@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ebpf-test
+spec:
+  selector:
+    matchLabels:
+      app: ebpf-test
+  template:
+    metadata:
+      labels:
+        app: ebpf-test
+    spec:
+      hostNetwork: true
+      containers:
+      - name: ebpf-test
+        #image: nexus-docker.opl.tools/spartakus/tools/builder
+        image: maciekleks/kseg:0.1.24
+        command: [ "/bin/sleep", "3650d" ]
+        imagePullPolicy: Always
+        tty: true
+        ports:
+        securityContext:
+          privileged: true
