@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"tc-dns-filter/user"
+	"github.com/MaciekLeks/l7egg/user"
 )
 
 type argList []string

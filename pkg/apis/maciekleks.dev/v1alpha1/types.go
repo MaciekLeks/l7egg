@@ -5,13 +5,11 @@ import (
 )
 
 type ClusterEgg struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec ClusterEggSpec `json:"spec,omitempty"
-
+	Spec ClusterEggSpec `json:"spec,omitempty"`
 }
 
 type ClusterEggSpec struct {
-
 }

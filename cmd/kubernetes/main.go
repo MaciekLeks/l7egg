@@ -1,9 +1,11 @@
 package main
 
 import (
-	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1aphpa1"
+	"fmt"
+	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
 )
 
 func main() {
- 	ce := vialpha1 clusterEgg
+	cegg := v1alpha1.ClusterEgg{}
+	fmt.Printf("Just show: %v", cegg)
 }
