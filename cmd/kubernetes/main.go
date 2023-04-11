@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"log"
@@ -34,4 +36,12 @@ func main() {
 	}
 
 	fmt.Printf("eggclientset %v", eggclientset)
+
+	clustereggs, err := eggclientset.MaciekleksV1alpha1().ClusterEggs("").List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		log.Printf("Geting clustereggs %v\n", err)
+	}
+
+	fmt.Printf("Length of clustereggs: %d and names of the first one is %s\n", len(clustereggs.Items), clustereggs.Items[0].Name)
+
 }

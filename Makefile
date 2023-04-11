@@ -104,3 +104,12 @@ k8s-build-cmd: $(CMD_K8S_GO_SOURCE)
 	$(GO) build \
 	-tags netgo -ldflags $(CGO_EXTLDFLAGS_STATIC) \
 	-o $(MAIN)-k8s ./cmd/kubernetes/$(MAIN).go
+
+K8S_CONTROLLER_GEN ?= ${GOPATH}/src/github.com/kubernetes-sigs/controller-tools/cmd/controller-gen
+# before use build controller-gen in  $K8S_CONTROLLER_GEN using command `go build -o controller-gen`
+.PHONY: k8s-build-crds
+k8s-build-crds:
+	$(K8S_CONTROLLER_GEN)/controller-gen crd \
+	paths=./pkg/apis/... \
+	output:crd:dir=manifests
+

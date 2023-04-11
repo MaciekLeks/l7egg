@@ -1,0 +1,12 @@
+apiVersion: maciekleks.dev/v1alpha1
+kind: ClusterEgg
+metadata:
+  name: clusteregg-example
+spec:
+  name: clusteregg-sample-config
+  ingressInterface: enp0s9
+  egressInterface: enp0s9
+  commonNames:
+  - www.interia.pl
+  cidrs:
+  - 172.172.34.3/32
