@@ -14,7 +14,8 @@ TARGET_BPF := $(TARGET).bpf.o
 LIBBPF ?= /home/mlk/dev/github/libbpfgo/output
 
 
-GO_SRC := ./cmd/standalone/*.go
+CMD_STANDALONE_GO_SRC := ./cmd/standalone/*.go
+CMD_K8S_GO_SRC := ./cmd/kubernetes/*.go
 BPF_SRC := $(wildcard *.bpf.c)
 BPF_HEADERS := $(wildcard *.h)
 
@@ -35,7 +36,7 @@ CGO_EXTLDFLAGS_STATIC = '-w -extldflags "-static"'
 .PHONY: all
 all: $(TARGET_BPF) $(TARGET)
 
-$(TARGET): $(GO_SRC)
+$(TARGET): $(CMD_STANDALONE_GO_SRC)
 	echo "GO:" >&2
 	CC=$(CLANG) \
 		CGO_CFLAGS=$(CGO_CFLAGS_STATIC) \
@@ -95,3 +96,11 @@ k8s-generate-groups:
 	github.com/MaciekLeks/l7egg/pkg/apis \
 	"maciekleks.dev:v1alpha1" \
 	--go-header-file $(K8S_CODE_GENERATOR)/hack/boilerplate.go.txt
+
+k8s-build-cmd: $(CMD_K8S_GO_SOURCE)
+	CC=$(CLANG) \
+	CGO_CFLAGS=$(CGO_CFLAGS_STATIC) \
+	GO_LDFLAGS=$(CGO_LDFLAGS_STATIC) \
+	$(GO) build \
+	-tags netgo -ldflags $(CGO_EXTLDFLAGS_STATIC) \
+	-o $(MAIN)-k8s ./cmd/kubernetes/$(MAIN).go
