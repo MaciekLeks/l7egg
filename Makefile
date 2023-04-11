@@ -87,9 +87,14 @@ docker:
 	docker push maciekleks/kseg:$(TAG)
 
 # code-genartor must be set in the PATH variable
+# Generates:
+# - deepcopy objects
+# - clientsets
+# - informers
+# - listers
 K8S_CODE_GENERATOR ?= ${GOPATH}/src/github.com/k8s.io/code-generator
-.PHONY: k8s-generate-groups
-k8s-generate-groups:
+.PHONY: k8s-build-client
+k8s-build-client:
 	$(K8S_CODE_GENERATOR)/generate-groups.sh  \
 	all \
 	github.com/MaciekLeks/l7egg/pkg/client \
@@ -111,5 +116,5 @@ K8S_CONTROLLER_GEN ?= ${GOPATH}/src/github.com/kubernetes-sigs/controller-tools/
 k8s-build-crds:
 	$(K8S_CONTROLLER_GEN)/controller-gen crd \
 	paths=./pkg/apis/... \
-	output:crd:dir=manifests
+	output:crd:dir=manifests \
 

@@ -28,8 +28,8 @@ type FakeMaciekleksV1alpha1 struct {
 	*testing.Fake
 }
 
-func (c *FakeMaciekleksV1alpha1) ClusterEggs(namespace string) v1alpha1.ClusterEggInterface {
-	return &FakeClusterEggs{c, namespace}
+func (c *FakeMaciekleksV1alpha1) ClusterEggs() v1alpha1.ClusterEggInterface {
+	return &FakeClusterEggs{c}
 }
 
 // RESTClient returns a RESTClient that is used to communicate

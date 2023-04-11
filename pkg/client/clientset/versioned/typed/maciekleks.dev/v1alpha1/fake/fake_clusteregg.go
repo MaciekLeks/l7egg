@@ -33,7 +33,6 @@ import (
 // FakeClusterEggs implements ClusterEggInterface
 type FakeClusterEggs struct {
 	Fake *FakeMaciekleksV1alpha1
-	ns   string
 }
 
 var clustereggsResource = schema.GroupVersionResource{Group: "maciekleks.dev", Version: "v1alpha1", Resource: "clustereggs"}
@@ -43,8 +42,7 @@ var clustereggsKind = schema.GroupVersionKind{Group: "maciekleks.dev", Version: 
 // Get takes name of the clusterEgg, and returns the corresponding clusterEgg object, and an error if there is any.
 func (c *FakeClusterEggs) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.ClusterEgg, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewGetAction(clustereggsResource, c.ns, name), &v1alpha1.ClusterEgg{})
-
+		Invokes(testing.NewRootGetAction(clustereggsResource, name), &v1alpha1.ClusterEgg{})
 	if obj == nil {
 		return nil, err
 	}
@@ -54,8 +52,7 @@ func (c *FakeClusterEggs) Get(ctx context.Context, name string, options v1.GetOp
 // List takes label and field selectors, and returns the list of ClusterEggs that match those selectors.
 func (c *FakeClusterEggs) List(ctx context.Context, opts v1.ListOptions) (result *v1alpha1.ClusterEggList, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewListAction(clustereggsResource, clustereggsKind, c.ns, opts), &v1alpha1.ClusterEggList{})
-
+		Invokes(testing.NewRootListAction(clustereggsResource, clustereggsKind, opts), &v1alpha1.ClusterEggList{})
 	if obj == nil {
 		return nil, err
 	}
@@ -76,15 +73,13 @@ func (c *FakeClusterEggs) List(ctx context.Context, opts v1.ListOptions) (result
 // Watch returns a watch.Interface that watches the requested clusterEggs.
 func (c *FakeClusterEggs) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
-		InvokesWatch(testing.NewWatchAction(clustereggsResource, c.ns, opts))
-
+		InvokesWatch(testing.NewRootWatchAction(clustereggsResource, opts))
 }
 
 // Create takes the representation of a clusterEgg and creates it.  Returns the server's representation of the clusterEgg, and an error, if there is any.
 func (c *FakeClusterEggs) Create(ctx context.Context, clusterEgg *v1alpha1.ClusterEgg, opts v1.CreateOptions) (result *v1alpha1.ClusterEgg, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewCreateAction(clustereggsResource, c.ns, clusterEgg), &v1alpha1.ClusterEgg{})
-
+		Invokes(testing.NewRootCreateAction(clustereggsResource, clusterEgg), &v1alpha1.ClusterEgg{})
 	if obj == nil {
 		return nil, err
 	}
@@ -94,8 +89,7 @@ func (c *FakeClusterEggs) Create(ctx context.Context, clusterEgg *v1alpha1.Clust
 // Update takes the representation of a clusterEgg and updates it. Returns the server's representation of the clusterEgg, and an error, if there is any.
 func (c *FakeClusterEggs) Update(ctx context.Context, clusterEgg *v1alpha1.ClusterEgg, opts v1.UpdateOptions) (result *v1alpha1.ClusterEgg, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateAction(clustereggsResource, c.ns, clusterEgg), &v1alpha1.ClusterEgg{})
-
+		Invokes(testing.NewRootUpdateAction(clustereggsResource, clusterEgg), &v1alpha1.ClusterEgg{})
 	if obj == nil {
 		return nil, err
 	}
@@ -105,14 +99,13 @@ func (c *FakeClusterEggs) Update(ctx context.Context, clusterEgg *v1alpha1.Clust
 // Delete takes name of the clusterEgg and deletes it. Returns an error if one occurs.
 func (c *FakeClusterEggs) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewDeleteActionWithOptions(clustereggsResource, c.ns, name, opts), &v1alpha1.ClusterEgg{})
-
+		Invokes(testing.NewRootDeleteActionWithOptions(clustereggsResource, name, opts), &v1alpha1.ClusterEgg{})
 	return err
 }
 
 // DeleteCollection deletes a collection of objects.
 func (c *FakeClusterEggs) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewDeleteCollectionAction(clustereggsResource, c.ns, listOpts)
+	action := testing.NewRootDeleteCollectionAction(clustereggsResource, listOpts)
 
 	_, err := c.Fake.Invokes(action, &v1alpha1.ClusterEggList{})
 	return err
@@ -121,8 +114,7 @@ func (c *FakeClusterEggs) DeleteCollection(ctx context.Context, opts v1.DeleteOp
 // Patch applies the patch and returns the patched clusterEgg.
 func (c *FakeClusterEggs) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.ClusterEgg, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(clustereggsResource, c.ns, name, pt, data, subresources...), &v1alpha1.ClusterEgg{})
-
+		Invokes(testing.NewRootPatchSubresourceAction(clustereggsResource, name, pt, data, subresources...), &v1alpha1.ClusterEgg{})
 	if obj == nil {
 		return nil, err
 	}

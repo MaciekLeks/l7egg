@@ -35,11 +35,11 @@ func main() {
 		log.Printf("Getting client set %v\n", err)
 	}
 
-	fmt.Printf("eggclientset %v", eggclientset)
+	fmt.Printf("eggclientset %v\n", eggclientset)
 
-	clustereggs, err := eggclientset.MaciekleksV1alpha1().ClusterEggs("").List(context.Background(), metav1.ListOptions{})
+	clustereggs, err := eggclientset.MaciekleksV1alpha1().ClusterEggs().List(context.Background(), metav1.ListOptions{})
 	if err != nil {
-		log.Printf("Geting clustereggs %v\n", err)
+		log.Printf("Geting clustereggs %v/n", err)
 	}
 
 	fmt.Printf("Length of clustereggs: %d and names of the first one is %s\n", len(clustereggs.Items), clustereggs.Items[0].Name)

@@ -21,7 +21,3 @@ package v1alpha1
 // ClusterEggListerExpansion allows custom methods to be added to
 // ClusterEggLister.
 type ClusterEggListerExpansion interface{}
-
-// ClusterEggNamespaceListerExpansion allows custom methods to be added to
-// ClusterEggNamespaceLister.
-type ClusterEggNamespaceListerExpansion interface{}

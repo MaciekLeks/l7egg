@@ -31,8 +31,9 @@ type ClusterEggLister interface {
 	// List lists all ClusterEggs in the indexer.
 	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1alpha1.ClusterEgg, err error)
-	// ClusterEggs returns an object that can list and get ClusterEggs.
-	ClusterEggs(namespace string) ClusterEggNamespaceLister
+	// Get retrieves the ClusterEgg from the index for a given name.
+	// Objects returned here must be treated as read-only.
+	Get(name string) (*v1alpha1.ClusterEgg, error)
 	ClusterEggListerExpansion
 }
 
@@ -54,41 +55,9 @@ func (s *clusterEggLister) List(selector labels.Selector) (ret []*v1alpha1.Clust
 	return ret, err
 }
 
-// ClusterEggs returns an object that can list and get ClusterEggs.
-func (s *clusterEggLister) ClusterEggs(namespace string) ClusterEggNamespaceLister {
-	return clusterEggNamespaceLister{indexer: s.indexer, namespace: namespace}
-}
-
-// ClusterEggNamespaceLister helps list and get ClusterEggs.
-// All objects returned here must be treated as read-only.
-type ClusterEggNamespaceLister interface {
-	// List lists all ClusterEggs in the indexer for a given namespace.
-	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1alpha1.ClusterEgg, err error)
-	// Get retrieves the ClusterEgg from the indexer for a given namespace and name.
-	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1alpha1.ClusterEgg, error)
-	ClusterEggNamespaceListerExpansion
-}
-
-// clusterEggNamespaceLister implements the ClusterEggNamespaceLister
-// interface.
-type clusterEggNamespaceLister struct {
-	indexer   cache.Indexer
-	namespace string
-}
-
-// List lists all ClusterEggs in the indexer for a given namespace.
-func (s clusterEggNamespaceLister) List(selector labels.Selector) (ret []*v1alpha1.ClusterEgg, err error) {
-	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1alpha1.ClusterEgg))
-	})
-	return ret, err
-}
-
-// Get retrieves the ClusterEgg from the indexer for a given namespace and name.
-func (s clusterEggNamespaceLister) Get(name string) (*v1alpha1.ClusterEgg, error) {
-	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
+// Get retrieves the ClusterEgg from the index for a given name.
+func (s *clusterEggLister) Get(name string) (*v1alpha1.ClusterEgg, error) {
+	obj, exists, err := s.indexer.GetByKey(name)
 	if err != nil {
 		return nil, err
 	}

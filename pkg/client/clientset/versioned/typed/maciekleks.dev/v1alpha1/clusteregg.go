@@ -33,7 +33,7 @@ import (
 // ClusterEggsGetter has a method to return a ClusterEggInterface.
 // A group's client should implement this interface.
 type ClusterEggsGetter interface {
-	ClusterEggs(namespace string) ClusterEggInterface
+	ClusterEggs() ClusterEggInterface
 }
 
 // ClusterEggInterface has methods to work with ClusterEgg resources.
@@ -52,14 +52,12 @@ type ClusterEggInterface interface {
 // clusterEggs implements ClusterEggInterface
 type clusterEggs struct {
 	client rest.Interface
-	ns     string
 }
 
 // newClusterEggs returns a ClusterEggs
-func newClusterEggs(c *MaciekleksV1alpha1Client, namespace string) *clusterEggs {
+func newClusterEggs(c *MaciekleksV1alpha1Client) *clusterEggs {
 	return &clusterEggs{
 		client: c.RESTClient(),
-		ns:     namespace,
 	}
 }
 
@@ -67,7 +65,6 @@ func newClusterEggs(c *MaciekleksV1alpha1Client, namespace string) *clusterEggs 
 func (c *clusterEggs) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.ClusterEgg, err error) {
 	result = &v1alpha1.ClusterEgg{}
 	err = c.client.Get().
-		Namespace(c.ns).
 		Resource("clustereggs").
 		Name(name).
 		VersionedParams(&options, scheme.ParameterCodec).
@@ -84,7 +81,6 @@ func (c *clusterEggs) List(ctx context.Context, opts v1.ListOptions) (result *v1
 	}
 	result = &v1alpha1.ClusterEggList{}
 	err = c.client.Get().
-		Namespace(c.ns).
 		Resource("clustereggs").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
@@ -101,7 +97,6 @@ func (c *clusterEggs) Watch(ctx context.Context, opts v1.ListOptions) (watch.Int
 	}
 	opts.Watch = true
 	return c.client.Get().
-		Namespace(c.ns).
 		Resource("clustereggs").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
@@ -112,7 +107,6 @@ func (c *clusterEggs) Watch(ctx context.Context, opts v1.ListOptions) (watch.Int
 func (c *clusterEggs) Create(ctx context.Context, clusterEgg *v1alpha1.ClusterEgg, opts v1.CreateOptions) (result *v1alpha1.ClusterEgg, err error) {
 	result = &v1alpha1.ClusterEgg{}
 	err = c.client.Post().
-		Namespace(c.ns).
 		Resource("clustereggs").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(clusterEgg).
@@ -125,7 +119,6 @@ func (c *clusterEggs) Create(ctx context.Context, clusterEgg *v1alpha1.ClusterEg
 func (c *clusterEggs) Update(ctx context.Context, clusterEgg *v1alpha1.ClusterEgg, opts v1.UpdateOptions) (result *v1alpha1.ClusterEgg, err error) {
 	result = &v1alpha1.ClusterEgg{}
 	err = c.client.Put().
-		Namespace(c.ns).
 		Resource("clustereggs").
 		Name(clusterEgg.Name).
 		VersionedParams(&opts, scheme.ParameterCodec).
@@ -138,7 +131,6 @@ func (c *clusterEggs) Update(ctx context.Context, clusterEgg *v1alpha1.ClusterEg
 // Delete takes name of the clusterEgg and deletes it. Returns an error if one occurs.
 func (c *clusterEggs) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	return c.client.Delete().
-		Namespace(c.ns).
 		Resource("clustereggs").
 		Name(name).
 		Body(&opts).
@@ -153,7 +145,6 @@ func (c *clusterEggs) DeleteCollection(ctx context.Context, opts v1.DeleteOption
 		timeout = time.Duration(*listOpts.TimeoutSeconds) * time.Second
 	}
 	return c.client.Delete().
-		Namespace(c.ns).
 		Resource("clustereggs").
 		VersionedParams(&listOpts, scheme.ParameterCodec).
 		Timeout(timeout).
@@ -166,7 +157,6 @@ func (c *clusterEggs) DeleteCollection(ctx context.Context, opts v1.DeleteOption
 func (c *clusterEggs) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.ClusterEgg, err error) {
 	result = &v1alpha1.ClusterEgg{}
 	err = c.client.Patch(pt).
-		Namespace(c.ns).
 		Resource("clustereggs").
 		Name(name).
 		SubResource(subresources...).

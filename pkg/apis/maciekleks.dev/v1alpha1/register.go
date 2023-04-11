@@ -23,7 +23,6 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&ClusterEggList{},
 	)
 
-	//?
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 
 	return nil

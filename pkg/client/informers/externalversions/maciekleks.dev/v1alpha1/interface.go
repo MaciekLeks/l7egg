@@ -41,5 +41,5 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 
 // ClusterEggs returns a ClusterEggInformer.
 func (v *version) ClusterEggs() ClusterEggInformer {
-	return &clusterEggInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+	return &clusterEggInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }

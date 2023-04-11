@@ -36,8 +36,8 @@ type MaciekleksV1alpha1Client struct {
 	restClient rest.Interface
 }
 
-func (c *MaciekleksV1alpha1Client) ClusterEggs(namespace string) ClusterEggInterface {
-	return newClusterEggs(c, namespace)
+func (c *MaciekleksV1alpha1Client) ClusterEggs() ClusterEggInterface {
+	return newClusterEggs(c)
 }
 
 // NewForConfig creates a new MaciekleksV1alpha1Client for the given config.
