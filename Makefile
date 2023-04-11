@@ -84,3 +84,14 @@ remote-build2:
 docker:
 	docker build -t maciekleks/kseg:$(TAG) .
 	docker push maciekleks/kseg:$(TAG)
+
+# code-genartor must be set in the PATH variable
+K8S_CODE_GENERATOR ?= ${GOPATH}/src/github.com/k8s.io/code-generator
+.PHONY: k8s-generate-groups
+k8s-generate-groups:
+	$(K8S_CODE_GENERATOR)/generate-groups.sh  \
+	all \
+	github.com/MaciekLeks/l7egg/pkg/client \
+	github.com/MaciekLeks/l7egg/pkg/apis \
+	"maciekleks.dev:v1alpha1" \
+	--go-header-file $(K8S_CODE_GENERATOR)/hack/boilerplate.go.txt
