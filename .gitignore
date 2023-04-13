@@ -3,6 +3,7 @@
 *.a
 *.out
 _tmp
+_k8s
 
 l7egg.bpf.o
 l7egg-static
