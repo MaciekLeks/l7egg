@@ -1,1 +1,0 @@
-{ "directory": "/home/mlk/go/src/github.com/MaciekLeks/l7egg/build", "file": "../main.bpf.c", "output": "main.bpf.o", "arguments": ["/usr/lib/llvm-15/bin/clang", "-xc", "../main.bpf.c", "-o", "main.bpf.o", "-g", "-Wall", "-fpie", "-I", "/home/mlk/dev/github/libbpfgo/output", "-D", "__TARGET_ARCH_x86_64", "-D", "DEBUG=1", "-O2", "--target=bpf", "-c", "--target=bpf"]},

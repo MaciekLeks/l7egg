@@ -3,6 +3,8 @@
 *.a
 *.out
 
+compile_commands.json
+
 # temp to be changed
 main-static
 main-k8s
