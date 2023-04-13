@@ -1,8 +1,11 @@
 ARCH=$(shell uname -m)
 
+CC = clang
+GO = /usr/local/go/bin/go
+
+MAIN = main
 CLANG = clang
 GO = /usr/local/go/bin/go
-CC = gcc
 MAIN = main
 
 TAG ?= latest
@@ -27,7 +30,7 @@ BPF_HEADERS := $(wildcard *.h)
 LIBBPF_OBJ = $(LIBBPF)/libbpf.a
 
 CFLAGS = -g -O2 -Wall -fpie
-LDFLAGS =
+LDFLAGS = $(LDFLAGS)
 
 CGO_CFLAGS_STATIC = "-I$(abspath $(LIBBPF))"
 CGO_LDFLAGS_STATIC = "-lelf -lz $(LIBBPF_OBJ)"
@@ -38,18 +41,17 @@ all: $(TARGET_BPF) $(TARGET)
 
 $(TARGET): $(CMD_STANDALONE_GO_SRC)
 	echo "GO:" >&2
-	CC=$(CLANG) \
-		CGO_CFLAGS=$(CGO_CFLAGS_STATIC) \
-		CGO_LDFLAGS=$(CGO_LDFLAGS_STATIC) \
-		$(GO) build \
-		-tags netgo -ldflags $(CGO_EXTLDFLAGS_STATIC) \
-		-o $(MAIN)-static ./cmd/standalone/$(MAIN).go
+	CGO_CFLAGS=$(CGO_CFLAGS_STATIC) \
+	CGO_LDFLAGS=$(CGO_LDFLAGS_STATIC) \
+	$(GO) build \
+	-tags netgo -ldflags $(CGO_EXTLDFLAGS_STATIC) \
+	-o $(MAIN)-static ./cmd/standalone/$(MAIN).go
 
 $(BPF_SRC): $(BPF_HEADERS)
 
 $(TARGET_BPF): $(BPF_SRC)
 	echo "EBPF:" >&2
-	clang \
+	$(CC) \
 		-MJ compile_commands.json \
 	    -g \
 	    -Wall \
