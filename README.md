@@ -1,15 +1,9 @@
-[how to use libbpf here](https://github.com/aquasecurity/libbpfgo/issues/289)
+L7egg - Level 7 Egress Good Gateway 
 
-# Docker
+Simple L7 egress firewall for use either as standalone program or K8s DaemonSet. 
 
-Info: It builds objects in the container.
+# How
+TODO
 
-```
-make docker
-```
-
-or
-
-```
-make docker TAG=0.1.0
-```
+# When 
+TODO
