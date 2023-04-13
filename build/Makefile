@@ -17,10 +17,10 @@ TARGET_BPF := $(TARGET).bpf.o
 LIBBPF ?= /home/mlk/dev/github/libbpfgo/output
 
 
-CMD_STANDALONE_GO_SRC := ./cmd/standalone/*.go
-CMD_K8S_GO_SRC := ./cmd/kubernetes/*.go
-BPF_SRC := $(wildcard *.bpf.c)
-BPF_HEADERS := $(wildcard *.h)
+CMD_STANDALONE_GO_SRC := ../cmd/standalone/*.go
+CMD_K8S_GO_SRC := ../cmd/kubernetes/*.go
+BPF_SRC := $(wildcard ../*.bpf.c)
+BPF_HEADERS := $(wildcard ../*.h)
 
 #on ubu-ebpf only
 # structure there:
@@ -45,7 +45,7 @@ $(TARGET): $(CMD_STANDALONE_GO_SRC)
 	CGO_LDFLAGS=$(CGO_LDFLAGS_STATIC) \
 	$(GO) build \
 	-tags netgo -ldflags $(CGO_EXTLDFLAGS_STATIC) \
-	-o $(MAIN)-static ./cmd/standalone/$(MAIN).go
+	-o $(MAIN)-static ../cmd/standalone/$(MAIN).go
 
 $(BPF_SRC): $(BPF_HEADERS)
 
@@ -75,13 +75,13 @@ vmlinuxh:
 
 .PHONY: remote-build
 remote-build:
-	rsync -ahv --exclude '.git' --delete ./ mlk@ubu-ebpf:~/ebpf-tests/
+	rsync -ahv --exclude '.git' --delete ../ mlk@ubu-ebpf:~/ebpf-tests/
 	ssh mlk@ubu-ebpf "cd ~/ebpf-tests && make clean && make all"
 
 .PHONY: remote-build
 remote-build2:
-	rsync -ahv  --delete --exclude '.git' ./ mlk@ubu-ebpf2:~/dev/ebpf-tests/
-	ssh mlk@ubu-ebpf2 "cd ~/dev/ebpf-tests && make clean && make all"
+	rsync -ahv  --delete --exclude '.git' ../ mlk@ubu-ebpf2:~/dev/ebpf-tests/
+	ssh mlk@ubu-ebpf2 "cd ~/dev/ebpf-tests/build && make clean && make all"
 
 .PHONY: docker
 docker:
