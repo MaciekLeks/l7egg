@@ -4,21 +4,20 @@ CC = clang
 GO = /usr/local/go/bin/go
 
 MAIN = l7egg
-CLANG = clang
 GO = /usr/local/go/bin/go
 
 TAG ?= latest
 DEBUG ?= 1
 
-TARGET := l7egg
-TARGET_BPF := $(TARGET).bpf.o
+TARGET_STANDALONE := l7egg-static
+TARGET_BPF := l7egg.bpf.o
 
 LIBBPF ?= /home/mlk/dev/github/libbpfgo/output
 
 
 CMD_STANDALONE_GO_SRC := ../cmd/standalone/*.go
 CMD_K8S_GO_SRC := ../cmd/kubernetes/*.go
-BPF_SRC := $(wildcard ../kernel/*.bpf.c)
+BPF_SRC := $(wildcard ../kernel/*.c)
 BPF_HEADERS := $(wildcard ../kernel/*.h)
 
 #on ubu-ebpf only
@@ -36,15 +35,15 @@ CGO_LDFLAGS_STATIC = "-lelf -lz $(LIBBPF_OBJ)"
 CGO_EXTLDFLAGS_STATIC = '-w -extldflags "-static"'
 
 .PHONY: all
-all: $(TARGET_BPF) $(TARGET)
+all: $(TARGET_BPF) $(TARGET_STANDALONE)
 
-$(TARGET): $(CMD_STANDALONE_GO_SRC)
+$(TARGET_STANDALONE): $(CMD_STANDALONE_GO_SRC)
 	echo "GO:" >&2
 	CGO_CFLAGS=$(CGO_CFLAGS_STATIC) \
 	CGO_LDFLAGS=$(CGO_LDFLAGS_STATIC) \
 	$(GO) build \
 	-tags netgo -ldflags $(CGO_EXTLDFLAGS_STATIC) \
-	-o $(MAIN)-static ../cmd/standalone/$(MAIN).go
+	-o $@ ../cmd/standalone/$(MAIN).go
 
 $(BPF_SRC): $(BPF_HEADERS)
 
@@ -66,7 +65,7 @@ $(TARGET_BPF): $(BPF_SRC)
 .PHONY: clean
 clean:
 	$(GO) clean -i
-	rm $(TARGET_BPF)  2> /dev/null || true
+	rm $(TARGET_BPF) $(TARGET_STANDALONE)  2> /dev/null || true
 
 .PHONY: vmlinuxh
 vmlinuxh:
@@ -104,7 +103,6 @@ k8s-build-client:
 	--go-header-file $(K8S_CODE_GENERATOR)/hack/boilerplate.go.txt
 
 k8s-build-cmd: $(CMD_K8S_GO_SOURCE)
-	CC=$(CLANG) \
 	CGO_CFLAGS=$(CGO_CFLAGS_STATIC) \
 	GO_LDFLAGS=$(CGO_LDFLAGS_STATIC) \
 	$(GO) build \
