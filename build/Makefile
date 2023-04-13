@@ -1,3 +1,6 @@
+.ONESHELL:
+SHELL = /bin/bash
+
 ARCH=$(shell uname -m)
 
 CC = clang
@@ -69,7 +72,8 @@ clean:
 
 .PHONY: vmlinuxh
 vmlinuxh:
-	bpftool btf dump file /sys/kernel/btf/vmlinux format c > vmlinux.h
+	echo "vmlinuxh"
+	bpftool btf dump file /sys/kernel/btf/vmlinux format c > ../kernel/vmlinux.h
 
 .PHONY: remote-build
 remote-build:
@@ -83,7 +87,8 @@ remote-build2:
 
 .PHONY: docker
 docker:
-	docker build -t maciekleks/kseg:$(TAG) .
+	cd ../
+	docker build -t maciekleks/kseg:$(TAG) -f ./build/Dockerfile .
 	docker push maciekleks/kseg:$(TAG)
 
 # code-genartor must be set in the PATH variable

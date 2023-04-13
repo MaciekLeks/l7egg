@@ -33,10 +33,12 @@ RUN cd libbpfgo \
 #    cp linux/include/uapi/linux/bpf* /usr/include/linux/
 
 WORKDIR /kseg
-COPY .. .
+COPY . .
 RUN echo "linux-kernel:$(uname -r) bpftool:$(bpftool version)" \
-  && make vmlinuxh \
-  && make all LIBBPF=lib/libbpfgo/output DEBUG=1
+    && cd build  \
+    && pwd \
+    && make vmlinuxh \
+    && make all LIBBPF=lib/libbpfgo/output DEBUG=1
 
-ENTRYPOINT ["./l7egg-static"]
+ENTRYPOINT ["./build/l7egg-static"]
 CMD ["-iface=eth0"]
