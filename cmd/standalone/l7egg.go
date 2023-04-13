@@ -22,7 +22,7 @@ func main() {
 	var cidrs argList
 	iface := flag.String("iface", "", "Ingress interface to bind TC program to.")
 	eface := flag.String("eface", "", "Egress interface to bind TC program to.")
-	bpfObjectPath := flag.String("bpfobj", "main.bpf.o", "Kernel module file path to load.")
+	bpfObjectPath := flag.String("bpfobj", "../build/l7egg.bpf.o", "Kernel module file path to load.")
 	flag.Var(&cidrs, "cidr", "Add net address (CIDR format) to add to the white list.")
 	flag.Var(&cns, "cn", "Add Common Name to add to the white list.")
 	flag.Parse()

@@ -3,15 +3,14 @@ ARCH=$(shell uname -m)
 CC = clang
 GO = /usr/local/go/bin/go
 
-MAIN = main
+MAIN = l7egg
 CLANG = clang
 GO = /usr/local/go/bin/go
-MAIN = main
 
 TAG ?= latest
 DEBUG ?= 1
 
-TARGET := main
+TARGET := l7egg
 TARGET_BPF := $(TARGET).bpf.o
 
 LIBBPF ?= /home/mlk/dev/github/libbpfgo/output
@@ -19,8 +18,8 @@ LIBBPF ?= /home/mlk/dev/github/libbpfgo/output
 
 CMD_STANDALONE_GO_SRC := ../cmd/standalone/*.go
 CMD_K8S_GO_SRC := ../cmd/kubernetes/*.go
-BPF_SRC := $(wildcard ../*.bpf.c)
-BPF_HEADERS := $(wildcard ../*.h)
+BPF_SRC := $(wildcard ../kernel/*.bpf.c)
+BPF_HEADERS := $(wildcard ../kernel/*.h)
 
 #on ubu-ebpf only
 # structure there:
