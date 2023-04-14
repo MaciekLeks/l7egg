@@ -16,21 +16,33 @@ make k8s-build-cmd
 
 # Use
 ## Standalone:
-To allow only egress traffic on the declared CIDRs and CNs:
+To allow only egress traffic on the declared CIDRs and CNs (works with partial domain names):
 ```bash
 ./l7egg-static -iface=enp0s3 -eface=enp0s3 \
   -cidr=10.0.2.0/24 \
   -cidr=10.1.0.0/16 \
-  -cidr=32.223.111.12/32 \
+  -cidr=18.244.102.124/32 \
   -cn="www.some-example.com" \
   -cn=".ubuntu.com" \ 
   -cn="api.snapcraft.io" \
-  -cn="git.com.org" \
+  -cn=".gitlab.com" \
+  -cm="ome.com" \
   -cn="docker.io"
 ```
-where,
+where
+
 `iface` - ingress network interface on which DNS responses come in the network namespace
-`eface` - egress netwotj interface that controls egress traffic
+
+`eface` - egress network interface that controls egress traffic
+
+For the given example allowed egress Domain Names are (except the full domain names), e.g.:
+- `www.gitlab.com`
+- `api.gitlab.com`
+- `ome.com`
+- `home.com`
+- `www.home.com`
+- `www.rome.com`
+
 ## K8s
 TODO:
 

@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 	"unsafe"
@@ -361,7 +362,7 @@ func insertNth(s string, n int) string {
 
 func contains(s []string, str string) bool {
 	for _, v := range s {
-		if v == str {
+		if strings.Contains(str, v) { //e.g. DNS returns str="abc.example.com" and v=".example.com"
 			return true
 		}
 	}
