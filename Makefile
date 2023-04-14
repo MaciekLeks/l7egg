@@ -70,17 +70,17 @@ clean:
 .PHONY: vmlinuxh
 vmlinuxh:
 	echo "vmlinuxh"
-	bpftool btf dump file /sys/kernel/btf/vmlinux format c > kernel/vmlinux.h
+	bpftool btf dump file /sys/kernel/btf/vmlinux format c > ./kernel/vmlinux.h
 
 .PHONY: remote-build
 remote-build:
 	rsync -ahv --exclude '.git' --delete . mlk@ubu-ebpf:~/ebpf-tests/
-	ssh mlk@ubu-ebpf "cd ~/ebpf-tests && make clean && make all"
+	ssh mlk@ubu-ebpf "cd ~/dev/ebpf-tests && make clean && make all"
 
 .PHONY: remote-build
 remote-build2:
 	rsync -ahv  --delete --exclude '.git' . mlk@ubu-ebpf2:~/dev/ebpf-tests/
-	ssh mlk@ubu-ebpf2 "cd ~/dev/ebpf-tests/build && make clean && make all"
+	ssh mlk@ubu-ebpf2 "cd ~/dev/ebpf-tests && make clean && make all"
 
 .PHONY: docker
 docker:

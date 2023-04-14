@@ -18,7 +18,7 @@ make k8s-build-cmd
 ## Standalone:
 To allow only egress traffic on the declared CIDRs and CNs (works with partial domain names):
 ```bash
-./l7egg-static -iface=enp0s3 -eface=enp0s3 \
+sudo ./l7egg-static -iface=enp0s3 -eface=enp0s3 \
   -cidr=10.0.2.0/24 \
   -cidr=10.1.0.0/16 \
   -cidr=18.244.102.124/32 \
@@ -43,6 +43,13 @@ For the given example allowed egress Domain Names are (except the full domain na
 - `www.home.com`
 - `www.rome.com`
 
+# Troubleshooting
+## l7egg-static does not restart
+Traffic Control qdisc and filters cleansing is needed first:
+```bash
+./tools/tc-cleaner.sh -iface=${iface} -eface=${eface}
+```
+and run the command again.
 ## K8s
 TODO:
 
