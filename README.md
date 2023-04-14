@@ -53,8 +53,15 @@ and run the command again.
 ## K8s
 TODO:
 
-# How
-TODO
+# Project structure
+- `build` - executable and object files
+- `cmd` - GO commands source files
+- `examples` - k8s example manifests
+- `kernel` - eBPF kernel space C source files
+- `manifests` - k8s CRDs manifests
+- `pkg` - k8s operator and controller reusable GO packages
+- `tools` - common tools 
+- `user` - eBPF user space GO source files
 
 # When 
 TODO
