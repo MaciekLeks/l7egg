@@ -33,7 +33,7 @@ RUN cd libbpfgo \
 #    cp linux/include/uapi/linux/bpf* /usr/include/linux/
 
 WORKDIR /kseg
-COPY . .
+COPY build .
 RUN echo "linux-kernel:$(uname -r) bpftool:$(bpftool version)" \
     && cd build  \
     && pwd \

@@ -4,13 +4,14 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	eggclientset "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/homedir"
 	"log"
 	"os"
-
-	eggclient "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned"
+	"path/filepath"
 )
 
 func main() {
@@ -18,7 +19,12 @@ func main() {
 	if err != nil {
 		fmt.Println("Not in cluster config")
 		// fallback to kubeconfig
-		kubeconfig := flag.String("kubeconfig", "/home/mlk/.kube/config", "kubeconfig file") //stg
+		var kubeconfig *string
+		if home := homedir.HomeDir(); home != "" {
+			kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "kubeconfig absolute file path") //st
+		} else {
+			kubeconfig = flag.String("kubeconfig", "", "kubeconfig absolute file path") //stg
+		}
 		flag.Parse()
 		if envvar := os.Getenv("KUBECONFIG"); len(envvar) > 0 {
 			kubeconfig = &envvar
@@ -30,14 +36,14 @@ func main() {
 		}
 	}
 
-	eggclientset, err := eggclient.NewForConfig(config)
+	egs, err := eggclientset.NewForConfig(config)
 	if err != nil {
 		log.Printf("Getting client set %v\n", err)
 	}
 
-	fmt.Printf("eggclientset %v\n", eggclientset)
+	fmt.Printf("eggclientset %v\n", egs)
 
-	clustereggs, err := eggclientset.MaciekleksV1alpha1().ClusterEggs().List(context.Background(), metav1.ListOptions{})
+	clustereggs, err := egs.MaciekleksV1alpha1().ClusterEggs().List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		log.Printf("Geting clustereggs %v/n", err)
 	}
