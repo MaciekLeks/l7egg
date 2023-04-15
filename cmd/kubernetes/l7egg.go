@@ -4,7 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	eggclientset "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned"
+	ceggclientset "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -12,6 +12,10 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
+
+	cegginformerfactory "github.com/MaciekLeks/l7egg/pkg/client/informers/externalversions"
+	ceggcontroller "github.com/MaciekLeks/l7egg/pkg/controller"
 )
 
 func main() {
@@ -36,18 +40,28 @@ func main() {
 		}
 	}
 
-	egs, err := eggclientset.NewForConfig(config)
+	ceggClientset, err := ceggclientset.NewForConfig(config)
 	if err != nil {
 		log.Printf("Getting client set %v\n", err)
 	}
 
-	fmt.Printf("eggclientset %v\n", egs)
+	fmt.Printf("eggclientset %v\n", ceggClientset)
 
-	clustereggs, err := egs.MaciekleksV1alpha1().ClusterEggs().List(context.Background(), metav1.ListOptions{})
+	ceggs, err := ceggClientset.MaciekleksV1alpha1().ClusterEggs().List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		log.Printf("Geting clustereggs %v/n", err)
 	}
 
-	fmt.Printf("Length of clustereggs: %d and names of the first one is %s\n", len(clustereggs.Items), clustereggs.Items[0].Name)
+	fmt.Printf("Length of clustereggs: %d and names of the first one is %s\n", len(ceggs.Items), ceggs.Items[0].Name)
+
+	informerFactory := cegginformerfactory.NewSharedInformerFactory(ceggClientset, 10*time.Minute)
+	c := ceggcontroller.NewController(ceggClientset, informerFactory.Maciekleks().V1alpha1().ClusterEggs())
+
+	fmt.Printf("ceggController %v\n", c)
+
+	stopper := make(chan struct{})
+	defer close(stopper)
+
+	informerFactory.Start(stopper)
 
 }

@@ -13,14 +13,14 @@ TAG ?= latest
 DEBUG ?= 1
 
 BUILD_DIR = build
-TARGET_STANDALONE := $(BUILD_DIR)/$(MAIN)-static
+TARGET_CLI := $(BUILD_DIR)/$(MAIN)-cli
 TARGET_K8S := $(BUILD_DIR)/$(MAIN)-k8s
 TARGET_BPF := $(BUILD_DIR)/$(MAIN).bpf.o
 
 LIBBPF_DIR ?= /home/mlk/dev/github/libbpfgo/output
 LIBBPF_STATIC_LIB = $(LIBBPF_DIR)/libbpf.a
 
-CMD_STANDALONE_GO_SRC := ./cmd/standalone/*.go
+CMD_CLI_GO_SRC := ./cmd/cli/*.go
 CMD_K8S_GO_SRC := ./cmd/kubernetes/*.go
 BPF_SRC := $(wildcard ./kernel/*.c)
 BPF_HEADERS := $(wildcard ./kernel/*.h)
@@ -34,7 +34,7 @@ CGO_LDFLAGS_STATIC = "-lelf -lz $(LIBBPF_STATIC_LIB)"
 CGO_EXTLDFLAGS_STATIC = '-w -extldflags "-static"'
 
 .PHONY: all
-all: $(TARGET_BPF) $(TARGET_STANDALONE)
+all: $(TARGET_BPF) $(TARGET_CLI)
 
 
 $(BPF_SRC): $(BPF_HEADERS)
@@ -54,18 +54,18 @@ $(TARGET_BPF): $(BPF_SRC)
 		-c $^ \
 		-o $@
 
-$(TARGET_STANDALONE): $(CMD_STANDALONE_GO_SRC) $(TARGET_BPF)
+$(TARGET_CLI): $(CMD_CLI_GO_SRC) $(TARGET_BPF)
 	echo "GO:" >&2
 	CGO_CFLAGS=$(CGO_CFLAGS_STATIC) \
 	CGO_LDFLAGS=$(CGO_LDFLAGS_STATIC) \
 	$(GO) build \
 	-tags netgo -ldflags $(CGO_EXTLDFLAGS_STATIC) \
-	-o $(TARGET_STANDALONE) ./cmd/standalone/$(MAIN).go
+	-o $(TARGET_CLI) ./cmd/cli/$(MAIN).go
 
 .PHONY: clean
 clean:
 	$(GO) clean -i
-	rm $(TARGET_BPF) $(TARGET_STANDALONE) $(TARGET_K8S) compile_commands.json  2> /dev/null || true
+	rm $(TARGET_BPF) $(TARGET_CLI) $(TARGET_K8S) compile_commands.json  2> /dev/null || true
 
 .PHONY: vmlinuxh
 vmlinuxh:
@@ -88,7 +88,7 @@ docker:
 	docker build -t maciekleks/kseg:$(TAG) -f ./build/Dockerfile .
 	docker push maciekleks/kseg:$(TAG)
 
-# code-genartor must be set in the PATH variable
+# code-genartor must be set in the K8S_CODE_GENERATOR
 # Generates:
 # - deepcopy objects
 # - clientsets
