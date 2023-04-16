@@ -63,5 +63,9 @@ func main() {
 	defer close(stopper)
 
 	informerFactory.Start(stopper)
+	//if err := c.Run(); err != nil {
+	//	log.Printf("Error running controller %v", err)
+	//}
+	c.Run(stopper)
 
 }
