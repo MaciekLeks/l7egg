@@ -59,31 +59,41 @@ func (c *Controller) worker() {
 	fmt.Printf("worker started\n")
 	//fmt.Println("worker")
 	for c.processNextItem() {
-		fmt.Printf("-")
+		//fmt.Printf("-")
 	}
 	fmt.Printf("/")
 }
 
 func (c *Controller) processNextItem() bool {
-	//fmt.Printf("\\")
-	//item, shutdown := c.queue.Get() //blocking op
+	fmt.Printf("processNextItem[0]\n")
+	item, shutdown := c.queue.Get() //blocking op
 	//fmt.Printf("|")
-	//if shutdown {
-	//	fmt.Println("shutdown")
-	//	return false
-	//}
-	//defer c.queue.Forget(item)
+	if shutdown {
+		log.Println("Cache shut down.")
+		return false
+	}
+	defer c.queue.Forget(item)
 	//
-	//key, err := cache.MetaNamespaceKeyFunc(item)
-	//if err != nil {
-	//	fmt.Printf("Getting key(<namespace>/<name>) from cache %s\n", err)
-	//}
-	//ns, name, err := cache.SplitMetaNamespaceKey(key)
-	//if err != nil {
-	//	fmt.Printf("Splitting key(<namespace>/<name>) into namespace and name %s\n", err)
-	//}
-	//
-	//fmt.Printf("%s/%s\n", ns, name)
+	key, err := cache.MetaNamespaceKeyFunc(item)
+	if err != nil {
+		log.Printf("Getting key(<ns>/<name>) from cache %s\n", err)
+		return false
+	}
+	_, name, err := cache.SplitMetaNamespaceKey(key) //namespace not xpected here
+	if err != nil {
+		log.Printf("Splitting key (<ns>/<name>) into name %s\n", err)
+		return false
+	}
+
+	fmt.Printf("cluster object name: %s\n", name)
+
+	cegg, err := c.ceggLister.Get(name)
+	if err != nil {
+		log.Printf("Error %v, gettting the clusteregg resource from lister.", err)
+		return false
+	}
+
+	fmt.Printf("clusteregg object: %+v\n", cegg)
 	//
 	//err = c.reconcile(ns, name)
 	//if err != nil {

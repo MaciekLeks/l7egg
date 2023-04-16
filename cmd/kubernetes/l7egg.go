@@ -52,7 +52,7 @@ func main() {
 		log.Printf("Geting clustereggs %v/n", err)
 	}
 
-	fmt.Printf("Length of clustereggs: %d and names of the first one is %s\n", len(ceggs.Items), ceggs.Items[0].Name)
+	fmt.Printf("Length of clustereggs: %d\n", len(ceggs.Items))
 
 	informerFactory := cegginformerfactory.NewSharedInformerFactory(ceggClientset, 10*time.Minute)
 	c := ceggcontroller.NewController(ceggClientset, informerFactory.Maciekleks().V1alpha1().ClusterEggs())
