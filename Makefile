@@ -119,3 +119,5 @@ k8s-build-crds:
 	paths=./pkg/apis/... \
 	output:crd:dir=manifests \
 
+tools/tc-cleaner: tools/tc-cleaner.go
+	$(GO) build -o $@ $<

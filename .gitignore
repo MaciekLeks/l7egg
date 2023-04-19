@@ -14,3 +14,7 @@ compile_commands.json
 # temp to be changed
 main-static
 main-k8s
+
+#temporary
+/tools/tc-cleaner
+/tools/tc-cleaner.go
