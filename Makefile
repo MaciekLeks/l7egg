@@ -18,8 +18,14 @@ TARGET_K8S_STATIC := $(BUILD_DIR)/$(MAIN)-k8s-static
 TARGET_K8S_DYN := $(BUILD_DIR)/$(MAIN)-k8s-dynamic
 TARGET_BPF := $(BUILD_DIR)/$(MAIN).bpf.o
 
-LIBBPF_DIR ?= /home/mlk/dev/github/libbpfgo/output
-LIBBPF_STATIC_LIB = $(LIBBPF_DIR)/libbpf.a
+# clone https://github.com/libbpf/libbpf
+# then, go to src dir and run e.g.
+# OBJDIR=build DESTDIR=root make install
+LIBBPF_DIR ?= /home/mlk/dev/github/libbpf
+LIBBPF_OUTPUT ?= $(LIBBPF_DIR)/src/root/usr
+LIBBPF_STATIC_LIB = $(LIBBPF_OUTPUT)/lib64/libbpf.a
+LIBBPF_INCLUDES = $(LIBBPF_OUTPUT)/include
+LIBBPF_DYN_LIB = $(LIBBPF_OUTPUT)/lib64
 
 CMD_CLI_GO_SRC := ./cmd/cli/*.go
 CMD_K8S_GO_SRC := ./cmd/kubernetes/*.go
@@ -30,15 +36,14 @@ BPF_HEADERS := $(wildcard ./kernel/*.h)
 CFLAGS = -g -O2 -Wall -fpie
 LDFLAGS = $(LDFLAGS)
 
-CGO_CFLAGS_STATIC = "-I$(abspath $(LIBBPF_DIR))"
+CGO_CFLAGS = "-I$(abspath $(LIBBPF_INCLUDES))"
 CGO_LDFLAGS_STATIC = "-lelf -lz $(LIBBPF_STATIC_LIB)"
 CGO_EXTLDFLAGS_STATIC = '-w -extldflags "-static"'
+# librabbry order is important for GO_EXTLDFLAGS_STATIC:
 GO_EXTLDFLAGS_STATIC = '-w -extldflags "-static $(LIBBPF_STATIC_LIB) -lelf -lz"'
-#^ librabbry order is important for GO_EXTLDFLAGS_STATIC
 
-CGO_CFLAGS_DYN = "-I/home/mlk/dev/github/libbpfgo/libbpf/src/root/usr/include"
-CGO_LDFLAGS_DYN = "-lelf -lz  -Wl,-rpath=/home/mlk/dev/github/libbpfgo/libbpf/src/root/usr/lib64 -L/home/mlk/dev/github/libbpfgo/libbpf/src/root/usr/lib64 -lbpf"
-GO_EXTLDFLAGS_DYN = '-w -extldflags "-lelf -lz  -Wl,-rpath=/home/mlk/dev/github/libbpfgo/libbpf/src/root/usr/lib64 -L/home/mlk/dev/github/libbpfgo/libbpf/src/root/usr/lib64 -lbpf"'
+# inject shared library search path into the executable: -Wl,rpath=...:
+GO_EXTLDFLAGS_DYN = '-w -extldflags "-lelf -lz  -Wl,-rpath=$(LIBBPF_DYN_LIB) -L$(LIBBPF_DYN_LIB) -lbpf"'
 
 .PHONY: all
 all: $(TARGET_BPF) $(TARGET_CLI)
@@ -53,7 +58,7 @@ $(TARGET_BPF): $(BPF_SRC)
 	    -g \
 	    -Wall \
 	    -fpie \
-		-I$(LIBBPF_DIR) \
+		-I$(LIBBPF_INCLUDES) \
 		-D__TARGET_ARCH_$(ARCH) \
 		-DDEBUG=$(DEBUG) \
 		-O2 \
@@ -63,7 +68,7 @@ $(TARGET_BPF): $(BPF_SRC)
 
 $(TARGET_CLI): $(CMD_CLI_GO_SRC) $(TARGET_BPF)
 	echo "GO:" >&2
-	CGO_CFLAGS=$(CGO_CFLAGS_STATIC) \
+	CGO_CFLAGS=$(CGO_CFLAGS) \
 	CGO_LDFLAGS=$(CGO_LDFLAGS_STATIC) \
 	$(GO) build -x \
 	-tags netgo -ldflags $(CGO_EXTLDFLAGS_STATIC) \
@@ -112,13 +117,13 @@ k8s-build-client:
 	--go-header-file $(K8S_CODE_GENERATOR)/hack/boilerplate.go.txt
 
 k8s-build-cmd-static: $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
-	CGO_CFLAGS=$(CGO_CFLAGS_STATIC) \
+	CGO_CFLAGS=$(CGO_CFLAGS) \
 	$(GO) build -x \
 	-tags netgo -ldflags $(GO_EXTLDFLAGS_STATIC) \
 	-o $(TARGET_K8S_STATIC) ./cmd/kubernetes/$(MAIN).go
 
 k8s-build-cmd-dynamic: $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
-	CGO_CFLAGS=$(CGO_CFLAGS_DYNAMIC) \
+	CGO_CFLAGS=$(CGO_CFLAGS) \
 	$(GO) build -x \
 	-tags netgo -ldflags $(GO_EXTLDFLAGS_DYN) \
 	-o $(TARGET_K8S_DYN) ./cmd/kubernetes/$(MAIN).go
