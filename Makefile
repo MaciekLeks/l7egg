@@ -38,7 +38,7 @@ LDFLAGS = $(LDFLAGS)
 
 CGO_CFLAGS = "-I$(abspath $(LIBBPF_INCLUDES))"
 CGO_LDFLAGS_STATIC = "-lelf -lz $(LIBBPF_STATIC_LIB)"
-CGO_EXTLDFLAGS_STATIC = '-w -extldflags "-static"'
+#CGO_EXTLDFLAGS_STATIC = '-w -extldflags "-static"'
 # librabbry order is important for GO_EXTLDFLAGS_STATIC:
 GO_EXTLDFLAGS_STATIC = '-w -extldflags "-static $(LIBBPF_STATIC_LIB) -lelf -lz"'
 
@@ -69,9 +69,8 @@ $(TARGET_BPF): $(BPF_SRC)
 $(TARGET_CLI): $(CMD_CLI_GO_SRC) $(TARGET_BPF)
 	echo "GO:" >&2
 	CGO_CFLAGS=$(CGO_CFLAGS) \
-	CGO_LDFLAGS=$(CGO_LDFLAGS_STATIC) \
 	$(GO) build -x \
-	-tags netgo -ldflags $(CGO_EXTLDFLAGS_STATIC) \
+	-tags netgo -ldflags $(GO_EXTLDFLAGS_STATIC) \
 	-o $(TARGET_CLI) ./cmd/cli/$(MAIN).go
 
 .PHONY: clean
