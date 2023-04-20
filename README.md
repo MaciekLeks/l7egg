@@ -6,22 +6,27 @@ Simple L7 egress firewall for use either as standalone program or K8s Operator.
 ## Prerequisites
 You need static or shared libpf library installed. 
 1. Clone [libpf](https://github.com/libbpf/libbpf) upstream
-2. If you do not want to set `LIBBPF_DIR` and `LIBBPF_DIR` for `make` then do:
+2. Build your static `libbpf.a` and shared `libbpf.so`, e.g.
 ```bash
 cd src
-mkdir -p {build,root}
-OBJDIR=build DESTDIR=root make install
+mkdir build
+sudo OBJDIR=build DESTDIR=/ make install
+```, then 
+from your root directory you can find outcomes here:
 ```
+/usr/includes
+/usr/lib64
+````
 
 ## Standalone:
 ```
 make clean
-make all
+LIBBPF_DIR=/ make all
 ```
 K8s operator/controller:
 ```
 make clean
-make k8s-build-cmd
+LIBBPF_DIR=/ make k8s-build-cmd
 ```
 
 # Use

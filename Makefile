@@ -21,11 +21,10 @@ TARGET_BPF := $(BUILD_DIR)/$(MAIN).bpf.o
 # clone https://github.com/libbpf/libbpf
 # then, go to src dir and run e.g.
 # OBJDIR=build DESTDIR=root make install
-LIBBPF_DIR ?= /home/mlk/dev/github/libbpf
-LIBBPF_OUTPUT ?= $(LIBBPF_DIR)/src/root/usr
-LIBBPF_STATIC_LIB = $(LIBBPF_OUTPUT)/lib64/libbpf.a
-LIBBPF_INCLUDES = $(LIBBPF_OUTPUT)/include
-LIBBPF_DYN_LIB = $(LIBBPF_OUTPUT)/lib64
+LIBBPF_DIR ?= /home/mlk/dev/github/libbpf/src/root/usr
+LIBBPF_STATIC_LIB = $(LIBBPF_DIR)/lib64/libbpf.a
+LIBBPF_INCLUDES = $(LIBBPF_DIR)/include
+LIBBPF_DYN_LIB = $(LIBBPF_DIR)/lib64
 
 CMD_CLI_GO_SRC := ./cmd/cli/*.go
 CMD_K8S_GO_SRC := ./cmd/kubernetes/*.go
