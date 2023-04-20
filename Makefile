@@ -14,7 +14,8 @@ DEBUG ?= 1
 
 BUILD_DIR = build
 TARGET_CLI := $(BUILD_DIR)/$(MAIN)-cli
-TARGET_K8S := $(BUILD_DIR)/$(MAIN)-k8s
+TARGET_K8S_STATIC := $(BUILD_DIR)/$(MAIN)-k8s-static
+TARGET_K8S_DYN := $(BUILD_DIR)/$(MAIN)-k8s-dynamic
 TARGET_BPF := $(BUILD_DIR)/$(MAIN).bpf.o
 
 LIBBPF_DIR ?= /home/mlk/dev/github/libbpfgo/output
@@ -32,6 +33,12 @@ LDFLAGS = $(LDFLAGS)
 CGO_CFLAGS_STATIC = "-I$(abspath $(LIBBPF_DIR))"
 CGO_LDFLAGS_STATIC = "-lelf -lz $(LIBBPF_STATIC_LIB)"
 CGO_EXTLDFLAGS_STATIC = '-w -extldflags "-static"'
+GO_EXTLDFLAGS_STATIC = '-w -extldflags "-static $(LIBBPF_STATIC_LIB) -lelf -lz"'
+#^ librabbry order is important for GO_EXTLDFLAGS_STATIC
+
+CGO_CFLAGS_DYN = "-I/home/mlk/dev/github/libbpfgo/libbpf/src/root/usr/include"
+CGO_LDFLAGS_DYN = "-lelf -lz  -Wl,-rpath=/home/mlk/dev/github/libbpfgo/libbpf/src/root/usr/lib64 -L/home/mlk/dev/github/libbpfgo/libbpf/src/root/usr/lib64 -lbpf"
+GO_EXTLDFLAGS_DYN = '-w -extldflags "-lelf -lz  -Wl,-rpath=/home/mlk/dev/github/libbpfgo/libbpf/src/root/usr/lib64 -L/home/mlk/dev/github/libbpfgo/libbpf/src/root/usr/lib64 -lbpf"'
 
 .PHONY: all
 all: $(TARGET_BPF) $(TARGET_CLI)
@@ -104,11 +111,19 @@ k8s-build-client:
 	"maciekleks.dev:v1alpha1" \
 	--go-header-file $(K8S_CODE_GENERATOR)/hack/boilerplate.go.txt
 
-k8s-build-cmd: $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
-	CGO_CFLAGS="-I/home/mlk/dev/github/libbpfgo/output" \
+k8s-build-cmd-static: $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
+	CGO_CFLAGS=$(CGO_CFLAGS_STATIC) \
 	$(GO) build -x \
-	-tags netgo -ldflags '-w -extldflags "-w -static -lbpf -L/home/mlk/dev/github/libbpfgo/output -lelf -lz"' \
-	-o $(TARGET_K8S) ./cmd/kubernetes/$(MAIN).go
+	-tags netgo -ldflags $(GO_EXTLDFLAGS_STATIC) \
+	-o $(TARGET_K8S_STATIC) ./cmd/kubernetes/$(MAIN).go
+
+k8s-build-cmd-dynamic: $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
+	CGO_CFLAGS=$(CGO_CFLAGS_DYNAMIC) \
+	$(GO) build -x \
+	-tags netgo -ldflags $(GO_EXTLDFLAGS_DYN) \
+	-o $(TARGET_K8S_DYN) ./cmd/kubernetes/$(MAIN).go
+
+#CGO_LDFLAGS=$(CGO_LDFLAGS_DYNAMIC) \
 
 K8S_CONTROLLER_GEN ?= ${GOPATH}/src/github.com/kubernetes-sigs/controller-tools/cmd/controller-gen
 # before use build controller-gen in  $K8S_CONTROLLER_GEN using command `go build -o controller-gen`

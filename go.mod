@@ -3,7 +3,7 @@ module github.com/MaciekLeks/l7egg
 go 1.20
 
 require (
-	github.com/aquasecurity/libbpfgo v0.4.7-libbpf-1.2.0-b2e29a1
+	github.com/aquasecurity/libbpfgo v0.4.5-libbpf-1.0.1
 	github.com/florianl/go-tc v0.4.2
 	github.com/google/gopacket v1.1.19
 	k8s.io/apimachinery v0.26.3
