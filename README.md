@@ -11,12 +11,13 @@ You need static or shared libpf library installed.
 cd src
 mkdir build
 sudo OBJDIR=build DESTDIR=/ make install
-```, then 
+```
+, then 
 from your root directory you can find outcomes here:
 ```
 /usr/includes
 /usr/lib64
-````
+```
 
 ## Standalone:
 ```
