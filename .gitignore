@@ -12,8 +12,7 @@ l7egg-k8s
 compile_commands.json
 
 # temp to be changed
-main-static
-main-k8s
+build/
 
 #temporary
 /tools/tc-cleaner
