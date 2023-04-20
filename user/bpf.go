@@ -27,7 +27,7 @@ import (
 	"unsafe"
 )
 
-type Seg struct {
+type ClientEgg struct {
 	CNs              []string
 	CIDRs            []string
 	IngressInterface string
@@ -45,8 +45,8 @@ type ipv4LPMVal struct {
 	counter uint64
 }
 
-func (seg Seg) Run() {
-	bpfModule, err := bpf.NewModuleFromFile(seg.BPFObjectPath)
+func (clientegg ClientEgg) Run() {
+	bpfModule, err := bpf.NewModuleFromFile(clientegg.BPFObjectPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(-1)
@@ -59,9 +59,9 @@ func (seg Seg) Run() {
 		os.Exit(-1)
 	}
 
-	err = attachProg(bpfModule, seg.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
+	err = attachProg(bpfModule, clientegg.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
 	must(err, "Can't attach TC hook.")
-	err = attachProg(bpfModule, seg.EgressInterface, bpf.BPFTcEgress, "tc_egress")
+	err = attachProg(bpfModule, clientegg.EgressInterface, bpf.BPFTcEgress, "tc_egress")
 	must(err, "Can't attach TC hook.")
 
 	packets := make(chan []byte)
@@ -88,7 +88,7 @@ func (seg Seg) Run() {
 
 	//{cidrs
 	fmt.Println("[ACL]: Init")
-	for _, ipv4NetStr := range seg.CIDRs {
+	for _, ipv4NetStr := range clientegg.CIDRs {
 		_, ipv4Net, err := net.ParseCIDR(ipv4NetStr)
 		must(err, "Can't parse ipv4 Net.")
 
@@ -224,7 +224,7 @@ recvLoop:
 						//fmt.Println("key size:", unsafe.Sizeof(key))
 						//fmt.Println("key data:", key.data)
 
-						if contains(seg.CNs[:], cn) {
+						if contains(clientegg.CNs[:], cn) {
 							////{check current value
 							//upKey := unsafe.Pointer(&key)
 							//valBytes, err := acl.GetValue(upKey)

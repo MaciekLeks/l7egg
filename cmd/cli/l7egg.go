@@ -31,7 +31,7 @@ func main() {
 		return
 	}
 
-	seg := user.Seg{
+	clientegg := user.ClientEgg{
 		IngressInterface: *iface,
 		EgressInterface:  *eface,
 		CNs:              cns,
@@ -39,5 +39,5 @@ func main() {
 		BPFObjectPath:    *bpfObjectPath,
 	}
 
-	seg.Run()
+	clientegg.Run()
 }

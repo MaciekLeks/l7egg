@@ -58,7 +58,7 @@ $(TARGET_CLI): $(CMD_CLI_GO_SRC) $(TARGET_BPF)
 	echo "GO:" >&2
 	CGO_CFLAGS=$(CGO_CFLAGS_STATIC) \
 	CGO_LDFLAGS=$(CGO_LDFLAGS_STATIC) \
-	$(GO) build \
+	$(GO) build -x \
 	-tags netgo -ldflags $(CGO_EXTLDFLAGS_STATIC) \
 	-o $(TARGET_CLI) ./cmd/cli/$(MAIN).go
 
@@ -105,10 +105,9 @@ k8s-build-client:
 	--go-header-file $(K8S_CODE_GENERATOR)/hack/boilerplate.go.txt
 
 k8s-build-cmd: $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
-	CGO_CFLAGS=$(CGO_CFLAGS_STATIC) \
-	GO_LDFLAGS=$(CGO_LDFLAGS_STATIC) \
-	$(GO) build \
-	-tags netgo -ldflags $(CGO_EXTLDFLAGS_STATIC) \
+	CGO_CFLAGS="-I/home/mlk/dev/github/libbpfgo/output" \
+	$(GO) build -x \
+	-tags netgo -ldflags '-w -extldflags "-w -static -lbpf -L/home/mlk/dev/github/libbpfgo/output -lelf -lz"' \
 	-o $(TARGET_K8S) ./cmd/kubernetes/$(MAIN).go
 
 K8S_CONTROLLER_GEN ?= ${GOPATH}/src/github.com/kubernetes-sigs/controller-tools/cmd/controller-gen

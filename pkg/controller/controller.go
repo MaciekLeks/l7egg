@@ -2,9 +2,11 @@ package controller
 
 import (
 	"fmt"
+	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
 	ceggclientset "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned"
 	cegginformer "github.com/MaciekLeks/l7egg/pkg/client/informers/externalversions/maciekleks.dev/v1alpha1"
 	cegglister "github.com/MaciekLeks/l7egg/pkg/client/listers/maciekleks.dev/v1alpha1"
+	"github.com/MaciekLeks/l7egg/user"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
@@ -42,7 +44,7 @@ func NewController(ceggClientset ceggclientset.Interface, ceggInformer cegginfor
 }
 
 func (c *Controller) Run(ch <-chan struct{}) {
-	fmt.Println("Starting controller")
+	fmt.Println("Starting controller.")
 	if !cache.WaitForCacheSync(ch, c.ceggCacheSynced) {
 		log.Println("Cache not synced.")
 	}
@@ -94,6 +96,8 @@ func (c *Controller) processNextItem() bool {
 	}
 
 	fmt.Printf("clusteregg object: %+v\n", cegg)
+
+	runEgg(cegg.Spec)
 	//
 	//err = c.reconcile(ns, name)
 	//if err != nil {
@@ -104,8 +108,21 @@ func (c *Controller) processNextItem() bool {
 	return true
 }
 
+func runEgg(spec v1alpha1.ClusterEggSpec) {
+	clientegg := user.ClientEgg{
+		IngressInterface: spec.IngressInterface,
+		EgressInterface:  spec.EgressInterface,
+		CNs:              spec.CommonNames,
+		CIDRs:            spec.CIDRs,
+		BPFObjectPath:    "./l7egg.bpf.o",
+	}
+
+	go clientegg.Run()
+}
+
 func (c *Controller) handleAdd(obj interface{}) {
 	log.Println("handleAdd was called.")
+
 	c.queue.Add(obj)
 }
 
