@@ -72,7 +72,7 @@ $(TARGET_CLI): $(CMD_CLI_GO_SRC) $(TARGET_BPF)
 .PHONY: clean
 clean:
 	$(GO) clean -i
-	rm $(TARGET_BPF) $(TARGET_CLI) $(TARGET_K8S) compile_commands.json  2> /dev/null || true
+	rm $(TARGET_BPF) $(TARGET_CLI) $(TARGET_K8S_STATIC) $(TARGET_K8S_DYN) compile_commands.json  2> /dev/null || true
 
 .PHONY: vmlinuxh
 vmlinuxh:
