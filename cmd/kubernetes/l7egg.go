@@ -61,20 +61,20 @@ func main() {
 
 	fmt.Printf("ceggController %v\n", c)
 
-	stopper := make(chan struct{})
+	done := make(chan struct{})
 	//defer close(stopper)
 
 	sig := make(chan os.Signal, 0)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
 	go func() {
 		<-sig
-		close(stopper)
+		close(done)
 	}()
 
-	informerFactory.Start(stopper)
+	informerFactory.Start(done)
 	//if err := c.Run(); err != nil {
 	//	log.Printf("Error running controller %v", err)
 	//}
-	c.Run(stopper)
+	c.Run(done)
 
 }

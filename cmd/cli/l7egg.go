@@ -4,6 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/user"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 type argList []string
@@ -39,8 +42,13 @@ func main() {
 		BPFObjectPath:    *bpfObjectPath,
 	}
 
-	stopper := make(chan struct{})
-	defer close(stopper)
+	done := make(chan struct{})
+	sig := make(chan os.Signal, 0)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
+	go func() {
+		<-sig
+		close(done)
+	}()
 
-	clientegg.Run(stopper)
+	clientegg.Run(done)
 }

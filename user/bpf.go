@@ -45,7 +45,7 @@ type ipv4LPMVal struct {
 	counter uint64
 }
 
-func (clientegg ClientEgg) Run(stopCh <-chan struct{}) {
+func (clientegg ClientEgg) Run(done <-chan struct{}) {
 	bpfModule, err := bpf.NewModuleFromFile(clientegg.BPFObjectPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -111,18 +111,13 @@ func (clientegg ClientEgg) Run(stopCh <-chan struct{}) {
 	}
 	//cidrs}
 
-	mapStopCh := make(chan interface{})
-	defer close(mapStopCh)
-	go runMapLooper(mapStopCh, acl)
+	go runMapLooper(done, acl)
 
 recvLoop:
 
 	for {
 		select {
-		case <-sig:
-			fmt.Println("[recvLoop]: SIGnal came.")
-			break recvLoop
-		case <-stopCh:
+		case <-done:
 			fmt.Println("[recvLoop]: stopCh closed.")
 			break recvLoop
 		case b, ok := <-packets:
@@ -221,14 +216,12 @@ recvLoop:
 		}
 	}
 
-	mapStopCh <- true
 	fmt.Println("///Stopping recvLoop.")
 	rb.Stop()
 	rb.Close()
 }
 
-func runMapLooper(done <-chan interface{}, acl *bpf.BPFMap) {
-	//{show map
+func runMapLooper(done <-chan struct{}, acl *bpf.BPFMap) {
 mapLoop:
 	for {
 		select {
@@ -274,8 +267,6 @@ mapLoop:
 		}
 	}
 	fmt.Println("///Stopping mapLoop.")
-
-	//show}
 }
 
 func unmarshalValue(bytes []byte) ipv4LPMVal {
