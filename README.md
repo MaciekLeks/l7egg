@@ -19,19 +19,19 @@ from your root directory you can find outcomes here:
 /usr/lib64
 ```
 
-## Standalone:
+## CLI:
 ```
 make clean
 LIBBPF_DIR=/ make all
 ```
-K8s operator/controller:
+## K8s operator/controller:
 ```
 make clean
 LIBBPF_DIR=/ make k8s-build-cmd
 ```
 
-# Use
-## Standalone:
+# Examples
+## CLI:
 To allow only egress traffic on the declared CIDRs and CNs (works with partial domain names):
 ```bash
 sudo ./l7egg-cli -iface=enp0s3 -eface=enp0s3 \

@@ -39,5 +39,8 @@ func main() {
 		BPFObjectPath:    *bpfObjectPath,
 	}
 
-	clientegg.Run()
+	stopper := make(chan struct{})
+	defer close(stopper)
+
+	clientegg.Run(stopper)
 }

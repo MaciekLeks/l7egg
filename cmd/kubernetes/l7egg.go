@@ -11,7 +11,9 @@ import (
 	"k8s.io/client-go/util/homedir"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	cegginformerfactory "github.com/MaciekLeks/l7egg/pkg/client/informers/externalversions"
@@ -60,7 +62,14 @@ func main() {
 	fmt.Printf("ceggController %v\n", c)
 
 	stopper := make(chan struct{})
-	defer close(stopper)
+	//defer close(stopper)
+
+	sig := make(chan os.Signal, 0)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
+	go func() {
+		<-sig
+		close(stopper)
+	}()
 
 	informerFactory.Start(stopper)
 	//if err := c.Run(); err != nil {

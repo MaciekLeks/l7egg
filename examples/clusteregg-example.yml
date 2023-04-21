@@ -7,6 +7,8 @@ spec:
   ingressInterface: enp0s3
   egressInterface: enp0s3
   commonNames:
-  - www.interia.pl
+  - www.onet.pl
+  - .ubuntu.com
   cidrs:
   - 172.172.34.3/32
+  - 10.0.0.0/24

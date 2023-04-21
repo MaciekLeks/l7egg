@@ -19,6 +19,7 @@ type Controller struct {
 	ceggCacheSynced cache.InformerSynced
 	ceggLister      cegglister.ClusterEggLister
 	queue           workqueue.RateLimitingInterface
+	done            <-chan struct{}
 }
 
 const (
@@ -43,18 +44,19 @@ func NewController(ceggClientset ceggclientset.Interface, ceggInformer cegginfor
 	return c
 }
 
-func (c *Controller) Run(ch <-chan struct{}) {
+func (c *Controller) Run(done <-chan struct{}) {
 	fmt.Println("Starting controller.")
-	if !cache.WaitForCacheSync(ch, c.ceggCacheSynced) {
+	c.done = done
+	if !cache.WaitForCacheSync(done, c.ceggCacheSynced) {
 		log.Println("Cache not synced.")
 	}
 
 	fmt.Println("---1")
 	// spin up only one gorouitne for now
-	go wait.Until(c.worker, 1*time.Second, ch) //runs again after 1 sec only if c.worker ends
+	go wait.Until(c.worker, 1*time.Second, done) //runs again after 1 sec only if c.worker ends
 	fmt.Println("---2")
 
-	<-ch
+	<-done
 }
 
 func (c *Controller) worker() {
@@ -97,7 +99,7 @@ func (c *Controller) processNextItem() bool {
 
 	fmt.Printf("clusteregg object: %+v\n", cegg)
 
-	runEgg(cegg.Spec)
+	runEgg(c.done, cegg.Spec)
 	//
 	//err = c.reconcile(ns, name)
 	//if err != nil {
@@ -108,7 +110,7 @@ func (c *Controller) processNextItem() bool {
 	return true
 }
 
-func runEgg(spec v1alpha1.ClusterEggSpec) {
+func runEgg(done <-chan struct{}, spec v1alpha1.ClusterEggSpec) {
 	clientegg := user.ClientEgg{
 		IngressInterface: spec.IngressInterface,
 		EgressInterface:  spec.EgressInterface,
@@ -117,7 +119,7 @@ func runEgg(spec v1alpha1.ClusterEggSpec) {
 		BPFObjectPath:    "./l7egg.bpf.o",
 	}
 
-	go clientegg.Run()
+	go clientegg.Run(done)
 }
 
 func (c *Controller) handleAdd(obj interface{}) {

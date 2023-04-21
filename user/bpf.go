@@ -45,7 +45,7 @@ type ipv4LPMVal struct {
 	counter uint64
 }
 
-func (clientegg ClientEgg) Run() {
+func (clientegg ClientEgg) Run(stopCh <-chan struct{}) {
 	bpfModule, err := bpf.NewModuleFromFile(clientegg.BPFObjectPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -111,49 +111,9 @@ func (clientegg ClientEgg) Run() {
 	}
 	//cidrs}
 
-	//{show map
-	go func() {
-		for {
-			time.Sleep(5 * time.Second)
-			fmt.Printf("\n[ACL]:")
-			i := acl.Iterator() //determineHost Endian search by Itertaot in libbfpgo
-			for i.Next() {
-				if i.Err() != nil {
-					fatal("Iterator error", i.Err())
-				}
-				keyBytes := i.Key()
-				prefixLen := binary.LittleEndian.Uint32(keyBytes[0:4])
-				ipBytes := keyBytes[4:8]
-				ip := bytes2ip(ipBytes)
-
-				key := ipv4LPMKey{prefixLen, ip2Uint32(ip)}
-				upKey := unsafe.Pointer(&key)
-				valBytes, err := acl.GetValue(upKey)
-				must(err, "Can't get value.")
-				counter := binary.LittleEndian.Uint64(valBytes[8:16])
-				ttl := binary.LittleEndian.Uint64(valBytes[0:8])
-				val := ipv4LPMVal{
-					ttl,
-					counter,
-				}
-				bootNs := uint64(C.get_nsecs())
-				//var expired string = fmt.Sprintf("%d-%d", bootNs, ttl)
-				var expired string = " "
-				if ttl != 0 && ttl < bootNs {
-					//fmt.Printf("\nttl(%d)<bootNs(%d)=%t | ", ttl, bootNs, ttl < bootNs)
-					expired = "x"
-				}
-
-				//valBytes := acl[ipv4LPMKey{1,1}]
-				//fmt.Printf(" [bootTtlNs:%d,bootNs:%d][%s]%s/%d[%d]", ttl, bootNs, expired, ip, prefixLen, val.counter)
-				fmt.Printf(" [%s]%s/%d[%d]", expired, ip, prefixLen, val.counter)
-
-			}
-		}
-
-	}()
-
-	//show}
+	mapStopCh := make(chan interface{})
+	defer close(mapStopCh)
+	go runMapLooper(mapStopCh, acl)
 
 recvLoop:
 
@@ -161,6 +121,9 @@ recvLoop:
 		select {
 		case <-sig:
 			fmt.Println("[recvLoop]: SIGnal came.")
+			break recvLoop
+		case <-stopCh:
+			fmt.Println("[recvLoop]: stopCh closed.")
 			break recvLoop
 		case b, ok := <-packets:
 			if ok == false {
@@ -258,8 +221,61 @@ recvLoop:
 		}
 	}
 
+	mapStopCh <- true
+	fmt.Println("///Stopping recvLoop.")
 	rb.Stop()
 	rb.Close()
+}
+
+func runMapLooper(done <-chan interface{}, acl *bpf.BPFMap) {
+	//{show map
+mapLoop:
+	for {
+		select {
+		case <-done:
+			fmt.Println("[mapLoop]: stopCh closed.")
+			break mapLoop
+		default:
+			time.Sleep(5 * time.Second)
+			fmt.Printf("\n[ACL]:")
+			i := acl.Iterator() //determineHost Endian search by Itertaot in libbfpgo
+			for i.Next() {
+				if i.Err() != nil {
+					fatal("Iterator error", i.Err())
+				}
+				keyBytes := i.Key()
+				prefixLen := binary.LittleEndian.Uint32(keyBytes[0:4])
+				ipBytes := keyBytes[4:8]
+				ip := bytes2ip(ipBytes)
+
+				key := ipv4LPMKey{prefixLen, ip2Uint32(ip)}
+				upKey := unsafe.Pointer(&key)
+				valBytes, err := acl.GetValue(upKey)
+				must(err, "Can't get value.")
+				counter := binary.LittleEndian.Uint64(valBytes[8:16])
+				ttl := binary.LittleEndian.Uint64(valBytes[0:8])
+				val := ipv4LPMVal{
+					ttl,
+					counter,
+				}
+				bootNs := uint64(C.get_nsecs())
+				//var expired string = fmt.Sprintf("%d-%d", bootNs, ttl)
+				var expired string = " "
+				if ttl != 0 && ttl < bootNs {
+					//fmt.Printf("\nttl(%d)<bootNs(%d)=%t | ", ttl, bootNs, ttl < bootNs)
+					expired = "x"
+				}
+
+				//valBytes := acl[ipv4LPMKey{1,1}]
+				//fmt.Printf(" [bootTtlNs:%d,bootNs:%d][%s]%s/%d[%d]", ttl, bootNs, expired, ip, prefixLen, val.counter)
+				fmt.Printf(" [%s]%s/%d[%d]", expired, ip, prefixLen, val.counter)
+
+			}
+		}
+	}
+	fmt.Println("///Stopping mapLoop.")
+
+	//show}
 }
 
 func unmarshalValue(bytes []byte) ipv4LPMVal {
