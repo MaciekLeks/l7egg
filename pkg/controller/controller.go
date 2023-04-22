@@ -6,7 +6,7 @@ import (
 	ceggclientset "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned"
 	cegginformer "github.com/MaciekLeks/l7egg/pkg/client/informers/externalversions/maciekleks.dev/v1alpha1"
 	cegglister "github.com/MaciekLeks/l7egg/pkg/client/listers/maciekleks.dev/v1alpha1"
-	"github.com/MaciekLeks/l7egg/user"
+	"github.com/MaciekLeks/l7egg/pkg/user"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"

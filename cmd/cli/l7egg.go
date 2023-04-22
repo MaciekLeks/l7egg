@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/MaciekLeks/l7egg/user"
+	"github.com/MaciekLeks/l7egg/pkg/user"
 	"os"
 	"os/signal"
 	"syscall"
