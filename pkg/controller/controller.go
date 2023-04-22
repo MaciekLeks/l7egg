@@ -19,7 +19,8 @@ type Controller struct {
 	ceggCacheSynced cache.InformerSynced
 	ceggLister      cegglister.ClusterEggLister
 	queue           workqueue.RateLimitingInterface
-	done            <-chan struct{}
+	done            chan struct{}
+	//wg              sync.WaitGroup
 }
 
 const (
@@ -46,7 +47,7 @@ func NewController(ceggClientset ceggclientset.Interface, ceggInformer cegginfor
 
 func (c *Controller) Run(done <-chan struct{}) {
 	fmt.Println("Starting controller.")
-	c.done = done
+	c.done = make(chan struct{})
 	if !cache.WaitForCacheSync(done, c.ceggCacheSynced) {
 		log.Println("Cache not synced.")
 	}
@@ -57,6 +58,10 @@ func (c *Controller) Run(done <-chan struct{}) {
 	fmt.Println("---2")
 
 	<-done
+	fmt.Println("---3")
+	close(c.done)
+
+	fmt.Println("---4")
 }
 
 func (c *Controller) worker() {

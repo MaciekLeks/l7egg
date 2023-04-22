@@ -20,7 +20,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"os/signal"
 	"strings"
 	"syscall"
 	"time"
@@ -83,9 +82,6 @@ func (clientegg ClientEgg) Run(done <-chan struct{}) {
 	acl, err := bpfModule.GetMap("ipv4_lpm_map")
 	must(err, "Can't get map")
 
-	sig := make(chan os.Signal, 0)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
-
 	//{cidrs
 	fmt.Println("[ACL]: Init")
 	for _, ipv4NetStr := range clientegg.CIDRs {
@@ -111,162 +107,185 @@ func (clientegg ClientEgg) Run(done <-chan struct{}) {
 	}
 	//cidrs}
 
-	go runMapLooper(done, acl)
+	fmt.Printf("#######1")
+	mapLooperDone := runMapLooper(done, acl)
+	fmt.Printf("#######2")
 
-recvLoop:
+	<-clientegg.runPacketsLooper(done, packets, acl)
 
-	for {
-		select {
-		case <-done:
-			fmt.Println("[recvLoop]: stopCh closed.")
-			break recvLoop
-		case b, ok := <-packets:
-			if ok == false {
-				fmt.Println("[recvLoop]: Channel not OK!")
-				break recvLoop
-			}
-
-			skbLen := binary.LittleEndian.Uint32(b[0:4])
-
-			//fmt.Printf("\n\nskb.len:%d, skb.", skbLen)
-			data := b[4:(skbLen + 4)]
-			//fmt.Println("Encoded packet:", insertNth(hex.EncodeToString(data), 2))
-
-			packet := gopacket.NewPacket(data, layers.LayerTypeEthernet, gopacket.Default)
-			// Get the TCP layer from this packet
-
-			//for _, l := range packet.Layers() {
-			//	fmt.Println("Layer:", l.LayerType())
-			//}
-
-			var payload []byte
-			if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
-				fmt.Println("This is a TCP packet!")
-				// Get actual TCP data from this layer
-				tcp, _ := tcpLayer.(*layers.TCP)
-				fmt.Printf("From src port %d to dst port %d\n", tcp.SrcPort, tcp.DstPort)
-
-				payload = tcp.Payload
-			} else if udpLayer := packet.Layer(layers.LayerTypeUDP); udpLayer != nil {
-				fmt.Println("This is a UDP packet!")
-				// Get actual TCP data from this layer
-				udp, _ := udpLayer.(*layers.UDP)
-				fmt.Printf("From src port %d to dst port %d\n", udp.SrcPort, udp.DstPort)
-
-				payload = udp.Payload
-			}
-
-			dnsPacket := gopacket.NewPacket(payload, layers.LayerTypeDNS, gopacket.Default)
-			if dnsLayer := dnsPacket.Layer(layers.LayerTypeDNS); dnsLayer != nil {
-				fmt.Println("This is a DNS packet!")
-				// Get actual TCP data from this layer
-
-				dns := dnsLayer.(*layers.DNS)
-				questions := dns.Questions
-				for _, q := range questions {
-					fmt.Printf("Question: Name:%s Type:%s Class:%s\n", string(q.Name), q.Type, q.Class)
-				}
-				answers := dns.Answers
-				for _, a := range answers {
-					fmt.Printf("Type: %s, Answer: IP:%s Name:%s CName:%s\n", a.Type, a.IP, string(a.Name), string(a.CNAME))
-					if a.Type == layers.DNSTypeA {
-
-						cn := string(a.Name)
-						ip := a.IP
-						ttlSec := a.TTL //!!! remove * 5
-
-						key := ipv4LPMKey{32, ip2Uint32(ip)}
-						//val := time.Now().Unix() + int64(ttl) //Now + ttl
-						ttlNs := uint64(ttlSec) * 1000000000
-						bootTtlNs := uint64(C.get_nsecs()) + ttlNs //boot time[ns] + ttl[ns]
-						//fmt.Println("key size:", unsafe.Sizeof(key))
-						//fmt.Println("key data:", key.data)
-
-						if contains(clientegg.CNs[:], cn) {
-							////{check current value
-							//upKey := unsafe.Pointer(&key)
-							//valBytes, err := acl.GetValue(upKey)
-							////check}
-
-							val := ipv4LPMVal{
-								bootTtlNs,
-								0, //zero existsing elements :/
-							}
-							err = updateACL(acl, key, val)
-							must(err, "Can't update ACL.")
-							fmt.Printf("Updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", cn, ip, ttlSec, ttlNs, bootTtlNs)
-
-						} else {
-							fmt.Println("DROP")
-						}
-					} else {
-						fmt.Println("Anser.Type:", a.Type)
-
-					}
-
-				}
-			}
-
-			//numberOfEventsReceived++
-			//
-			//fmt.Println("[10]")
-			//if numberOfEventsReceived > 3 {
-			//	break recvLoop
-			//}
-		}
-	}
-
+	<-mapLooperDone
 	fmt.Println("///Stopping recvLoop.")
 	rb.Stop()
 	rb.Close()
 }
 
-func runMapLooper(done <-chan struct{}, acl *bpf.BPFMap) {
-mapLoop:
-	for {
-		select {
-		case <-done:
-			fmt.Println("[mapLoop]: stopCh closed.")
-			break mapLoop
-		default:
-			time.Sleep(5 * time.Second)
-			fmt.Printf("\n[ACL]:")
-			i := acl.Iterator() //determineHost Endian search by Itertaot in libbfpgo
-			for i.Next() {
-				if i.Err() != nil {
-					fatal("Iterator error", i.Err())
-				}
-				keyBytes := i.Key()
-				prefixLen := binary.LittleEndian.Uint32(keyBytes[0:4])
-				ipBytes := keyBytes[4:8]
-				ip := bytes2ip(ipBytes)
+func (clientegg ClientEgg) runPacketsLooper(done <-chan struct{}, packets chan []byte, acl *bpf.BPFMap) chan interface{} {
+	term := make(chan interface{})
+	go func() {
+		defer fmt.Printf("runPacketsLooper terminated")
+		defer close(term)
+	recvLoop:
 
-				key := ipv4LPMKey{prefixLen, ip2Uint32(ip)}
-				upKey := unsafe.Pointer(&key)
-				valBytes, err := acl.GetValue(upKey)
-				must(err, "Can't get value.")
-				counter := binary.LittleEndian.Uint64(valBytes[8:16])
-				ttl := binary.LittleEndian.Uint64(valBytes[0:8])
-				val := ipv4LPMVal{
-					ttl,
-					counter,
-				}
-				bootNs := uint64(C.get_nsecs())
-				//var expired string = fmt.Sprintf("%d-%d", bootNs, ttl)
-				var expired string = " "
-				if ttl != 0 && ttl < bootNs {
-					//fmt.Printf("\nttl(%d)<bootNs(%d)=%t | ", ttl, bootNs, ttl < bootNs)
-					expired = "x"
+		for {
+			select {
+			case <-done:
+				fmt.Println("[recvLoop]: stopCh closed.")
+				break recvLoop
+			case b, ok := <-packets:
+				if ok == false {
+					fmt.Println("[recvLoop]: Channel not OK!")
+					break recvLoop
 				}
 
-				//valBytes := acl[ipv4LPMKey{1,1}]
-				//fmt.Printf(" [bootTtlNs:%d,bootNs:%d][%s]%s/%d[%d]", ttl, bootNs, expired, ip, prefixLen, val.counter)
-				fmt.Printf(" [%s]%s/%d[%d]", expired, ip, prefixLen, val.counter)
+				skbLen := binary.LittleEndian.Uint32(b[0:4])
 
+				//fmt.Printf("\n\nskb.len:%d, skb.", skbLen)
+				data := b[4:(skbLen + 4)]
+				//fmt.Println("Encoded packet:", insertNth(hex.EncodeToString(data), 2))
+
+				packet := gopacket.NewPacket(data, layers.LayerTypeEthernet, gopacket.Default)
+				// Get the TCP layer from this packet
+
+				//for _, l := range packet.Layers() {
+				//	fmt.Println("Layer:", l.LayerType())
+				//}
+
+				var payload []byte
+				if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
+					fmt.Println("This is a TCP packet!")
+					// Get actual TCP data from this layer
+					tcp, _ := tcpLayer.(*layers.TCP)
+					fmt.Printf("From src port %d to dst port %d\n", tcp.SrcPort, tcp.DstPort)
+
+					payload = tcp.Payload
+				} else if udpLayer := packet.Layer(layers.LayerTypeUDP); udpLayer != nil {
+					fmt.Println("This is a UDP packet!")
+					// Get actual TCP data from this layer
+					udp, _ := udpLayer.(*layers.UDP)
+					fmt.Printf("From src port %d to dst port %d\n", udp.SrcPort, udp.DstPort)
+
+					payload = udp.Payload
+				}
+
+				dnsPacket := gopacket.NewPacket(payload, layers.LayerTypeDNS, gopacket.Default)
+				if dnsLayer := dnsPacket.Layer(layers.LayerTypeDNS); dnsLayer != nil {
+					fmt.Println("This is a DNS packet!")
+					// Get actual TCP data from this layer
+
+					dns := dnsLayer.(*layers.DNS)
+					questions := dns.Questions
+					for _, q := range questions {
+						fmt.Printf("Question: Name:%s Type:%s Class:%s\n", string(q.Name), q.Type, q.Class)
+					}
+					answers := dns.Answers
+					for _, a := range answers {
+						fmt.Printf("Type: %s, Answer: IP:%s Name:%s CName:%s\n", a.Type, a.IP, string(a.Name), string(a.CNAME))
+						if a.Type == layers.DNSTypeA {
+
+							cn := string(a.Name)
+							ip := a.IP
+							ttlSec := a.TTL //!!! remove * 5
+
+							key := ipv4LPMKey{32, ip2Uint32(ip)}
+							//val := time.Now().Unix() + int64(ttl) //Now + ttl
+							ttlNs := uint64(ttlSec) * 1000000000
+							bootTtlNs := uint64(C.get_nsecs()) + ttlNs //boot time[ns] + ttl[ns]
+							//fmt.Println("key size:", unsafe.Sizeof(key))
+							//fmt.Println("key data:", key.data)
+
+							if contains(clientegg.CNs[:], cn) {
+								////{check current value
+								//upKey := unsafe.Pointer(&key)
+								//valBytes, err := acl.GetValue(upKey)
+								////check}
+
+								val := ipv4LPMVal{
+									bootTtlNs,
+									0, //zero existsing elements :/
+								}
+								err := updateACL(acl, key, val)
+								must(err, "Can't update ACL.")
+								fmt.Printf("Updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", cn, ip, ttlSec, ttlNs, bootTtlNs)
+
+							} else {
+								fmt.Println("DROP")
+							}
+						} else {
+							fmt.Println("Anser.Type:", a.Type)
+
+						}
+
+					}
+				}
+
+				//numberOfEventsReceived++
+				//
+				//fmt.Println("[10]")
+				//if numberOfEventsReceived > 3 {
+				//	break recvLoop
+				//}
 			}
 		}
-	}
-	fmt.Println("///Stopping mapLoop.")
+	}()
+	return term
+}
+
+func runMapLooper(done <-chan struct{}, acl *bpf.BPFMap) chan struct{} {
+	term := make(chan struct{})
+
+	fmt.Printf("#######4")
+	go func() {
+		defer fmt.Printf("runMapLooper terminated")
+		defer close(term)
+	mapLoop:
+		for {
+			select {
+			case <-done:
+				fmt.Println("[mapLoop]: stopCh closed.")
+				break mapLoop
+			default:
+				time.Sleep(5 * time.Second)
+				fmt.Printf("\n[ACL]:")
+				i := acl.Iterator() //determineHost Endian search by Itertaot in libbfpgo
+				for i.Next() {
+					if i.Err() != nil {
+						fatal("Iterator error", i.Err())
+					}
+					keyBytes := i.Key()
+					prefixLen := binary.LittleEndian.Uint32(keyBytes[0:4])
+					ipBytes := keyBytes[4:8]
+					ip := bytes2ip(ipBytes)
+
+					key := ipv4LPMKey{prefixLen, ip2Uint32(ip)}
+					upKey := unsafe.Pointer(&key)
+					valBytes, err := acl.GetValue(upKey)
+					must(err, "Can't get value.")
+					counter := binary.LittleEndian.Uint64(valBytes[8:16])
+					ttl := binary.LittleEndian.Uint64(valBytes[0:8])
+					val := ipv4LPMVal{
+						ttl,
+						counter,
+					}
+					bootNs := uint64(C.get_nsecs())
+					//var expired string = fmt.Sprintf("%d-%d", bootNs, ttl)
+					var expired string = " "
+					if ttl != 0 && ttl < bootNs {
+						//fmt.Printf("\nttl(%d)<bootNs(%d)=%t | ", ttl, bootNs, ttl < bootNs)
+						expired = "x"
+					}
+
+					//valBytes := acl[ipv4LPMKey{1,1}]
+					//fmt.Printf(" [bootTtlNs:%d,bootNs:%d][%s]%s/%d[%d]", ttl, bootNs, expired, ip, prefixLen, val.counter)
+					fmt.Printf(" [%s]%s/%d[%d]", expired, ip, prefixLen, val.counter)
+
+				}
+			}
+		}
+		fmt.Printf("#######5")
+	}()
+
+	fmt.Printf("#######6")
+	return term
 }
 
 func unmarshalValue(bytes []byte) ipv4LPMVal {
