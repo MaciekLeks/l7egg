@@ -116,10 +116,10 @@ func (clientegg ClientEgg) Run(wg *sync.WaitGroup, done <-chan struct{}) {
 		defer tools.CleanInterfaces(0, clientegg.IngressInterface, clientegg.EgressInterface) //only egress needed
 		defer bpfModule.Close()
 
-		mapLooperDone := clientegg.runMapLooper(done, acl)
-		<-clientegg.runPacketsLooper(done, packets, acl)
-
-		<-mapLooperDone
+		var lwg sync.WaitGroup
+		clientegg.runMapLooper(&lwg, done, acl)
+		clientegg.runPacketsLooper(&lwg, done, packets, acl)
+		lwg.Wait()
 
 		fmt.Println("///Stopping recvLoop.")
 		rb.Stop()
@@ -128,11 +128,11 @@ func (clientegg ClientEgg) Run(wg *sync.WaitGroup, done <-chan struct{}) {
 
 }
 
-func (clientegg ClientEgg) runPacketsLooper(done <-chan struct{}, packets chan []byte, acl *bpf.BPFMap) chan interface{} {
-	term := make(chan interface{})
+func (clientegg ClientEgg) runPacketsLooper(lwg *sync.WaitGroup, done <-chan struct{}, packets chan []byte, acl *bpf.BPFMap) {
+	lwg.Add(1)
 	go func() {
+		defer lwg.Done()
 		defer fmt.Println("runPacketsLooper terminated")
-		defer close(term)
 	recvLoop:
 
 		for {
@@ -236,15 +236,13 @@ func (clientegg ClientEgg) runPacketsLooper(done <-chan struct{}, packets chan [
 			}
 		}
 	}()
-	return term
 }
 
-func (_ ClientEgg) runMapLooper(done <-chan struct{}, acl *bpf.BPFMap) chan struct{} {
-	term := make(chan struct{})
-
+func (_ ClientEgg) runMapLooper(lwg *sync.WaitGroup, done <-chan struct{}, acl *bpf.BPFMap) {
+	lwg.Add(1)
 	go func() {
+		defer lwg.Done()
 		defer fmt.Printf("runMapLooper terminated")
-		defer close(term)
 	mapLoop:
 		for {
 			select {
@@ -290,8 +288,6 @@ func (_ ClientEgg) runMapLooper(done <-chan struct{}, acl *bpf.BPFMap) chan stru
 			}
 		}
 	}()
-
-	return term
 }
 
 func clean(iface string) {

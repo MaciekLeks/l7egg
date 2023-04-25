@@ -75,7 +75,7 @@ func (h *TCClsActHelper) DeleteClsact() error {
 		return fmt.Errorf("Deleting clsact qdisc error: %+v\n", err)
 	}
 
-	fmt.Printf("Clsact qdisc (Handle: %x Parent: %x) deleted.", h.clsact.Handle, h.clsact.Parent)
+	fmt.Printf("Clsact qdisc (handle: %x, parent: %x) deleted.\n", h.clsact.Handle, h.clsact.Parent)
 
 	return nil
 }
@@ -119,7 +119,7 @@ func (h *TCClsActHelper) DeleteFilter(handleID HandleID, parentHandleID HandleID
 				fmt.Println("Could not delete filter from TC socket for %#v", err)
 				return err
 			}
-			fmt.Printf("Filter (Handle: %x Parent: %x) deleted.\n", handleID, parentHandleID)
+			fmt.Printf("Filter (handle: %x, parent: %x) deleted.\n", handleID, parentHandleID)
 		}
 	}
 	return nil
