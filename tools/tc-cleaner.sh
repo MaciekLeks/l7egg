@@ -2,19 +2,19 @@
 
 echo "Traffic Control cleansing tool for clsact qdisc used by l7egg"
 
-iface_flag=$1
-eface_flag=$2
-help='Usage: tc-cleaner -iface=${iface} -eface={$eface}'
+iiface_flag=$1
+eiface_flag=$2
+help='Usage: tc-cleaner -iiface=${iiface} -eiface={$eiface}'
 
-if [[ -z "$iface_flag" || ! "$iface_flag" =~ ^-iface=.+ ]]
+if [[ -z "$iiface_flag" || ! "$iiface_flag" =~ ^-iiface=.+ ]]
 then
-  echo "Missing or wrong -iface flag."
+  echo "Missing or wrong -iiface flag."
   err=1
 fi
 
-if [[ -z "$eface_flag" || ! "$eface_flag" =~ ^-eface=.+ ]]
+if [[ -z "$eiface_flag" || ! "$eiface_flag" =~ ^-eiface=.+ ]]
 then
-  echo "Missing or wrong -eface flag."
+  echo "Missing or wrong -eiface flag."
   err=1
 fi
 
@@ -24,19 +24,20 @@ then
   exit 0
 fi
 
-iface=${iface_flag#*=}
-eface=${eface_flag#*=}
+iiface=${iiface_flag#*=}
+eiface=${eiface_flag#*=}
 
 set +e
 echo "--- Current Status"
-sudo tc filter show dev "${iface}" ingress
-sudo tc filter show dev "${eface}" egress
-sudo tc qdisc del dev enp0s3 clsact
+sudo tc filter show dev "${iiface}" ingress
+sudo tc filter show dev "${eiface}" egress
+sudo tc qdisc del dev "${iiface}" clsact
+sudo tc qdisc del dev "${eiface}" clsact
 sudo bpftool net list
 
 echo "--- Cleaning"
-sudo tc filter del dev "${eface}" egress
-sudo tc filter del dev "${iface}" ingress
+sudo tc filter del dev "${eiface}" egress
+sudo tc filter del dev "${iiface}" ingress
 
 echo "-- Current Status"
 sudo tc qdisc show
