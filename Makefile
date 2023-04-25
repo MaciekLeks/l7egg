@@ -45,7 +45,7 @@ GO_EXTLDFLAGS_STATIC = '-w -extldflags "-static $(LIBBPF_STATIC_LIB) -lelf -lz"'
 GO_EXTLDFLAGS_DYN = '-w -extldflags "-lelf -lz  -Wl,-rpath=$(LIBBPF_DYN_LIB) -L$(LIBBPF_DYN_LIB) -lbpf"'
 
 .PHONY: all
-all: $(TARGET_BPF) $(TARGET_CLI)
+all: $(TARGET_BPF) $(TARGET_CLI) $(TARGET_K8S_DYN)
 
 
 $(BPF_SRC): $(BPF_HEADERS)
@@ -114,17 +114,21 @@ k8s-build-client:
 	"maciekleks.dev:v1alpha1" \
 	--go-header-file $(K8S_CODE_GENERATOR)/hack/boilerplate.go.txt
 
+.PHONY: k8s-build-cmd-static
 k8s-build-cmd-static: $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
 	CGO_CFLAGS=$(CGO_CFLAGS) \
 	$(GO) build -x \
 	-tags netgo -ldflags $(GO_EXTLDFLAGS_STATIC) \
 	-o $(TARGET_K8S_STATIC) ./cmd/kubernetes/$(MAIN).go
 
-k8s-build-cmd-dynamic: $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
+$(TARGET_K8S_DYN): $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
 	CGO_CFLAGS=$(CGO_CFLAGS) \
 	$(GO) build -x \
 	-tags netgo -ldflags $(GO_EXTLDFLAGS_DYN) \
 	-o $(TARGET_K8S_DYN) ./cmd/kubernetes/$(MAIN).go
+
+.PHONY: k8s-build-cmd-dynamic
+k8s-build-cmd-dynamic: $(TARGET_K8S_DYN)
 
 #CGO_LDFLAGS=$(CGO_LDFLAGS_DYNAMIC) \
 

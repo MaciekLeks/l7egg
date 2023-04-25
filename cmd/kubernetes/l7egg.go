@@ -76,5 +76,5 @@ func main() {
 	//	log.Printf("Error running controller %v", err)
 	//}
 	c.Run(done)
-
+	c.Wait()
 }

@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"github.com/MaciekLeks/l7egg/pkg/tools"
 	bpf "github.com/aquasecurity/libbpfgo"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -21,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -44,13 +46,13 @@ type ipv4LPMVal struct {
 	counter uint64
 }
 
-func (clientegg ClientEgg) Run(done <-chan struct{}) {
+func (clientegg ClientEgg) Run(wg *sync.WaitGroup, done <-chan struct{}) {
+
 	bpfModule, err := bpf.NewModuleFromFile(clientegg.BPFObjectPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(-1)
 	}
-	defer bpfModule.Close()
 
 	err = bpfModule.BPFLoadObject()
 	if err != nil {
@@ -69,9 +71,9 @@ func (clientegg ClientEgg) Run(done <-chan struct{}) {
 
 	rb.Start()
 
-	//numberOfEventsReceived := 0
+	//TODO: remove this:
 	go func() {
-		time.Sleep(2 * time.Second)
+		time.Sleep(3 * time.Second)
 		_, err := exec.Command("curl", "https://www.onet.pl").Output()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -107,22 +109,29 @@ func (clientegg ClientEgg) Run(done <-chan struct{}) {
 	}
 	//cidrs}
 
-	fmt.Printf("#######1")
-	mapLooperDone := runMapLooper(done, acl)
-	fmt.Printf("#######2")
+	wg.Add(1)
+	go func() {
+		//LIFO
+		defer wg.Done()
+		defer tools.CleanInterfaces(0, clientegg.IngressInterface, clientegg.EgressInterface) //only egress needed
+		defer bpfModule.Close()
 
-	<-clientegg.runPacketsLooper(done, packets, acl)
+		mapLooperDone := clientegg.runMapLooper(done, acl)
+		<-clientegg.runPacketsLooper(done, packets, acl)
 
-	<-mapLooperDone
-	fmt.Println("///Stopping recvLoop.")
-	rb.Stop()
-	rb.Close()
+		<-mapLooperDone
+
+		fmt.Println("///Stopping recvLoop.")
+		rb.Stop()
+		rb.Close()
+	}()
+
 }
 
 func (clientegg ClientEgg) runPacketsLooper(done <-chan struct{}, packets chan []byte, acl *bpf.BPFMap) chan interface{} {
 	term := make(chan interface{})
 	go func() {
-		defer fmt.Printf("runPacketsLooper terminated")
+		defer fmt.Println("runPacketsLooper terminated")
 		defer close(term)
 	recvLoop:
 
@@ -230,10 +239,9 @@ func (clientegg ClientEgg) runPacketsLooper(done <-chan struct{}, packets chan [
 	return term
 }
 
-func runMapLooper(done <-chan struct{}, acl *bpf.BPFMap) chan struct{} {
+func (_ ClientEgg) runMapLooper(done <-chan struct{}, acl *bpf.BPFMap) chan struct{} {
 	term := make(chan struct{})
 
-	fmt.Printf("#######4")
 	go func() {
 		defer fmt.Printf("runMapLooper terminated")
 		defer close(term)
@@ -281,11 +289,15 @@ func runMapLooper(done <-chan struct{}, acl *bpf.BPFMap) chan struct{} {
 				}
 			}
 		}
-		fmt.Printf("#######5")
 	}()
 
-	fmt.Printf("#######6")
 	return term
+}
+
+func clean(iface string) {
+	//fmt.Printf("Cleansing network device %s\n", iface)
+	//err := tools.DeleteClsact(iface)
+	//must(err, "Can't delete clsact qdisc.")
 }
 
 func unmarshalValue(bytes []byte) ipv4LPMVal {

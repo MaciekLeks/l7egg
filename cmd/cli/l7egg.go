@@ -6,6 +6,7 @@ import (
 	"github.com/MaciekLeks/l7egg/pkg/user"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 )
 
@@ -50,5 +51,7 @@ func main() {
 		close(done)
 	}()
 
-	clientegg.Run(done)
+	var wg sync.WaitGroup
+	clientegg.Run(&wg, done)
+	wg.Wait()
 }

@@ -11,6 +11,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	"log"
+	"sync"
 	"time"
 )
 
@@ -19,8 +20,8 @@ type Controller struct {
 	ceggCacheSynced cache.InformerSynced
 	ceggLister      cegglister.ClusterEggLister
 	queue           workqueue.RateLimitingInterface
-	done            chan struct{}
-	//wg              sync.WaitGroup
+	parentDone      chan struct{}
+	wg              sync.WaitGroup
 }
 
 const (
@@ -33,6 +34,7 @@ func NewController(ceggClientset ceggclientset.Interface, ceggInformer cegginfor
 		ceggLister:      ceggInformer.Lister(),
 		ceggCacheSynced: ceggInformer.Informer().HasSynced,
 		queue:           workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), queueName),
+		parentDone:      make(chan struct{}),
 	}
 
 	ceggInformer.Informer().AddEventHandler(
@@ -47,7 +49,7 @@ func NewController(ceggClientset ceggclientset.Interface, ceggInformer cegginfor
 
 func (c *Controller) Run(done <-chan struct{}) {
 	fmt.Println("Starting controller.")
-	c.done = make(chan struct{})
+
 	if !cache.WaitForCacheSync(done, c.ceggCacheSynced) {
 		log.Println("Cache not synced.")
 	}
@@ -59,8 +61,8 @@ func (c *Controller) Run(done <-chan struct{}) {
 
 	<-done
 	fmt.Println("---3")
-	close(c.done)
-
+	close(c.parentDone)
+	//TOOD wait for user space bpf to terminate
 	fmt.Println("---4")
 }
 
@@ -71,6 +73,10 @@ func (c *Controller) worker() {
 		//fmt.Printf("-")
 	}
 	fmt.Printf("/")
+}
+
+func (c *Controller) Wait() {
+	c.wg.Wait()
 }
 
 func (c *Controller) processNextItem() bool {
@@ -104,7 +110,7 @@ func (c *Controller) processNextItem() bool {
 
 	fmt.Printf("clusteregg object: %+v\n", cegg)
 
-	runEgg(c.done, cegg.Spec)
+	runEgg(&c.wg, c.parentDone, cegg.Spec)
 	//
 	//err = c.reconcile(ns, name)
 	//if err != nil {
@@ -115,7 +121,7 @@ func (c *Controller) processNextItem() bool {
 	return true
 }
 
-func runEgg(done <-chan struct{}, spec v1alpha1.ClusterEggSpec) {
+func runEgg(wg *sync.WaitGroup, done <-chan struct{}, spec v1alpha1.ClusterEggSpec) {
 	clientegg := user.ClientEgg{
 		IngressInterface: spec.IngressInterface,
 		EgressInterface:  spec.EgressInterface,
@@ -124,7 +130,7 @@ func runEgg(done <-chan struct{}, spec v1alpha1.ClusterEggSpec) {
 		BPFObjectPath:    "./l7egg.bpf.o",
 	}
 
-	go clientegg.Run(done)
+	clientegg.Run(wg, done)
 }
 
 func (c *Controller) handleAdd(obj interface{}) {
