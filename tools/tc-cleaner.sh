@@ -31,13 +31,14 @@ set +e
 echo "--- Current Status"
 sudo tc filter show dev "${iiface}" ingress
 sudo tc filter show dev "${eiface}" egress
-sudo tc qdisc del dev "${iiface}" clsact
-sudo tc qdisc del dev "${eiface}" clsact
-sudo bpftool net list
+udo bpftool net list
 
 echo "--- Cleaning"
 sudo tc filter del dev "${eiface}" egress
 sudo tc filter del dev "${iiface}" ingress
+sudo tc qdisc del dev "${iiface}" clsact
+sudo tc qdisc del dev "${eiface}" clsact
+
 
 echo "-- Current Status"
 sudo tc qdisc show
