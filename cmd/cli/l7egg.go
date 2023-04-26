@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/user"
@@ -43,15 +44,16 @@ func main() {
 		BPFObjectPath:    *bpfObjectPath,
 	}
 
-	done := make(chan struct{})
+	rootCtx := context.Background()
+	ctx, cancelFunc := context.WithCancel(rootCtx)
 	sig := make(chan os.Signal, 0)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
 	go func() {
 		<-sig
-		close(done)
+		cancelFunc()
 	}()
 
 	var wg sync.WaitGroup
-	clientegg.Run(&wg, done)
+	clientegg.Run(ctx, &wg)
 	wg.Wait()
 }

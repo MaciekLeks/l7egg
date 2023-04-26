@@ -12,6 +12,7 @@ package user
 import "C"
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/tools"
@@ -46,7 +47,7 @@ type ipv4LPMVal struct {
 	counter uint64
 }
 
-func (clientegg ClientEgg) Run(wg *sync.WaitGroup, done <-chan struct{}) {
+func (clientegg ClientEgg) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 	bpfModule, err := bpf.NewModuleFromFile(clientegg.BPFObjectPath)
 	if err != nil {
@@ -117,8 +118,8 @@ func (clientegg ClientEgg) Run(wg *sync.WaitGroup, done <-chan struct{}) {
 		defer bpfModule.Close()
 
 		var lwg sync.WaitGroup
-		clientegg.runMapLooper(&lwg, done, acl)
-		clientegg.runPacketsLooper(&lwg, done, packets, acl)
+		clientegg.runMapLooper(ctx, &lwg, acl)
+		clientegg.runPacketsLooper(ctx, &lwg, packets, acl)
 		lwg.Wait()
 
 		fmt.Println("///Stopping recvLoop.")
@@ -128,7 +129,7 @@ func (clientegg ClientEgg) Run(wg *sync.WaitGroup, done <-chan struct{}) {
 
 }
 
-func (clientegg ClientEgg) runPacketsLooper(lwg *sync.WaitGroup, done <-chan struct{}, packets chan []byte, acl *bpf.BPFMap) {
+func (clientegg ClientEgg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packets chan []byte, acl *bpf.BPFMap) {
 	lwg.Add(1)
 	go func() {
 		defer lwg.Done()
@@ -137,7 +138,7 @@ func (clientegg ClientEgg) runPacketsLooper(lwg *sync.WaitGroup, done <-chan str
 
 		for {
 			select {
-			case <-done:
+			case <-ctx.Done():
 				fmt.Println("[recvLoop]: stopCh closed.")
 				break recvLoop
 			case b, ok := <-packets:
@@ -238,7 +239,7 @@ func (clientegg ClientEgg) runPacketsLooper(lwg *sync.WaitGroup, done <-chan str
 	}()
 }
 
-func (_ ClientEgg) runMapLooper(lwg *sync.WaitGroup, done <-chan struct{}, acl *bpf.BPFMap) {
+func (_ ClientEgg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup, acl *bpf.BPFMap) {
 	lwg.Add(1)
 	go func() {
 		defer lwg.Done()
@@ -246,7 +247,7 @@ func (_ ClientEgg) runMapLooper(lwg *sync.WaitGroup, done <-chan struct{}, acl *
 	mapLoop:
 		for {
 			select {
-			case <-done:
+			case <-ctx.Done():
 				fmt.Println("[mapLoop]: stopCh closed.")
 				break mapLoop
 			default:

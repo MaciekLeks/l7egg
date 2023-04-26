@@ -1,12 +1,15 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
 	ceggclientset "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned"
 	cegginformer "github.com/MaciekLeks/l7egg/pkg/client/informers/externalversions/maciekleks.dev/v1alpha1"
 	cegglister "github.com/MaciekLeks/l7egg/pkg/client/listers/maciekleks.dev/v1alpha1"
 	"github.com/MaciekLeks/l7egg/pkg/user"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
@@ -20,7 +23,6 @@ type Controller struct {
 	ceggCacheSynced cache.InformerSynced
 	ceggLister      cegglister.ClusterEggLister
 	queue           workqueue.RateLimitingInterface
-	parentDone      chan struct{}
 	wg              sync.WaitGroup
 }
 
@@ -34,7 +36,6 @@ func NewController(ceggClientset ceggclientset.Interface, ceggInformer cegginfor
 		ceggLister:      ceggInformer.Lister(),
 		ceggCacheSynced: ceggInformer.Informer().HasSynced,
 		queue:           workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), queueName),
-		parentDone:      make(chan struct{}),
 	}
 
 	ceggInformer.Informer().AddEventHandler(
@@ -47,29 +48,28 @@ func NewController(ceggClientset ceggclientset.Interface, ceggInformer cegginfor
 	return c
 }
 
-func (c *Controller) Run(done <-chan struct{}) {
+func (c *Controller) Run(ctx context.Context) {
 	fmt.Println("Starting controller.")
 
-	if !cache.WaitForCacheSync(done, c.ceggCacheSynced) {
+	if !cache.WaitForCacheSync(ctx.Done(), c.ceggCacheSynced) {
 		log.Println("Cache not synced.")
 	}
 
 	fmt.Println("---1")
 	// spin up only one gorouitne for now
-	go wait.Until(c.worker, 1*time.Second, done) //runs again after 1 sec only if c.worker ends
+	go wait.UntilWithContext(ctx, c.worker, 1*time.Second) //runs again after 1 sec only if c.worker ends
 	fmt.Println("---2")
 
-	<-done
+	<-ctx.Done()
 	fmt.Println("---3")
-	close(c.parentDone)
 	//TOOD wait for user space bpf to terminate
 	fmt.Println("---4")
 }
 
-func (c *Controller) worker() {
+func (c *Controller) worker(ctx context.Context) {
 	fmt.Printf("worker started\n")
 	//fmt.Println("worker")
-	for c.processNextItem() {
+	for c.processNextItem(ctx) {
 		//fmt.Printf("-")
 	}
 	fmt.Printf("/")
@@ -79,9 +79,11 @@ func (c *Controller) Wait() {
 	c.wg.Wait()
 }
 
-func (c *Controller) processNextItem() bool {
+func (c *Controller) processNextItem(ctx context.Context) bool {
 	fmt.Printf("processNextItem[0]\n")
 	item, shutdown := c.queue.Get() //blocking op
+	defer fmt.Println("processNextItem ended.")
+	defer c.queue.Forget(item)
 	//fmt.Printf("|")
 	if shutdown {
 		log.Println("Cache shut down.")
@@ -94,7 +96,7 @@ func (c *Controller) processNextItem() bool {
 		log.Printf("Getting key(<ns>/<name>) from cache %s\n", err)
 		return false
 	}
-	_, name, err := cache.SplitMetaNamespaceKey(key) //namespace not xpected here
+	_, name, err := cache.SplitMetaNamespaceKey(key) //namespace not expected here
 	if err != nil {
 		log.Printf("Splitting key (<ns>/<name>) into name %s\n", err)
 		return false
@@ -102,15 +104,23 @@ func (c *Controller) processNextItem() bool {
 
 	fmt.Printf("cluster object name: %s\n", name)
 
-	cegg, err := c.ceggLister.Get(name)
-	if err != nil {
-		log.Printf("Error %v, gettting the clusteregg resource from lister.", err)
-		return false
+	//directly from the server
+	//cegg, err := c.ceggLister.Get(name)
+	//if err != nil {
+	//	log.Printf("Error %v, gettting the clusteregg resource from lister.", err)
+	//	return false
+	//}
+
+	//check directly on the server (not lister) if the object has been deleted form the k8s cluster
+	cegg, err := c.ceggClientset.MaciekleksV1alpha1().ClusterEggs().Get(ctx, name, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		log.Printf("Handle delete for clusteregg %s\n", name)
+		return true
 	}
 
 	fmt.Printf("clusteregg object: %+v\n", cegg)
 
-	runEgg(&c.wg, c.parentDone, cegg.Spec)
+	runEgg(ctx, &c.wg, cegg.Spec)
 	//
 	//err = c.reconcile(ns, name)
 	//if err != nil {
@@ -121,7 +131,7 @@ func (c *Controller) processNextItem() bool {
 	return true
 }
 
-func runEgg(wg *sync.WaitGroup, done <-chan struct{}, spec v1alpha1.ClusterEggSpec) {
+func runEgg(ctx context.Context, wg *sync.WaitGroup, spec v1alpha1.ClusterEggSpec) {
 	clientegg := user.ClientEgg{
 		IngressInterface: spec.IngressInterface,
 		EgressInterface:  spec.EgressInterface,
@@ -130,7 +140,7 @@ func runEgg(wg *sync.WaitGroup, done <-chan struct{}, spec v1alpha1.ClusterEggSp
 		BPFObjectPath:    "./l7egg.bpf.o",
 	}
 
-	clientegg.Run(wg, done)
+	clientegg.Run(ctx, wg)
 }
 
 func (c *Controller) handleAdd(obj interface{}) {

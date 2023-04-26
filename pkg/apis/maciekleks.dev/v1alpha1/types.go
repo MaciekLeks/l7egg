@@ -13,7 +13,13 @@ type ClusterEgg struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	Spec ClusterEggSpec `json:"spec,omitempty"`
+	//Status ClusterEggStatus `json:"status,omitempty"`
 }
+
+/*
+type ClusterEggStatus {
+
+}*/
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ClusterEggList struct {
