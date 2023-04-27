@@ -36,12 +36,15 @@ func main() {
 		return
 	}
 
+	var wg sync.WaitGroup
 	clientegg := user.ClientEgg{
 		IngressInterface: *iface,
 		EgressInterface:  *eface,
 		CNs:              cns,
 		CIDRs:            cidrs,
 		BPFObjectPath:    *bpfObjectPath,
+
+		WaitGroup: &wg,
 	}
 
 	rootCtx := context.Background()
@@ -53,7 +56,6 @@ func main() {
 		cancelFunc()
 	}()
 
-	var wg sync.WaitGroup
-	clientegg.Run(ctx, &wg)
+	clientegg.Run(ctx)
 	wg.Wait()
 }

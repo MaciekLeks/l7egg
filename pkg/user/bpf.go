@@ -35,6 +35,10 @@ type ClientEgg struct {
 	IngressInterface string
 	EgressInterface  string
 	BPFObjectPath    string
+
+	//steering fields
+	StopFunc  context.CancelFunc
+	WaitGroup *sync.WaitGroup
 }
 
 type ipv4LPMKey struct {
@@ -47,7 +51,7 @@ type ipv4LPMVal struct {
 	counter uint64
 }
 
-func (clientegg ClientEgg) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (clientegg ClientEgg) Run(ctx context.Context) {
 
 	bpfModule, err := bpf.NewModuleFromFile(clientegg.BPFObjectPath)
 	if err != nil {
@@ -110,10 +114,10 @@ func (clientegg ClientEgg) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 	//cidrs}
 
-	wg.Add(1)
+	clientegg.WaitGroup.Add(1)
 	go func() {
 		//LIFO
-		defer wg.Done()
+		defer clientegg.WaitGroup.Done()
 		defer tools.CleanInterfaces(0, clientegg.IngressInterface, clientegg.EgressInterface) //only egress needed
 		defer bpfModule.Close()
 
@@ -239,7 +243,7 @@ func (clientegg ClientEgg) runPacketsLooper(ctx context.Context, lwg *sync.WaitG
 	}()
 }
 
-func (_ ClientEgg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup, acl *bpf.BPFMap) {
+func (clientegg ClientEgg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup, acl *bpf.BPFMap) {
 	lwg.Add(1)
 	go func() {
 		defer lwg.Done()
