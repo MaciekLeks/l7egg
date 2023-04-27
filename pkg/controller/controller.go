@@ -99,7 +99,7 @@ func (c *Controller) worker(ctx context.Context) {
 		cegg, err := c.ceggLister.Get(name)
 		if err == nil {
 			// The ClusterEgg still exists in informer cache, the event must have
-			// been add/update/sync
+			// been add/update
 			fmt.Printf("--->>>clusteregg object: %+v\n", cegg)
 			c.updateEgg(ctx, *cegg)
 			return false
@@ -144,22 +144,29 @@ func (c *Controller) Wait() {
 
 func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) {
 
-	subCtx, stopFunc := context.WithCancel(ctx)
-	var subWaitGroup sync.WaitGroup
-	clientegg := user.ClientEgg{
-		IngressInterface: cegg.Spec.IngressInterface,
-		EgressInterface:  cegg.Spec.EgressInterface,
-		CNs:              cegg.Spec.CommonNames,
-		CIDRs:            cegg.Spec.CIDRs,
-		BPFObjectPath:    "./l7egg.bpf.o",
+	_, found := c.clienteggs[cegg.Name]
+	if found {
+		fmt.Println("%%%>>> Updating :/")
+		return
+	} else {
 
-		StopFunc:  stopFunc,
-		WaitGroup: &subWaitGroup,
+		subCtx, stopFunc := context.WithCancel(ctx)
+		var subWaitGroup sync.WaitGroup
+		clientegg := user.ClientEgg{
+			IngressInterface: cegg.Spec.IngressInterface,
+			EgressInterface:  cegg.Spec.EgressInterface,
+			CNs:              cegg.Spec.CommonNames,
+			CIDRs:            cegg.Spec.CIDRs,
+			BPFObjectPath:    "./l7egg.bpf.o",
+
+			StopFunc:  stopFunc,
+			WaitGroup: &subWaitGroup,
+		}
+
+		clientegg.Run(subCtx)
+
+		c.clienteggs[cegg.Name] = clientegg
 	}
-
-	clientegg.Run(subCtx)
-
-	c.clienteggs[cegg.Name] = clientegg
 }
 
 func (c *Controller) deleteEgg(ctx context.Context, name string) {
@@ -196,10 +203,10 @@ func (c *Controller) handleDelete(obj interface{}) {
 
 func (c *Controller) handleUpdate(prev interface{}, obj interface{}) {
 	log.Println("handleUpdate was called.")
-	//ceggPrev := prev.(*v1alpha1.ClusterEgg)
-	//cegg := obj.(*v1alpha1.ClusterEgg)
-	//if ceggPrev.GetResourceVersion() != cegg.GetResourceVersion() {
-	//	//handle only update not sync event
-	//	c.queue.Add(obj)
-	//}
+	ceggPrev := prev.(*v1alpha1.ClusterEgg)
+	cegg := obj.(*v1alpha1.ClusterEgg)
+	if ceggPrev.GetResourceVersion() != cegg.GetResourceVersion() {
+		//handle only update not sync event
+		c.queue.Add(obj)
+	}
 }
