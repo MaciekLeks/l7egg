@@ -13,7 +13,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	"log"
-	"sync"
 	"time"
 )
 
@@ -128,64 +127,30 @@ func (c *Controller) worker(ctx context.Context) {
 }
 
 func (c *Controller) Wait() {
-
-	var stopWaitGroup sync.WaitGroup
-	for k, v := range c.clienteggs {
-		stopWaitGroup.Add(1)
-		go func() {
-			defer stopWaitGroup.Done()
-			fmt.Println("Stopping %s", k)
-			v.WaitGroup.Wait()
-		}()
-	}
-	stopWaitGroup.Wait()
-
+	user.Get().Wait()
 }
 
 func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) {
 
-	_, found := c.clienteggs[cegg.Name]
-	if found {
-		fmt.Println("%%%>>> Updating :/")
-		return
-	} else {
+	manager := user.Get()
 
-		subCtx, stopFunc := context.WithCancel(ctx)
-		var subWaitGroup sync.WaitGroup
-		clientegg := user.ClientEgg{
-			IngressInterface: cegg.Spec.IngressInterface,
-			EgressInterface:  cegg.Spec.EgressInterface,
-			CNs:              cegg.Spec.CommonNames,
-			CIDRs:            cegg.Spec.CIDRs,
-			BPFObjectPath:    "./l7egg.bpf.o",
-
-			StopFunc:  stopFunc,
-			WaitGroup: &subWaitGroup,
-		}
-
-		clientegg.Run(subCtx)
-
-		c.clienteggs[cegg.Name] = clientegg
+	clientegg := &user.ClientEgg{
+		IngressInterface: cegg.Spec.IngressInterface,
+		EgressInterface:  cegg.Spec.EgressInterface,
+		CNs:              cegg.Spec.CommonNames,
+		CIDRs:            cegg.Spec.CIDRs,
+		BPFObjectPath:    "./l7egg.bpf.o",
 	}
+
+	manager.Start(ctx, cegg.Name, clientegg)
+
 }
 
 func (c *Controller) deleteEgg(ctx context.Context, name string) {
 	fmt.Println("$$$>>>deleteEgg")
-	for k := range c.clienteggs {
-		fmt.Println("$$$>>>%s", k)
-	}
-	clientegg, found := c.clienteggs[name]
-	if !found {
-		fmt.Printf("Checking key map exists %s\n", name)
-		return
-	}
 
-	fmt.Println("$$$>>>deleteEgg: stopping")
-	clientegg.StopFunc()
-	fmt.Println("$$$>>>deleteEgg: waiting")
-	clientegg.WaitGroup.Wait()
-	fmt.Println("$$$>>>deleteEgg: done")
-	delete(c.clienteggs, name)
+	manager := user.Get()
+	manager.Stop(name)
 
 	fmt.Println("$$$>>>deleteEgg: map entry deleted")
 }

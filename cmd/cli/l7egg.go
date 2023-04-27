@@ -7,7 +7,6 @@ import (
 	"github.com/MaciekLeks/l7egg/pkg/user"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 )
 
@@ -36,15 +35,13 @@ func main() {
 		return
 	}
 
-	var wg sync.WaitGroup
-	clientegg := user.ClientEgg{
+	manager := user.Get()
+	clientegg := &user.ClientEgg{
 		IngressInterface: *iface,
 		EgressInterface:  *eface,
 		CNs:              cns,
 		CIDRs:            cidrs,
 		BPFObjectPath:    *bpfObjectPath,
-
-		WaitGroup: &wg,
 	}
 
 	rootCtx := context.Background()
@@ -56,6 +53,7 @@ func main() {
 		cancelFunc()
 	}()
 
-	clientegg.Run(ctx)
-	wg.Wait()
+	manager.Start(ctx, "default", clientegg)
+	manager.Wait()
+
 }
