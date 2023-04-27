@@ -89,7 +89,6 @@ func (c *Controller) processNextItem(ctx context.Context) bool {
 		log.Println("Cache shut down.")
 		return false
 	}
-	defer c.queue.Forget(item)
 	//
 	key, err := cache.MetaNamespaceKeyFunc(item)
 	if err != nil {
