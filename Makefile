@@ -132,13 +132,15 @@ k8s-build-cmd-dynamic: $(TARGET_K8S_DYN)
 
 #CGO_LDFLAGS=$(CGO_LDFLAGS_DYNAMIC) \
 
-K8S_CONTROLLER_GEN ?= ${GOPATH}/src/github.com/kubernetes-sigs/controller-tools/cmd/controller-gen
+# K8S_CONTROLLER_GEN ?= ${GOPATH}/src/github.com/kubernetes-sigs/controller-tools/cmd/controller-gen
 # before use build controller-gen in  $K8S_CONTROLLER_GEN using command `go build -o controller-gen`
+# see files in tools: {tools.go, generate.go}
 .PHONY: k8s-build-crds
 k8s-build-crds:
-	$(K8S_CONTROLLER_GEN)/controller-gen crd \
-	paths=./pkg/apis/... \
-	output:crd:dir=manifests \
+	$(GO) generate ./...
+	#$(K8S_CONTROLLER_GEN)/controller-gen crd \
+	#paths=./pkg/apis/... \
+	#output:crd:dir=manifests \
 
 #tools/tc-cleaner: tools/tc-cleaner.go
 #	$(GO) build -o $@ $<
