@@ -42,11 +42,17 @@ spec:
                   type: string
                 type: array
               egressInterface:
+                maxLength: 32
                 type: string
+                x-kubernetes-validations:
+                - message: EgressInterface is immutable
+                  rule: self == oldSelf
               ingressInterface:
+                maxLength: 32
                 type: string
-              name:
-                type: string
+                x-kubernetes-validations:
+                - message: IngressInterface is immutable
+                  rule: self == oldSelf
             type: object
         type: object
     served: true

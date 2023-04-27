@@ -30,10 +30,17 @@ type ClusterEggList struct {
 }
 
 type ClusterEggSpec struct {
-	Name string `json:"name,omitempty"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="IngressInterface is immutable"
+	// +kubebuilder:validation:MaxLength=32
+	IngressInterface string `json:"ingressInterface,omitempty"`
 
-	IngressInterface string   `json:"ingressInterface,omitempty"`
-	EgressInterface  string   `json:"egressInterface,omitempty"`
-	CommonNames      []string `json:"commonNames,omitempty"`
-	CIDRs            []string `json:"cidrs,omitempty"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="EgressInterface is immutable"
+	// +kubebuilder:validation:MaxLength=32
+	EgressInterface string `json:"egressInterface,omitempty"`
+
+	CommonNames []string `json:"commonNames,omitempty"`
+
+	CIDRs []string `json:"cidrs,omitempty"`
 }

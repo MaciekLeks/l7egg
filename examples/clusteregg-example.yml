@@ -3,7 +3,6 @@ kind: ClusterEgg
 metadata:
   name: clusteregg-example
 spec:
-  name: clusteregg-sample-config
   ingressInterface: enp0s3
   egressInterface: enp0s3
   commonNames:
