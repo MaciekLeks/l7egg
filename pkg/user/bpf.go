@@ -35,6 +35,8 @@ type ClientEgg struct {
 	IngressInterface string
 	EgressInterface  string
 	BPFObjectPath    string
+	bpfModule        *bpf.Module
+	acl              *bpf.BPFMap
 }
 
 type ipv4LPMKey struct {
@@ -49,25 +51,26 @@ type ipv4LPMVal struct {
 
 func (clientegg ClientEgg) run(ctx context.Context, wg *sync.WaitGroup) {
 
-	bpfModule, err := bpf.NewModuleFromFile(clientegg.BPFObjectPath)
+	var err error
+	clientegg.bpfModule, err = bpf.NewModuleFromFile(clientegg.BPFObjectPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(-1)
 	}
 
-	err = bpfModule.BPFLoadObject()
+	err = clientegg.bpfModule.BPFLoadObject()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(-1)
 	}
 
-	err = attachProg(bpfModule, clientegg.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
+	err = attachProg(clientegg.bpfModule, clientegg.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
 	must(err, "Can't attach TC hook.")
-	err = attachProg(bpfModule, clientegg.EgressInterface, bpf.BPFTcEgress, "tc_egress")
+	err = attachProg(clientegg.bpfModule, clientegg.EgressInterface, bpf.BPFTcEgress, "tc_egress")
 	must(err, "Can't attach TC hook.")
 
 	packets := make(chan []byte)
-	rb, err := bpfModule.InitRingBuf("packets", packets)
+	rb, err := clientegg.bpfModule.InitRingBuf("packets", packets)
 	must(err, "Can't initialize ring buffer map.")
 
 	rb.Start()
@@ -82,9 +85,31 @@ func (clientegg ClientEgg) run(ctx context.Context, wg *sync.WaitGroup) {
 		}
 	}()
 
-	acl, err := bpfModule.GetMap("ipv4_lpm_map")
+	clientegg.acl, err = clientegg.bpfModule.GetMap("ipv4_lpm_map")
 	must(err, "Can't get map")
 
+	clientegg.updateCIDRs()
+
+	wg.Add(1)
+	go func() {
+		//LIFO
+		defer wg.Done()
+		defer tools.CleanInterfaces(0, clientegg.IngressInterface, clientegg.EgressInterface) //only egress needed
+		defer clientegg.bpfModule.Close()
+
+		var lwg sync.WaitGroup
+		clientegg.runMapLooper(ctx, &lwg)
+		clientegg.runPacketsLooper(ctx, &lwg, packets)
+		lwg.Wait()
+
+		fmt.Println("///Stopping recvLoop.")
+		rb.Stop()
+		rb.Close()
+	}()
+
+}
+
+func (clientegg ClientEgg) updateCIDRs() {
 	//{cidrs
 	fmt.Println("[ACL]: Init")
 	for _, ipv4NetStr := range clientegg.CIDRs {
@@ -103,33 +128,15 @@ func (clientegg ClientEgg) run(ctx context.Context, wg *sync.WaitGroup) {
 			0,
 		}
 
-		err = updateACL(acl, key, val)
+		err = updateACL(clientegg.acl, key, val)
 		must(err, "Can't update ACL.")
 		//fmt.Println("tmpKeySize:", unsafe.Sizeof(tmpKey))
 		//fmt.Println("tmpKey.data:", tmpKey.data)
 	}
 	//cidrs}
-
-	wg.Add(1)
-	go func() {
-		//LIFO
-		defer wg.Done()
-		defer tools.CleanInterfaces(0, clientegg.IngressInterface, clientegg.EgressInterface) //only egress needed
-		defer bpfModule.Close()
-
-		var lwg sync.WaitGroup
-		clientegg.runMapLooper(ctx, &lwg, acl)
-		clientegg.runPacketsLooper(ctx, &lwg, packets, acl)
-		lwg.Wait()
-
-		fmt.Println("///Stopping recvLoop.")
-		rb.Stop()
-		rb.Close()
-	}()
-
 }
 
-func (clientegg ClientEgg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packets chan []byte, acl *bpf.BPFMap) {
+func (clientegg ClientEgg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packets chan []byte) {
 	lwg.Add(1)
 	go func() {
 		defer lwg.Done()
@@ -213,7 +220,7 @@ func (clientegg ClientEgg) runPacketsLooper(ctx context.Context, lwg *sync.WaitG
 									bootTtlNs,
 									0, //zero existsing elements :/
 								}
-								err := updateACL(acl, key, val)
+								err := updateACL(clientegg.acl, key, val)
 								must(err, "Can't update ACL.")
 								fmt.Printf("Updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", cn, ip, ttlSec, ttlNs, bootTtlNs)
 
@@ -239,7 +246,7 @@ func (clientegg ClientEgg) runPacketsLooper(ctx context.Context, lwg *sync.WaitG
 	}()
 }
 
-func (clientegg ClientEgg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup, acl *bpf.BPFMap) {
+func (clientegg ClientEgg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup) {
 	lwg.Add(1)
 	go func() {
 		defer lwg.Done()
@@ -253,7 +260,7 @@ func (clientegg ClientEgg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup
 			default:
 				time.Sleep(5 * time.Second)
 				fmt.Printf("\n[ACL]:")
-				i := acl.Iterator() //determineHost Endian search by Itertaot in libbfpgo
+				i := clientegg.acl.Iterator() //determineHost Endian search by Itertaot in libbfpgo
 				for i.Next() {
 					if i.Err() != nil {
 						fatal("Iterator error", i.Err())
@@ -265,7 +272,7 @@ func (clientegg ClientEgg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup
 
 					key := ipv4LPMKey{prefixLen, ip2Uint32(ip)}
 					upKey := unsafe.Pointer(&key)
-					valBytes, err := acl.GetValue(upKey)
+					valBytes, err := clientegg.acl.GetValue(upKey)
 					must(err, "Can't get value.")
 					counter := binary.LittleEndian.Uint64(valBytes[8:16])
 					ttl := binary.LittleEndian.Uint64(valBytes[0:8])
