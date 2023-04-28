@@ -18,7 +18,7 @@ type IClientEggManager interface {
 type clientEggBox struct {
 	stopFunc  context.CancelFunc
 	waitGroup *sync.WaitGroup //TODO: only ene goroutine (in run(...)) - changing to channel?
-	clientegg *ClientEgg
+	egg       *egg
 }
 
 type clientEggManager struct {
@@ -43,13 +43,14 @@ func (m *clientEggManager) Start(ctx context.Context, key string, clientegg *Cli
 	subCtx, stopFunc := context.WithCancel(ctx)
 	var subWaitGroup sync.WaitGroup
 
+	egg := newEgg(clientegg)
 	m.boxes[key] = clientEggBox{
 		stopFunc:  stopFunc,
 		waitGroup: &subWaitGroup,
-		clientegg: clientegg,
+		egg:       egg,
 	}
 
-	clientegg.run(subCtx, &subWaitGroup) //TODO add some error handling
+	egg.run(subCtx, &subWaitGroup) //TODO add some error handling
 }
 
 // Stop Stops one box
@@ -82,6 +83,28 @@ func (m *clientEggManager) Wait() {
 	stopWaitGroup.Wait()
 }
 
-func (m *clientEggManager) UpdateCIDRs(cidrs []string) {
-
+func (m *clientEggManager) UpdateCIDRs(key string, newCIDRs []string) {
+	//box, found := m.boxes[key]
+	//if !found {
+	//	fmt.Printf("Checking key in map %s\n", key)
+	//	return
+	//}
+	//
+	//currentCIDRs := box.egg.CIDRs
+	//
+	//for ccidr := range currentCIDRs {
+	//
+	//}
 }
+
+//
+//func findAndDelete(s []string, item string) []string {
+//	index := 0
+//	for _, i := range s {
+//		if i != item {
+//			s[index] = i
+//			index++
+//		}
+//	}
+//	return s[:index]
+//}

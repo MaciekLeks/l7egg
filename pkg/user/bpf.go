@@ -35,8 +35,14 @@ type ClientEgg struct {
 	IngressInterface string
 	EgressInterface  string
 	BPFObjectPath    string
-	bpfModule        *bpf.Module
-	acl              *bpf.BPFMap
+}
+
+type egg struct {
+	ClientEgg
+	bpfModule *bpf.Module
+	acl       *bpf.BPFMap
+	cidrs     net.IPNet
+	packets   chan []byte
 }
 
 type ipv4LPMKey struct {
@@ -49,32 +55,38 @@ type ipv4LPMVal struct {
 	counter uint64
 }
 
-func (clientegg ClientEgg) run(ctx context.Context, wg *sync.WaitGroup) {
+func newEgg(clientegg *ClientEgg) *egg {
+	var egg egg
 
 	var err error
-	clientegg.bpfModule, err = bpf.NewModuleFromFile(clientegg.BPFObjectPath)
+	egg.ClientEgg = *clientegg
+	egg.bpfModule, err = bpf.NewModuleFromFile(clientegg.BPFObjectPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(-1)
 	}
 
-	err = clientegg.bpfModule.BPFLoadObject()
+	err = egg.bpfModule.BPFLoadObject()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(-1)
 	}
 
-	err = attachProg(clientegg.bpfModule, clientegg.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
+	err = attachProg(egg.bpfModule, clientegg.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
 	must(err, "Can't attach TC hook.")
-	err = attachProg(clientegg.bpfModule, clientegg.EgressInterface, bpf.BPFTcEgress, "tc_egress")
+	err = attachProg(egg.bpfModule, clientegg.EgressInterface, bpf.BPFTcEgress, "tc_egress")
 	must(err, "Can't attach TC hook.")
 
-	packets := make(chan []byte)
-	rb, err := clientegg.bpfModule.InitRingBuf("packets", packets)
+	egg.packets = make(chan []byte)
+
+	return &egg
+}
+
+func (egg egg) run(ctx context.Context, wg *sync.WaitGroup) {
+	rb, err := egg.bpfModule.InitRingBuf("packets", egg.packets)
 	must(err, "Can't initialize ring buffer map.")
 
 	rb.Start()
-
 	//TODO: remove this:
 	go func() {
 		time.Sleep(3 * time.Second)
@@ -85,21 +97,21 @@ func (clientegg ClientEgg) run(ctx context.Context, wg *sync.WaitGroup) {
 		}
 	}()
 
-	clientegg.acl, err = clientegg.bpfModule.GetMap("ipv4_lpm_map")
+	egg.acl, err = egg.bpfModule.GetMap("ipv4_lpm_map")
 	must(err, "Can't get map")
 
-	clientegg.updateCIDRs()
+	egg.updateCIDRs()
 
 	wg.Add(1)
 	go func() {
 		//LIFO
 		defer wg.Done()
-		defer tools.CleanInterfaces(0, clientegg.IngressInterface, clientegg.EgressInterface) //only egress needed
-		defer clientegg.bpfModule.Close()
+		defer tools.CleanInterfaces(0, egg.IngressInterface, egg.EgressInterface) //only egress needed
+		defer egg.bpfModule.Close()
 
 		var lwg sync.WaitGroup
-		clientegg.runMapLooper(ctx, &lwg)
-		clientegg.runPacketsLooper(ctx, &lwg, packets)
+		egg.runMapLooper(ctx, &lwg)
+		egg.runPacketsLooper(ctx, &lwg, egg.packets)
 		lwg.Wait()
 
 		fmt.Println("///Stopping recvLoop.")
@@ -109,10 +121,10 @@ func (clientegg ClientEgg) run(ctx context.Context, wg *sync.WaitGroup) {
 
 }
 
-func (clientegg ClientEgg) updateCIDRs() {
+func (egg egg) updateCIDRs() {
 	//{cidrs
 	fmt.Println("[ACL]: Init")
-	for _, ipv4NetStr := range clientegg.CIDRs {
+	for _, ipv4NetStr := range egg.CIDRs {
 		_, ipv4Net, err := net.ParseCIDR(ipv4NetStr)
 		must(err, "Can't parse ipv4 Net.")
 
@@ -128,7 +140,7 @@ func (clientegg ClientEgg) updateCIDRs() {
 			0,
 		}
 
-		err = updateACL(clientegg.acl, key, val)
+		err = updateACLKey(egg.acl, key, val)
 		must(err, "Can't update ACL.")
 		//fmt.Println("tmpKeySize:", unsafe.Sizeof(tmpKey))
 		//fmt.Println("tmpKey.data:", tmpKey.data)
@@ -136,7 +148,7 @@ func (clientegg ClientEgg) updateCIDRs() {
 	//cidrs}
 }
 
-func (clientegg ClientEgg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packets chan []byte) {
+func (egg egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packets chan []byte) {
 	lwg.Add(1)
 	go func() {
 		defer lwg.Done()
@@ -210,7 +222,7 @@ func (clientegg ClientEgg) runPacketsLooper(ctx context.Context, lwg *sync.WaitG
 							//fmt.Println("key size:", unsafe.Sizeof(key))
 							//fmt.Println("key data:", key.data)
 
-							if contains(clientegg.CNs[:], cn) {
+							if contains(egg.CNs[:], cn) {
 								////{check current value
 								//upKey := unsafe.Pointer(&key)
 								//valBytes, err := acl.GetValue(upKey)
@@ -220,7 +232,7 @@ func (clientegg ClientEgg) runPacketsLooper(ctx context.Context, lwg *sync.WaitG
 									bootTtlNs,
 									0, //zero existsing elements :/
 								}
-								err := updateACL(clientegg.acl, key, val)
+								err := updateACLKey(egg.acl, key, val)
 								must(err, "Can't update ACL.")
 								fmt.Printf("Updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", cn, ip, ttlSec, ttlNs, bootTtlNs)
 
@@ -246,7 +258,7 @@ func (clientegg ClientEgg) runPacketsLooper(ctx context.Context, lwg *sync.WaitG
 	}()
 }
 
-func (clientegg ClientEgg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup) {
+func (egg egg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup) {
 	lwg.Add(1)
 	go func() {
 		defer lwg.Done()
@@ -260,7 +272,7 @@ func (clientegg ClientEgg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup
 			default:
 				time.Sleep(5 * time.Second)
 				fmt.Printf("\n[ACL]:")
-				i := clientegg.acl.Iterator() //determineHost Endian search by Itertaot in libbfpgo
+				i := egg.acl.Iterator() //determineHost Endian search by Itertaot in libbfpgo
 				for i.Next() {
 					if i.Err() != nil {
 						fatal("Iterator error", i.Err())
@@ -272,7 +284,7 @@ func (clientegg ClientEgg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup
 
 					key := ipv4LPMKey{prefixLen, ip2Uint32(ip)}
 					upKey := unsafe.Pointer(&key)
-					valBytes, err := clientegg.acl.GetValue(upKey)
+					valBytes, err := egg.acl.GetValue(upKey)
 					must(err, "Can't get value.")
 					counter := binary.LittleEndian.Uint64(valBytes[8:16])
 					ttl := binary.LittleEndian.Uint64(valBytes[0:8])
@@ -311,7 +323,7 @@ func unmarshalValue(bytes []byte) ipv4LPMVal {
 	}
 }
 
-func updateACL(acl *bpf.BPFMap, key ipv4LPMKey, val ipv4LPMVal) error {
+func updateACLKey(acl *bpf.BPFMap, key ipv4LPMKey, val ipv4LPMVal) error {
 	//alyternative way
 	//aclKeyEnc := bytes.NewBuffer(encodeUint32(32))
 	//aclKeyEnc.Write(encodeUint32(ip2Uint32(ip)))
@@ -338,11 +350,22 @@ func updateACL(acl *bpf.BPFMap, key ipv4LPMKey, val ipv4LPMVal) error {
 		fmt.Println("[updatACL] Can't upate ACLP, err:", err)
 		return err
 	} else {
-		fmt.Printf("[updateACL] ACL updated for, key:%v, val:%v\n", key, val)
+		fmt.Printf("[updateACLKey] ACL updated for, key:%v, val:%v\n", key, val)
 	}
 	//!!} else {
-	//!!	fmt.Printf("[updateACL] Key already exists in ACL, key:%v val:%v\n", key, binary.LittleEndian.Uint64(v))
+	//!!	fmt.Printf("[updateACLKey] Key already exists in ACL, key:%v val:%v\n", key, binary.LittleEndian.Uint64(v))
 	//!!}
+	return nil
+}
+
+func removeACLKey(acl *bpf.BPFMap, key ipv4LPMKey) error {
+	upKey := unsafe.Pointer(&key)
+	//check if not exists first
+	err := acl.DeleteKey(upKey)
+	if err != nil { //update in any cases
+		fmt.Printf("Key not exists %v", key)
+	}
+
 	return nil
 }
 
