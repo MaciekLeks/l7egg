@@ -13,6 +13,14 @@ type IClientEggManager interface {
 	UpdateCIDRs([]string)
 }
 
+type ClientEgg struct {
+	CNs              []string
+	CIDRs            []string
+	IngressInterface string
+	EgressInterface  string
+	BPFObjectPath    string
+}
+
 // clientEggManager holds ClientEgg and steering variables (stopFunc to stop it from the controller witout stopping the controller iself).
 // waitGroup synchronize bpf main groutine starting from user.run function
 type clientEggBox struct {

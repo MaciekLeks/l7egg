@@ -29,19 +29,12 @@ import (
 	"unsafe"
 )
 
-type ClientEgg struct {
-	CNs              []string
-	CIDRs            []string
-	IngressInterface string
-	EgressInterface  string
-	BPFObjectPath    string
-}
-
 type egg struct {
-	ClientEgg
+	// Depreciated: should all part of egg struct
+	ClientEgg //TOOD remove from here
 	bpfModule *bpf.Module
 	acl       *bpf.BPFMap
-	cidrs     net.IPNet
+	keys      []ipv4LPMKey
 	packets   chan []byte
 }
 
@@ -57,9 +50,9 @@ type ipv4LPMVal struct {
 
 func newEgg(clientegg *ClientEgg) *egg {
 	var egg egg
-
 	var err error
-	egg.ClientEgg = *clientegg
+
+	egg.ClientEgg = *clientegg //TOOD no needed
 	egg.bpfModule, err = bpf.NewModuleFromFile(clientegg.BPFObjectPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
