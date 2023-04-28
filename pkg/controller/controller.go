@@ -71,7 +71,7 @@ func (c *Controller) Run(ctx context.Context) {
 func (c *Controller) worker(ctx context.Context) {
 	workFunc := func() bool {
 
-		fmt.Println("--->>>before Get")
+		fmt.Println("--->>>before BpfManagerInstance")
 		keyObj, quit := c.queue.Get() //blocking op
 		defer fmt.Println("--->>>processNextItem ended.")
 		if quit {
@@ -80,7 +80,7 @@ func (c *Controller) worker(ctx context.Context) {
 		}
 		defer c.queue.Done(keyObj)
 
-		fmt.Println("--->>>after Get")
+		fmt.Println("--->>>after BpfManagerInstance")
 
 		key, err := cache.MetaNamespaceKeyFunc(keyObj)
 		if err != nil {
@@ -104,7 +104,7 @@ func (c *Controller) worker(ctx context.Context) {
 			return false
 		}
 		//check directly on the server (not lister) if the object has been deleted form the k8s cluster
-		//cegg, err := c.ceggClientset.MaciekleksV1alpha1().ClusterEggs().Get(ctx, name, metav1.GetOptions{})
+		//cegg, err := c.ceggClientset.MaciekleksV1alpha1().ClusterEggs().BpfManagerInstance(ctx, name, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			log.Printf("--->>>Handle delete for clusteregg %s\n", name)
 		}
@@ -127,12 +127,12 @@ func (c *Controller) worker(ctx context.Context) {
 }
 
 func (c *Controller) Wait() {
-	user.Get().Wait()
+	user.BpfManagerInstance().Wait()
 }
 
 func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) {
 
-	manager := user.Get()
+	manager := user.BpfManagerInstance()
 
 	clientegg := &user.ClientEgg{
 		IngressInterface: cegg.Spec.IngressInterface,
@@ -149,7 +149,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) {
 func (c *Controller) deleteEgg(ctx context.Context, name string) {
 	fmt.Println("$$$>>>deleteEgg")
 
-	manager := user.Get()
+	manager := user.BpfManagerInstance()
 	manager.Stop(name)
 
 	fmt.Println("$$$>>>deleteEgg: map entry deleted")

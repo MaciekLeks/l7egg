@@ -27,7 +27,7 @@ var (
 	once     sync.Once
 )
 
-func Get() *clientEggManager {
+func BpfManagerInstance() *clientEggManager {
 	once.Do(func() {
 		instance = &clientEggManager{
 			boxes: map[string]clientEggBox{},

@@ -154,7 +154,7 @@ func (clientegg ClientEgg) runPacketsLooper(ctx context.Context, lwg *sync.WaitG
 				//fmt.Println("Encoded packet:", insertNth(hex.EncodeToString(data), 2))
 
 				packet := gopacket.NewPacket(data, layers.LayerTypeEthernet, gopacket.Default)
-				// Get the TCP layer from this packet
+				// BpfManagerInstance the TCP layer from this packet
 
 				//for _, l := range packet.Layers() {
 				//	fmt.Println("Layer:", l.LayerType())
@@ -163,14 +163,14 @@ func (clientegg ClientEgg) runPacketsLooper(ctx context.Context, lwg *sync.WaitG
 				var payload []byte
 				if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
 					fmt.Println("This is a TCP packet!")
-					// Get actual TCP data from this layer
+					// BpfManagerInstance actual TCP data from this layer
 					tcp, _ := tcpLayer.(*layers.TCP)
 					fmt.Printf("From src port %d to dst port %d\n", tcp.SrcPort, tcp.DstPort)
 
 					payload = tcp.Payload
 				} else if udpLayer := packet.Layer(layers.LayerTypeUDP); udpLayer != nil {
 					fmt.Println("This is a UDP packet!")
-					// Get actual TCP data from this layer
+					// BpfManagerInstance actual TCP data from this layer
 					udp, _ := udpLayer.(*layers.UDP)
 					fmt.Printf("From src port %d to dst port %d\n", udp.SrcPort, udp.DstPort)
 
@@ -180,7 +180,7 @@ func (clientegg ClientEgg) runPacketsLooper(ctx context.Context, lwg *sync.WaitG
 				dnsPacket := gopacket.NewPacket(payload, layers.LayerTypeDNS, gopacket.Default)
 				if dnsLayer := dnsPacket.Layer(layers.LayerTypeDNS); dnsLayer != nil {
 					fmt.Println("This is a DNS packet!")
-					// Get actual TCP data from this layer
+					// BpfManagerInstance actual TCP data from this layer
 
 					dns := dnsLayer.(*layers.DNS)
 					questions := dns.Questions

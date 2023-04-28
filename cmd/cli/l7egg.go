@@ -35,7 +35,7 @@ func main() {
 		return
 	}
 
-	manager := user.Get()
+	manager := user.BpfManagerInstance()
 	clientegg := &user.ClientEgg{
 		IngressInterface: *iface,
 		EgressInterface:  *eface,
