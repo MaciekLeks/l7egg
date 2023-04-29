@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"fmt"
+	"net"
 	"sync"
 )
 
@@ -15,7 +16,7 @@ type IClientEggManager interface {
 
 type ClientEgg struct {
 	CNs              []string
-	CIDRs            []string
+	CIDRs            []*CIDR
 	IngressInterface string
 	EgressInterface  string
 	BPFObjectPath    string
@@ -33,10 +34,42 @@ type clientEggManager struct {
 	boxes map[string]clientEggBox
 }
 
+type CIDR struct {
+	//TODO ipv6 needed
+	ipv4LPMKey
+}
+
 var (
 	instance *clientEggManager
 	once     sync.Once
 )
+
+// ParseCIDR TODO: only ipv4
+func ParseCIDR(cidrS string) (*CIDR, error) {
+	_, ipv4Net, err := net.ParseCIDR(cidrS)
+	must(err, "Can't parse ipv4 Net.")
+	if err != nil {
+		return nil, fmt.Errorf("Can't parse IPv4 CIDR")
+	}
+
+	prefix, _ := ipv4Net.Mask.Size()
+	ip := ipv4Net.IP.To4()
+	return &CIDR{ipv4LPMKey{uint32(prefix), ip2Uint32(ip)}}, nil
+}
+
+// ParseCIDRs TODO: only ipv4
+func ParseCIDRs(cidrsS []string) ([]*CIDR, error) {
+	var cidrs []*CIDR
+	for _, cidrS := range cidrsS {
+		cidr, err := ParseCIDR(cidrS)
+		if err != nil {
+			return nil, err
+		}
+		cidrs = append(cidrs, cidr)
+	}
+
+	return cidrs, nil
+}
 
 func BpfManagerInstance() *clientEggManager {
 	once.Do(func() {
@@ -45,6 +78,10 @@ func BpfManagerInstance() *clientEggManager {
 		}
 	})
 	return instance
+}
+
+func parseClientEgg(clientegg *ClientEgg) {
+
 }
 
 func (m *clientEggManager) Start(ctx context.Context, key string, clientegg *ClientEgg) {

@@ -133,12 +133,16 @@ func (c *Controller) Wait() {
 func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) {
 
 	manager := user.BpfManagerInstance()
-
+	cidrs, err := user.ParseCIDRs(cegg.Spec.CIDRs)
+	if err != nil {
+		fmt.Errorf("Parsing input data %#v", err)
+		return
+	}
 	clientegg := &user.ClientEgg{
 		IngressInterface: cegg.Spec.IngressInterface,
 		EgressInterface:  cegg.Spec.EgressInterface,
 		CNs:              cegg.Spec.CommonNames,
-		CIDRs:            cegg.Spec.CIDRs,
+		CIDRs:            cidrs,
 		BPFObjectPath:    "./l7egg.bpf.o",
 	}
 

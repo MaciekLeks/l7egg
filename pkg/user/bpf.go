@@ -117,14 +117,13 @@ func (egg egg) run(ctx context.Context, wg *sync.WaitGroup) {
 func (egg egg) updateCIDRs() {
 	//{cidrs
 	fmt.Println("[ACL]: Init")
-	for _, ipv4NetStr := range egg.CIDRs {
-		_, ipv4Net, err := net.ParseCIDR(ipv4NetStr)
-		must(err, "Can't parse ipv4 Net.")
-
-		prefix, _ := ipv4Net.Mask.Size()
-		ip := ipv4Net.IP.To4()
-		//fmt.Println("-----mask: %d rest: %v", prefix, ipv4Net.IP)
-		key := ipv4LPMKey{uint32(prefix), ip2Uint32(ip)}
+	for _, cidr := range egg.CIDRs {
+		//must(err, "Can't parse ipv4 Net.")
+		//
+		//prefix, _ := ipv4Net.Mask.Size()
+		//ip := ipv4Net.IP.To4()
+		////fmt.Println("-----mask: %d rest: %v", prefix, ipv4Net.IP)
+		//key := ipv4LPMKey{uint32(prefix), ip2Uint32(ip)}
 		//tmpKey := ipv4LPMKey{32, ip2Uint32(ip)}
 		//val := time.Now().Unix()
 		//var val uint64 = 0 //means no TTL
@@ -133,7 +132,7 @@ func (egg egg) updateCIDRs() {
 			0,
 		}
 
-		err = updateACLKey(egg.acl, key, val)
+		err := updateACLKey(egg.acl, cidr.ipv4LPMKey, val)
 		must(err, "Can't update ACL.")
 		//fmt.Println("tmpKeySize:", unsafe.Sizeof(tmpKey))
 		//fmt.Println("tmpKey.data:", tmpKey.data)

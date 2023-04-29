@@ -23,11 +23,11 @@ func (i *argList) Set(value string) error {
 
 func main() {
 	var cns argList
-	var cidrs argList
+	var cidrsL argList
 	iface := flag.String("iface", "", "Ingress interface to bind TC program to.")
 	eface := flag.String("eface", "", "Egress interface to bind TC program to.")
 	bpfObjectPath := flag.String("bpfobj", "l7egg.bpf.o", "Kernel module file path to load.")
-	flag.Var(&cidrs, "cidr", "Add net address (CIDR format) to add to the white list.")
+	flag.Var(&cidrsL, "cidr", "Add net address (CIDR format) to add to the white list.")
 	flag.Var(&cns, "cn", "Add Common Name to add to the white list.")
 	flag.Parse()
 	if *iface == "" || *eface == "" {
@@ -36,6 +36,11 @@ func main() {
 	}
 
 	manager := user.BpfManagerInstance()
+	cidrs, err := user.ParseCIDRs(cidrsL)
+	if err != nil {
+		fmt.Errorf("Parsing input data %#v", err)
+		return
+	}
 	clientegg := &user.ClientEgg{
 		IngressInterface: *iface,
 		EgressInterface:  *eface,
