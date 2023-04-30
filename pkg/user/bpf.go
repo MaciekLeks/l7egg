@@ -176,18 +176,7 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 						if err != nil {
 							return fmt.Errorf("Updating value status", egg)
 						}
-						//egg.CIDRs = append(egg.CIDRs[:i], egg.CIDRs[i+1:]...)
 					}
-				} else {
-					//fmt.Println("%%%>>>4.7")
-					//val := getACLValue(egg.acl, key)
-					//val.status = uint8(cidrStale)
-					//err := updateACLValue(egg.acl, key, val)
-					//if err != nil {
-					//	return fmt.Errorf("Updating value status", egg)
-					//}
-					////removeACLKey(egg.acl, key)
-					////egg.CIDRs = append(egg.CIDRs[:i], egg.CIDRs[i+1:]...)
 				}
 			}
 		}
