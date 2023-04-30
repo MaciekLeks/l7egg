@@ -3,7 +3,6 @@ package user
 import (
 	"context"
 	"fmt"
-	"github.com/MaciekLeks/l7egg/pkg/tools"
 	"net"
 	"sync"
 )
@@ -18,7 +17,7 @@ type IClientEggManager interface {
 
 type ClientEgg struct {
 	CNs              []string
-	CIDRs            *tools.SafeSlice[*CIDR]
+	CIDRs            []*CIDR
 	IngressInterface string
 	EgressInterface  string
 	BPFObjectPath    string

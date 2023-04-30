@@ -7,7 +7,6 @@ import (
 	ceggclientset "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned"
 	cegginformer "github.com/MaciekLeks/l7egg/pkg/client/informers/externalversions/maciekleks.dev/v1alpha1"
 	cegglister "github.com/MaciekLeks/l7egg/pkg/client/listers/maciekleks.dev/v1alpha1"
-	"github.com/MaciekLeks/l7egg/pkg/tools"
 	"github.com/MaciekLeks/l7egg/pkg/user"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -149,13 +148,11 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) {
 		fmt.Errorf("Parsing input data %#v", err)
 		return
 	}
-	safeCidrs := &tools.SafeSlice[*user.CIDR]{}
-	safeCidrs.Append(cidrs...)
 	clientegg := &user.ClientEgg{ //TODO make a function to wrap this up (parsing, building the object)
 		IngressInterface: cegg.Spec.IngressInterface,
 		EgressInterface:  cegg.Spec.EgressInterface,
 		CNs:              cegg.Spec.CommonNames,
-		CIDRs:            safeCidrs,
+		CIDRs:            cidrs,
 		BPFObjectPath:    "./l7egg.bpf.o",
 	}
 

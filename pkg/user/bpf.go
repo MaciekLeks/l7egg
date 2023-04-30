@@ -118,42 +118,22 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup) {
 func (egg *egg) initCIDRs() {
 	//{cidrs
 	fmt.Println("[ACL]: Init")
-	for i := 0; i < egg.CIDRs.Len(); i++ {
-		//must(err, "Can't parse ipv4 Net.")
-		//
-		//prefix, _ := ipv4Net.Mask.Size()
-		//ip := ipv4Net.IP.To4()
-		////fmt.Println("-----mask: %d rest: %v", prefix, ipv4Net.IP)
-		//key := ipv4LPMKey{uint32(prefix), ip2Uint32(ip)}
-		//tmpKey := ipv4LPMKey{32, ip2Uint32(ip)}
-		//val := time.Now().Unix()
-		//var val uint64 = 0 //means no TTL
+	for _, cidr := range egg.CIDRs {
 		val := ipv4LPMVal{
 			0,
 			0,
 		}
 
-		fmt.Println("@[1]")
-		err := updateACLKey(egg.acl, egg.CIDRs.GetValue(i).ipv4LPMKey, val)
-		fmt.Println("@[2]")
+		err := updateACLKey(egg.acl, cidr.ipv4LPMKey, val)
 		must(err, "Can't update ACL.")
-		cidr := egg.CIDRs.GetRef(i)
-		fmt.Println("@[3]")
-		(*cidr).status = cidrSynced
-		egg.CIDRs.Commit()
-		fmt.Println("@[4]")
-		//fmt.Println("tmpKeySize:", unsafe.Sizeof(tmpKey))
-		//fmt.Println("tmpKey.data:", tmpKey.data)
+		cidr.status = cidrSynced
 	}
-	fmt.Println("@[5-done]")
-	//cidrs}
 }
 
 func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 
 	fmt.Println("%%%>>>1")
-	for i := 0; i < egg.CIDRs.Len(); i++ {
-		current := *egg.CIDRs.GetRef(i)
+	for _, current := range egg.CIDRs {
 		current.status = cidrStale
 
 		fmt.Println("%%%>>>2")
@@ -163,7 +143,6 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 				newone.status = cidrSynced
 			}
 		}
-		egg.CIDRs.Commit()
 	}
 
 	fmt.Println("%%%>>>4")
@@ -197,8 +176,7 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 		//we control CIDR with ttl=0 only
 		if ttl == 0 {
 			fmt.Println("%%%>>>4.5")
-			for i := 0; i < egg.CIDRs.Len(); i++ {
-				cidr := *egg.CIDRs.GetReadRef(i)
+			for _, cidr := range egg.CIDRs {
 				if key.prefixLen == cidr.prefixLen && key.data == cidr.data {
 					if cidr.status == cidrStale {
 
@@ -211,7 +189,6 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 					//removeACLKey(egg.acl, key)
 					//egg.CIDRs = append(egg.CIDRs[:i], egg.CIDRs[i+1:]...)
 				}
-				egg.CIDRs.Release()
 			}
 		}
 	}
@@ -233,12 +210,13 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 				return fmt.Errorf("Can't update ACL %#v", err)
 			}
 			cidr.status = cidrSynced
-			egg.CIDRs.Append(cidr)
+			//shallow copy of cidr
+			newOne := *cidr
+			egg.CIDRs = append(egg.CIDRs, &newOne)
 		}
 	}
 
-	for i := 1; i < egg.CIDRs.Len(); i++ {
-		cidr := egg.CIDRs.GetValue(i)
+	for _, cidr := range egg.CIDRs {
 		if cidr.status != cidrSynced {
 			fmt.Printf("Stale keys %#v\n", cidr)
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/MaciekLeks/l7egg/pkg/tools"
 	"github.com/MaciekLeks/l7egg/pkg/user"
 	"os"
 	"os/signal"
@@ -42,13 +41,11 @@ func main() {
 		fmt.Errorf("Parsing input data %#v", err)
 		return
 	}
-	safeCidrs := &tools.SafeSlice[*user.CIDR]{}
-	safeCidrs.Append(cidrs...)
 	clientegg := &user.ClientEgg{
 		IngressInterface: *iface,
 		EgressInterface:  *eface,
 		CNs:              cns,
-		CIDRs:            safeCidrs,
+		CIDRs:            cidrs,
 		BPFObjectPath:    *bpfObjectPath,
 	}
 
