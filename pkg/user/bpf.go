@@ -36,6 +36,7 @@ type egg struct {
 	acl       *bpf.BPFMap
 	keys      []ipv4LPMKey
 	packets   chan []byte
+	//aclLoock  sync.RWMutex
 }
 
 type ipv4LPMKey struct {
@@ -75,7 +76,7 @@ func newEgg(clientegg *ClientEgg) *egg {
 	return &egg
 }
 
-func (egg egg) run(ctx context.Context, wg *sync.WaitGroup) {
+func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup) {
 	rb, err := egg.bpfModule.InitRingBuf("packets", egg.packets)
 	must(err, "Can't initialize ring buffer map.")
 
@@ -93,7 +94,7 @@ func (egg egg) run(ctx context.Context, wg *sync.WaitGroup) {
 	egg.acl, err = egg.bpfModule.GetMap("ipv4_lpm_map")
 	must(err, "Can't get map")
 
-	egg.updateCIDRs()
+	egg.initCIDRs()
 
 	wg.Add(1)
 	go func() {
@@ -114,10 +115,10 @@ func (egg egg) run(ctx context.Context, wg *sync.WaitGroup) {
 
 }
 
-func (egg egg) updateCIDRs() {
+func (egg *egg) initCIDRs() {
 	//{cidrs
 	fmt.Println("[ACL]: Init")
-	for _, cidr := range egg.CIDRs {
+	for i := 0; i < egg.CIDRs.Len(); i++ {
 		//must(err, "Can't parse ipv4 Net.")
 		//
 		//prefix, _ := ipv4Net.Mask.Size()
@@ -132,15 +133,122 @@ func (egg egg) updateCIDRs() {
 			0,
 		}
 
-		err := updateACLKey(egg.acl, cidr.ipv4LPMKey, val)
+		fmt.Println("@[1]")
+		err := updateACLKey(egg.acl, egg.CIDRs.GetValue(i).ipv4LPMKey, val)
+		fmt.Println("@[2]")
 		must(err, "Can't update ACL.")
+		cidr := egg.CIDRs.GetRef(i)
+		fmt.Println("@[3]")
+		(*cidr).status = cidrSynced
+		egg.CIDRs.Commit()
+		fmt.Println("@[4]")
 		//fmt.Println("tmpKeySize:", unsafe.Sizeof(tmpKey))
 		//fmt.Println("tmpKey.data:", tmpKey.data)
 	}
+	fmt.Println("@[5-done]")
 	//cidrs}
 }
 
-func (egg egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packets chan []byte) {
+func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
+
+	fmt.Println("%%%>>>1")
+	for i := 0; i < egg.CIDRs.Len(); i++ {
+		current := *egg.CIDRs.GetRef(i)
+		current.status = cidrStale
+
+		fmt.Println("%%%>>>2")
+		for _, newone := range cidrs {
+			if current.prefixLen == newone.prefixLen && current.data == newone.data {
+				current.status = cidrSynced
+				newone.status = cidrSynced
+			}
+		}
+		egg.CIDRs.Commit()
+	}
+
+	fmt.Println("%%%>>>4")
+	// delete
+	i := egg.acl.Iterator() //determineHost Endian search by Itertaot in libbfpgo
+	fmt.Println("%%%>>>4.1 egg.acl: %vm %v", egg.acl, i)
+	for i.Next() {
+
+		fmt.Println("%%%>>>4.2")
+		if i.Err() != nil {
+			return fmt.Errorf("BPF Map Iterator error", i.Err())
+		}
+
+		keyBytes := i.Key()
+		prefixLen := binary.LittleEndian.Uint32(keyBytes[0:4])
+		ipBytes := keyBytes[4:8]
+		ip := bytes2ip(ipBytes)
+
+		fmt.Println("%%%>>>4.3")
+
+		key := ipv4LPMKey{prefixLen, ip2Uint32(ip)}
+		upKey := unsafe.Pointer(&key)
+		valBytes, err := egg.acl.GetValue(upKey)
+		if err != nil {
+			return fmt.Errorf("Can't get BPM Map value.", i.Err())
+		}
+		ttl := binary.LittleEndian.Uint64(valBytes[0:8])
+
+		fmt.Println("%%%>>>4.4")
+
+		//we control CIDR with ttl=0 only
+		if ttl == 0 {
+			fmt.Println("%%%>>>4.5")
+			for i := 0; i < egg.CIDRs.Len(); i++ {
+				cidr := *egg.CIDRs.GetReadRef(i)
+				if key.prefixLen == cidr.prefixLen && key.data == cidr.data {
+					if cidr.status == cidrStale {
+
+						fmt.Println("%%%>>>4.6")
+						//removeACLKey(egg.acl, key)
+						//egg.CIDRs = append(egg.CIDRs[:i], egg.CIDRs[i+1:]...)
+					}
+				} else {
+					fmt.Println("%%%>>>4.7")
+					//removeACLKey(egg.acl, key)
+					//egg.CIDRs = append(egg.CIDRs[:i], egg.CIDRs[i+1:]...)
+				}
+				egg.CIDRs.Release()
+			}
+		}
+	}
+
+	fmt.Println("%%%>>>5")
+	//add
+	for _, cidr := range cidrs {
+		fmt.Println("%%%>>> adding ")
+		if cidr.status == cidrNew {
+			val := ipv4LPMVal{
+				0,
+				0,
+			}
+
+			fmt.Println("%%%>>> adding 2")
+			err := updateACLKey(egg.acl, cidr.ipv4LPMKey, val)
+			fmt.Println("%%%>>> adding 3")
+			if err != nil {
+				return fmt.Errorf("Can't update ACL %#v", err)
+			}
+			cidr.status = cidrSynced
+			egg.CIDRs.Append(cidr)
+		}
+	}
+
+	for i := 1; i < egg.CIDRs.Len(); i++ {
+		cidr := egg.CIDRs.GetValue(i)
+		if cidr.status != cidrSynced {
+			fmt.Printf("Stale keys %#v\n", cidr)
+
+		}
+	}
+
+	return nil
+}
+
+func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packets chan []byte) {
 	lwg.Add(1)
 	go func() {
 		defer lwg.Done()
@@ -250,7 +358,7 @@ func (egg egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packet
 	}()
 }
 
-func (egg egg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup) {
+func (egg *egg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup) {
 	lwg.Add(1)
 	go func() {
 		defer lwg.Done()

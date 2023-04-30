@@ -68,6 +68,7 @@ struct ipv4_lpm_key {
 struct value_t {
     __u64 ttl;
     __u64 counter;
+    //__u8 status; //0 - synced, 2 - stale
 }  __attribute__((packed));
 
 struct {

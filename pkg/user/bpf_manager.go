@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"fmt"
+	"github.com/MaciekLeks/l7egg/pkg/tools"
 	"net"
 	"sync"
 )
@@ -12,11 +13,12 @@ type IClientEggManager interface {
 	Stop(string)
 	Wait()
 	UpdateCIDRs([]string)
+	Exists(string)
 }
 
 type ClientEgg struct {
 	CNs              []string
-	CIDRs            []*CIDR
+	CIDRs            *tools.SafeSlice[*CIDR]
 	IngressInterface string
 	EgressInterface  string
 	BPFObjectPath    string
@@ -34,9 +36,19 @@ type clientEggManager struct {
 	boxes map[string]clientEggBox
 }
 
+type cidrStatus byte
+
+const (
+	cidrSynced cidrStatus = iota
+	cidrNew               //new to add to the ebpf map
+	cidrStale  = 2        //could removed
+
+)
+
 type CIDR struct {
 	//TODO ipv6 needed
 	ipv4LPMKey
+	status cidrStatus
 }
 
 var (
@@ -54,7 +66,7 @@ func ParseCIDR(cidrS string) (*CIDR, error) {
 
 	prefix, _ := ipv4Net.Mask.Size()
 	ip := ipv4Net.IP.To4()
-	return &CIDR{ipv4LPMKey{uint32(prefix), ip2Uint32(ip)}}, nil
+	return &CIDR{ipv4LPMKey{uint32(prefix), ip2Uint32(ip)}, cidrNew}, nil
 }
 
 // ParseCIDRs TODO: only ipv4
@@ -82,6 +94,13 @@ func BpfManagerInstance() *clientEggManager {
 
 func parseClientEgg(clientegg *ClientEgg) {
 
+}
+
+func (m *clientEggManager) Exists(key string) bool {
+	if _, found := m.boxes[key]; found {
+		return true
+	}
+	return false
 }
 
 func (m *clientEggManager) Start(ctx context.Context, key string, clientegg *ClientEgg) {
@@ -128,18 +147,25 @@ func (m *clientEggManager) Wait() {
 	stopWaitGroup.Wait()
 }
 
-func (m *clientEggManager) UpdateCIDRs(key string, newCIDRs []string) {
-	//box, found := m.boxes[key]
-	//if !found {
-	//	fmt.Printf("Checking key in map %s\n", key)
-	//	return
-	//}
-	//
-	//currentCIDRs := box.egg.CIDRs
-	//
-	//for ccidr := range currentCIDRs {
-	//
-	//}
+func (m *clientEggManager) UpdateCIDRs(key string, newCIDRsS []string) error {
+
+	cidrs, err := ParseCIDRs(newCIDRsS)
+	if err != nil {
+		return fmt.Errorf("Parsing input data %#v", err)
+	}
+
+	box, found := m.boxes[key]
+	if !found {
+		return fmt.Errorf("Checking key in map %s\n", key)
+	}
+
+	fmt.Printf("box.egg %#v\n", box.egg)
+	if err := box.egg.updateCIDRs(cidrs); err != nil {
+		return err
+	}
+
+	return nil
+
 }
 
 //
