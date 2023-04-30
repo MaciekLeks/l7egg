@@ -6,6 +6,7 @@ require (
 	github.com/aquasecurity/libbpfgo v0.4.5-libbpf-1.0.1
 	github.com/florianl/go-tc v0.4.2
 	github.com/google/gopacket v1.1.19
+	github.com/rs/xid v1.5.0
 	k8s.io/apimachinery v0.26.3
 	k8s.io/client-go v0.26.3
 )

@@ -14,9 +14,12 @@
 //#include <linux/tcp.h>
 //#include <linux/filter.h>
 
-#define ETH_HLEN	14		/* Total octets in header.	 */
+#define ETH_HLEN 14		/* Total octets in header.	 */
 #define ETH_P_IP 0x0800
 #define ETH_FRAME_LEN 1514
+
+#define IP_SYNCED 0
+#define IP_STALE 1
 
 #ifdef asm_inline
 #undef asm_inline
@@ -68,7 +71,7 @@ struct ipv4_lpm_key {
 struct value_t {
     __u64 ttl;
     __u64 counter;
-    //__u8 status; //0 - synced, 2 - stale
+    __u8 status; //0 - synced, 2 - stale
 }  __attribute__((packed));
 
 struct {
@@ -196,6 +199,10 @@ static __always_inline int process(struct __sk_buff *skb, bool is_egress) {
             }
             //}egress gate
             struct value_t* pval = pv;
+            // does not process STALE IPs
+            if (pval->status == IP_STALE) {
+                return 0;
+            }
             __u64 boot_plus_ttl_ns = pval->ttl;
             __u64 boot_ns =  bpf_ktime_get_boot_ns();
             if (boot_plus_ttl_ns != 0 &&  boot_plus_ttl_ns < boot_ns) { //0 means no TTL

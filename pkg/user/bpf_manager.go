@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"fmt"
+	"github.com/rs/xid"
 	"net"
 	"sync"
 )
@@ -39,13 +40,14 @@ type cidrStatus byte
 
 const (
 	cidrSynced cidrStatus = iota
+	cidrStale             //could removed
 	cidrNew               //new to add to the ebpf map
-	cidrStale  = 2        //could removed
-
 )
 
 type CIDR struct {
 	//TODO ipv6 needed
+	cidr string
+	id   string
 	ipv4LPMKey
 	status cidrStatus
 }
@@ -65,7 +67,7 @@ func ParseCIDR(cidrS string) (*CIDR, error) {
 
 	prefix, _ := ipv4Net.Mask.Size()
 	ip := ipv4Net.IP.To4()
-	return &CIDR{ipv4LPMKey{uint32(prefix), ip2Uint32(ip)}, cidrNew}, nil
+	return &CIDR{cidrS, xid.New().String(), ipv4LPMKey{uint32(prefix), ip2Uint32(ip)}, cidrNew}, nil
 }
 
 // ParseCIDRs TODO: only ipv4

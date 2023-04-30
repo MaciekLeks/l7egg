@@ -46,6 +46,7 @@ type ipv4LPMKey struct {
 type ipv4LPMVal struct {
 	ttl     uint64
 	counter uint64
+	status  uint8
 }
 
 func newEgg(clientegg *ClientEgg) *egg {
@@ -119,11 +120,12 @@ func (egg *egg) initCIDRs() {
 	fmt.Println("[ACL]: Init")
 	for _, cidr := range egg.CIDRs {
 		val := ipv4LPMVal{
-			0,
-			0,
+			ttl:     0,
+			counter: 0,
+			status:  uint8(cidrSynced),
 		}
 
-		err := updateACLKey(egg.acl, cidr.ipv4LPMKey, val)
+		err := updateACLValue(egg.acl, cidr.ipv4LPMKey, val)
 		must(err, "Can't update ACL.")
 		cidr.status = cidrSynced
 	}
@@ -149,44 +151,43 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 	i := egg.acl.Iterator() //determineHost Endian search by Itertaot in libbfpgo
 	fmt.Println("%%%>>>4.1 egg.acl: %vm %v", egg.acl, i)
 	for i.Next() {
-
 		fmt.Println("%%%>>>4.2")
 		if i.Err() != nil {
 			return fmt.Errorf("BPF Map Iterator error", i.Err())
 		}
 
 		keyBytes := i.Key()
-		prefixLen := binary.LittleEndian.Uint32(keyBytes[0:4])
-		ipBytes := keyBytes[4:8]
-		ip := bytes2ip(ipBytes)
-
-		fmt.Println("%%%>>>4.3")
-
-		key := ipv4LPMKey{prefixLen, ip2Uint32(ip)}
-		upKey := unsafe.Pointer(&key)
-		valBytes, err := egg.acl.GetValue(upKey)
-		if err != nil {
-			return fmt.Errorf("Can't get BPM Map value.", i.Err())
-		}
-		ttl := binary.LittleEndian.Uint64(valBytes[0:8])
+		key := unmarshalACLKey(keyBytes)
+		val := getACLValue(egg.acl, key)
 
 		fmt.Println("%%%>>>4.4")
 
 		//we control CIDR with ttl=0 only
-		if ttl == 0 {
+		if val.ttl == 0 {
 			fmt.Println("%%%>>>4.5")
 			for _, cidr := range egg.CIDRs {
 				if key.prefixLen == cidr.prefixLen && key.data == cidr.data {
 					if cidr.status == cidrStale {
 
 						fmt.Println("%%%>>>4.6")
-						//removeACLKey(egg.acl, key)
+
+						val.status = uint8(cidrStale)
+						err := updateACLValue(egg.acl, key, val)
+						if err != nil {
+							return fmt.Errorf("Updating value status", egg)
+						}
 						//egg.CIDRs = append(egg.CIDRs[:i], egg.CIDRs[i+1:]...)
 					}
 				} else {
-					fmt.Println("%%%>>>4.7")
-					//removeACLKey(egg.acl, key)
-					//egg.CIDRs = append(egg.CIDRs[:i], egg.CIDRs[i+1:]...)
+					//fmt.Println("%%%>>>4.7")
+					//val := getACLValue(egg.acl, key)
+					//val.status = uint8(cidrStale)
+					//err := updateACLValue(egg.acl, key, val)
+					//if err != nil {
+					//	return fmt.Errorf("Updating value status", egg)
+					//}
+					////removeACLKey(egg.acl, key)
+					////egg.CIDRs = append(egg.CIDRs[:i], egg.CIDRs[i+1:]...)
 				}
 			}
 		}
@@ -198,12 +199,13 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 		fmt.Println("%%%>>> adding ")
 		if cidr.status == cidrNew {
 			val := ipv4LPMVal{
-				0,
-				0,
+				ttl:     0,
+				counter: 0,
+				status:  uint8(cidrSynced),
 			}
 
 			fmt.Println("%%%>>> adding 2")
-			err := updateACLKey(egg.acl, cidr.ipv4LPMKey, val)
+			err := updateACLValue(egg.acl, cidr.ipv4LPMKey, val)
 			fmt.Println("%%%>>> adding 3")
 			if err != nil {
 				return fmt.Errorf("Can't update ACL %#v", err)
@@ -306,10 +308,11 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 								////check}
 
 								val := ipv4LPMVal{
-									bootTtlNs,
-									0, //zero existsing elements :/
+									ttl:     bootTtlNs,
+									counter: 0, //zero existsing elements :/
+									status:  uint8(cidrSynced),
 								}
-								err := updateACLKey(egg.acl, key, val)
+								err := updateACLValue(egg.acl, key, val)
 								must(err, "Can't update ACL.")
 								fmt.Printf("Updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", cn, ip, ttlSec, ttlNs, bootTtlNs)
 
@@ -360,26 +363,18 @@ func (egg *egg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup) {
 					ip := bytes2ip(ipBytes)
 
 					key := ipv4LPMKey{prefixLen, ip2Uint32(ip)}
-					upKey := unsafe.Pointer(&key)
-					valBytes, err := egg.acl.GetValue(upKey)
-					must(err, "Can't get value.")
-					counter := binary.LittleEndian.Uint64(valBytes[8:16])
-					ttl := binary.LittleEndian.Uint64(valBytes[0:8])
-					val := ipv4LPMVal{
-						ttl,
-						counter,
-					}
+					val := getACLValue(egg.acl, key)
 					bootNs := uint64(C.get_nsecs())
 					//var expired string = fmt.Sprintf("%d-%d", bootNs, ttl)
 					var expired string = " "
-					if ttl != 0 && ttl < bootNs {
+					if val.ttl != 0 && val.ttl < bootNs {
 						//fmt.Printf("\nttl(%d)<bootNs(%d)=%t | ", ttl, bootNs, ttl < bootNs)
 						expired = "x"
 					}
 
 					//valBytes := acl[ipv4LPMKey{1,1}]
 					//fmt.Printf(" [bootTtlNs:%d,bootNs:%d][%s]%s/%d[%d]", ttl, bootNs, expired, ip, prefixLen, val.counter)
-					fmt.Printf(" [%s]%s/%d[%d]", expired, ip, prefixLen, val.counter)
+					fmt.Printf(" [%s]%s/%d[%d|%d]", expired, ip, prefixLen, val.counter, val.status)
 
 				}
 			}
@@ -387,20 +382,30 @@ func (egg *egg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup) {
 	}()
 }
 
-func clean(iface string) {
-	//fmt.Printf("Cleansing network device %s\n", iface)
-	//err := tools.DeleteClsact(iface)
-	//must(err, "Can't delete clsact qdisc.")
+func unmarshalACLKey(bytes []byte) ipv4LPMKey {
+	prefixLen := binary.LittleEndian.Uint32(bytes[0:4])
+	ipBytes := bytes[4:8]
+	ip := bytes2ip(ipBytes)
+
+	return ipv4LPMKey{prefixLen, ip2Uint32(ip)}
+}
+
+func getACLValue(acl *bpf.BPFMap, key ipv4LPMKey) ipv4LPMVal {
+	upKey := unsafe.Pointer(&key)
+	valBytes, err := acl.GetValue(upKey)
+	must(err, "Can't get value.")
+	return unmarshalValue(valBytes)
 }
 
 func unmarshalValue(bytes []byte) ipv4LPMVal {
 	return ipv4LPMVal{
 		ttl:     binary.LittleEndian.Uint64(bytes[0:8]),
 		counter: binary.LittleEndian.Uint64(bytes[8:16]),
+		status:  bytes[16:17][0],
 	}
 }
 
-func updateACLKey(acl *bpf.BPFMap, key ipv4LPMKey, val ipv4LPMVal) error {
+func updateACLValue(acl *bpf.BPFMap, key ipv4LPMKey, val ipv4LPMVal) error {
 	//alyternative way
 	//aclKeyEnc := bytes.NewBuffer(encodeUint32(32))
 	//aclKeyEnc.Write(encodeUint32(ip2Uint32(ip)))
@@ -427,10 +432,10 @@ func updateACLKey(acl *bpf.BPFMap, key ipv4LPMKey, val ipv4LPMVal) error {
 		fmt.Println("[updatACL] Can't upate ACLP, err:", err)
 		return err
 	} else {
-		fmt.Printf("[updateACLKey] ACL updated for, key:%v, val:%v\n", key, val)
+		fmt.Printf("[updateACLValue] ACL updated for, key:%v, val:%v\n", key, val)
 	}
 	//!!} else {
-	//!!	fmt.Printf("[updateACLKey] Key already exists in ACL, key:%v val:%v\n", key, binary.LittleEndian.Uint64(v))
+	//!!	fmt.Printf("[updateACLValue] Key already exists in ACL, key:%v val:%v\n", key, binary.LittleEndian.Uint64(v))
 	//!!}
 	return nil
 }
