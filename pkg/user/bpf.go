@@ -34,7 +34,6 @@ type egg struct {
 	ClientEgg //TOOD remove from here
 	bpfModule *bpf.Module
 	acl       *bpf.BPFMap
-	keys      []ipv4LPMKey
 	packets   chan []byte
 	//aclLoock  sync.RWMutex
 }
