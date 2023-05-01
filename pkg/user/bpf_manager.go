@@ -3,7 +3,7 @@ package user
 import (
 	"context"
 	"fmt"
-	"github.com/rs/xid"
+	"github.com/MaciekLeks/l7egg/pkg/tools"
 	"net"
 	"sync"
 )
@@ -33,7 +33,8 @@ type clientEggBox struct {
 }
 
 type clientEggManager struct {
-	boxes map[string]clientEggBox
+	boxes    map[string]clientEggBox
+	seqIdGen tools.ISeqId[uint16]
 }
 
 type cidrStatus byte
@@ -47,7 +48,7 @@ const (
 type CIDR struct {
 	//TODO ipv6 needed
 	cidr string
-	id   string
+	id   uint16
 	ipv4LPMKey
 	status cidrStatus
 }
@@ -58,7 +59,7 @@ var (
 )
 
 // ParseCIDR TODO: only ipv4
-func ParseCIDR(cidrS string) (*CIDR, error) {
+func (m *clientEggManager) ParseCIDR(cidrS string) (*CIDR, error) {
 	_, ipv4Net, err := net.ParseCIDR(cidrS)
 	must(err, "Can't parse ipv4 Net.")
 	if err != nil {
@@ -67,14 +68,14 @@ func ParseCIDR(cidrS string) (*CIDR, error) {
 
 	prefix, _ := ipv4Net.Mask.Size()
 	ip := ipv4Net.IP.To4()
-	return &CIDR{cidrS, xid.New().String(), ipv4LPMKey{uint32(prefix), ip2Uint32(ip)}, cidrNew}, nil
+	return &CIDR{cidrS, m.seqIdGen.Next(), ipv4LPMKey{uint32(prefix), ip2Uint32(ip)}, cidrNew}, nil
 }
 
 // ParseCIDRs TODO: only ipv4
-func ParseCIDRs(cidrsS []string) ([]*CIDR, error) {
+func (m *clientEggManager) ParseCIDRs(cidrsS []string) ([]*CIDR, error) {
 	var cidrs []*CIDR
 	for _, cidrS := range cidrsS {
-		cidr, err := ParseCIDR(cidrS)
+		cidr, err := m.ParseCIDR(cidrS)
 		if err != nil {
 			return nil, err
 		}
@@ -87,7 +88,8 @@ func ParseCIDRs(cidrsS []string) ([]*CIDR, error) {
 func BpfManagerInstance() *clientEggManager {
 	once.Do(func() {
 		instance = &clientEggManager{
-			boxes: map[string]clientEggBox{},
+			boxes:    map[string]clientEggBox{},
+			seqIdGen: tools.New[uint16](),
 		}
 	})
 	return instance
@@ -150,7 +152,7 @@ func (m *clientEggManager) Wait() {
 
 func (m *clientEggManager) UpdateCIDRs(key string, newCIDRsS []string) error {
 
-	cidrs, err := ParseCIDRs(newCIDRsS)
+	cidrs, err := m.ParseCIDRs(newCIDRsS)
 	if err != nil {
 		return fmt.Errorf("Parsing input data %#v", err)
 	}

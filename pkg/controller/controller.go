@@ -143,7 +143,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) {
 		return
 	}
 
-	cidrs, err := user.ParseCIDRs(cegg.Spec.CIDRs)
+	cidrs, err := manager.ParseCIDRs(cegg.Spec.CIDRs)
 	if err != nil {
 		fmt.Errorf("Parsing input data %#v", err)
 		return

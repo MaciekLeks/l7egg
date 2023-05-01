@@ -36,7 +36,7 @@ func main() {
 	}
 
 	manager := user.BpfManagerInstance()
-	cidrs, err := user.ParseCIDRs(cidrsL)
+	cidrs, err := manager.ParseCIDRs(cidrsL)
 	if err != nil {
 		fmt.Errorf("Parsing input data %#v", err)
 		return
