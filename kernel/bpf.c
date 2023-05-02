@@ -202,7 +202,8 @@ static __always_inline int process(struct __sk_buff *skb, bool is_egress) {
             struct value_t* pval = pv;
             // does not process STALE IPs
             if (pval->status == IP_STALE) {
-                return 0;
+                print_ip("[egress] STALE, DROP", daddr);
+                return 2; //TC_ACT_SHOT
             }
             __u64 boot_plus_ttl_ns = pval->ttl;
             __u64 boot_ns =  bpf_ktime_get_boot_ns();

@@ -336,6 +336,8 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 					// BpfManagerInstance actual TCP data from this layer
 
 					dns := dnsLayer.(*layers.DNS)
+
+					fmt.Printf("Type: IsResponse:%t\n", dns.QR)
 					questions := dns.Questions
 					for _, q := range questions {
 						fmt.Printf("Question: Name:%s Type:%s Class:%s\n", string(q.Name), q.Type, q.Class)
