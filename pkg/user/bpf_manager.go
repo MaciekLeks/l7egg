@@ -37,12 +37,12 @@ type clientEggManager struct {
 	seqIdGen tools.ISeqId[uint16]
 }
 
-type cidrStatus byte
+type assetStatus byte
 
 const (
-	cidrSynced cidrStatus = iota
-	cidrStale             //could removed
-	cidrNew               //new to add to the ebpf map
+	cidrSynced assetStatus = iota
+	cidrStale              //could removed
+	cidrNew                //new to add to the ebpf map
 )
 
 type CIDR struct {
@@ -50,7 +50,13 @@ type CIDR struct {
 	cidr string
 	id   uint16
 	ipv4LPMKey
-	status cidrStatus
+	status assetStatus
+}
+
+type CN struct {
+	cn     string
+	id     uint16
+	status assetStatus
 }
 
 var (
@@ -150,16 +156,16 @@ func (m *clientEggManager) Wait() {
 	stopWaitGroup.Wait()
 }
 
-func (m *clientEggManager) UpdateCIDRs(key string, newCIDRsS []string) error {
+func (m *clientEggManager) UpdateCIDRs(boxKey string, newCIDRsS []string) error {
 
 	cidrs, err := m.ParseCIDRs(newCIDRsS)
 	if err != nil {
 		return fmt.Errorf("Parsing input data %#v", err)
 	}
 
-	box, found := m.boxes[key]
+	box, found := m.boxes[boxKey]
 	if !found {
-		return fmt.Errorf("Checking key in map %s\n", key)
+		return fmt.Errorf("Checking key in map %s\n", boxKey)
 	}
 
 	fmt.Printf("box.egg %#v\n", box.egg)
@@ -168,7 +174,37 @@ func (m *clientEggManager) UpdateCIDRs(key string, newCIDRsS []string) error {
 	}
 
 	return nil
+}
 
+func (m *clientEggManager) UpdateCNs(boxKey string, newCNsS []string) error {
+
+	//TODO: parsing needed!!!
+
+	box, found := m.boxes[boxKey]
+	if !found {
+		return fmt.Errorf("Checking key in map %s\n", boxKey)
+	}
+
+	fmt.Printf("box.egg %#v\n", box.egg)
+	if err := box.egg.updateCNs(newCNsS); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *clientEggManager) Update(boxKey string, newCIDRsS []string, newCNsS []string) error {
+	err := m.UpdateCIDRs(boxKey, newCIDRsS)
+	if err != nil {
+		return err
+	}
+
+	err = m.UpdateCNs(boxKey, newCIDRsS)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 //

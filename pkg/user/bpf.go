@@ -216,6 +216,11 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 	return nil
 }
 
+func (egg *egg) updateCNs(cns []string) error {
+	//TODO to be implemented
+	return nil
+}
+
 func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packets chan []byte) {
 	lwg.Add(1)
 	go func() {
