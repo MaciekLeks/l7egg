@@ -226,7 +226,7 @@ func (egg *egg) updateCNs(cns []CN) error {
 		for _, newone := range cns {
 			if current.cn == newone.cn {
 				egg.CNs.Update(i, func(current *CN) {
-					fmt.Println("%%%>>> egg.CNs.Update")
+					fmt.Println("%%%>>> egg.CNs.UpdateClientEgg")
 					current.status = assetSynced
 				})
 				newone.status = assetSynced
@@ -477,7 +477,7 @@ func updateACLValue(acl *bpf.BPFMap, key ipv4LPMKey, val ipv4LPMVal) error {
 	//aclValEnc := encodeUint32(1)
 	//fmt.Printf("IP:%s val:%d, hex:%x\n", ip, ip2Uint32(ip), ip2Uint32(ip))
 	//fmt.Printf("Key:%s val:%s\n", insertNth(hex.EncodeToString(aclKeyEnc.Bytes()), 2), insertNth(hex.EncodeToString(aclValEnc), 2))
-	//acl.Update(&aclKeyEnc.Bytes, &aclValEnc)
+	//acl.UpdateClientEgg(&aclKeyEnc.Bytes, &aclValEnc)
 
 	upKey := unsafe.Pointer(&key)
 	//check if not exists first

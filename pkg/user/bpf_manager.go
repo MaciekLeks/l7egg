@@ -64,8 +64,8 @@ var (
 	once     sync.Once
 )
 
-// ParseCIDR TODO: only ipv4
-func (m *clientEggManager) ParseCIDR(cidrS string) (*CIDR, error) {
+// parseCIDR TODO: only ipv4
+func (m *clientEggManager) parseCIDR(cidrS string) (*CIDR, error) {
 	_, ipv4Net, err := net.ParseCIDR(cidrS)
 	must(err, "Can't parse ipv4 Net.")
 	if err != nil {
@@ -78,10 +78,10 @@ func (m *clientEggManager) ParseCIDR(cidrS string) (*CIDR, error) {
 }
 
 // ParseCIDRs TODO: only ipv4
-func (m *clientEggManager) ParseCIDRs(cidrsS []string) ([]*CIDR, error) {
+func (m *clientEggManager) parseCIDRs(cidrsS []string) ([]*CIDR, error) {
 	var cidrs []*CIDR
 	for _, cidrS := range cidrsS {
-		cidr, err := m.ParseCIDR(cidrS)
+		cidr, err := m.parseCIDR(cidrS)
 		if err != nil {
 			return nil, err
 		}
@@ -92,16 +92,16 @@ func (m *clientEggManager) ParseCIDRs(cidrsS []string) ([]*CIDR, error) {
 }
 
 // ParseCN returns CN object from string
-func (m *clientEggManager) ParseCN(cnS string) (CN, error) {
+func (m *clientEggManager) parseCN(cnS string) (CN, error) {
 	//TODO add some validation before returning CN
 	//we are sync - due to we do not have to update kernel side
 	return CN{cnS, m.seqIdGen.Next(), assetNew}, nil
 }
 
-func (m *clientEggManager) ParseCNs(cnsS []string) ([]CN, error) {
+func (m *clientEggManager) parseCNs(cnsS []string) ([]CN, error) {
 	var cns []CN
 	for _, cnS := range cnsS {
-		cn, err := m.ParseCN(cnS)
+		cn, err := m.parseCN(cnS)
 		if err != nil {
 			return nil, err
 		}
@@ -130,6 +130,31 @@ func (m *clientEggManager) Exists(key string) bool {
 		return true
 	}
 	return false
+}
+
+func (m *clientEggManager) NewClientEgg(iiface string, eiface string, cnsS []string, cidrsS []string) (*ClientEgg, error) {
+	cidrs, err := m.parseCIDRs(cidrsS)
+	if err != nil {
+		fmt.Errorf("Parsing input data %#v", err)
+		return nil, err
+	}
+
+	cns, err := m.parseCNs(cnsS)
+	if err != nil {
+		fmt.Errorf("Parsing input data %#v", err)
+		return nil, err
+	}
+	safeCNs := tools.SafeSlice[CN]{}
+	safeCNs.Append(cns...)
+
+	clientegg := &ClientEgg{ //TODO make a function to wrap this up (parsing, building the object)
+		IngressInterface: iiface,
+		EgressInterface:  eiface,
+		CNs:              &safeCNs,
+		CIDRs:            cidrs,
+		BPFObjectPath:    "./l7egg.bpf.o",
+	}
+	return clientegg, nil
 }
 
 func (m *clientEggManager) Start(ctx context.Context, key string, clientegg *ClientEgg) {
@@ -178,7 +203,7 @@ func (m *clientEggManager) Wait() {
 
 func (m *clientEggManager) UpdateCIDRs(boxKey string, newCIDRsS []string) error {
 
-	cidrs, err := m.ParseCIDRs(newCIDRsS)
+	cidrs, err := m.parseCIDRs(newCIDRsS)
 	if err != nil {
 		return fmt.Errorf("Parsing input data %#v", err)
 	}
@@ -199,7 +224,7 @@ func (m *clientEggManager) UpdateCIDRs(boxKey string, newCIDRsS []string) error 
 func (m *clientEggManager) UpdateCNs(boxKey string, newCNsS []string) error {
 
 	//TODO: parsing needed!!!
-	cns, err := m.ParseCNs(newCNsS)
+	cns, err := m.parseCNs(newCNsS)
 	if err != nil {
 		return fmt.Errorf("Parsing input data %#v", err)
 	}
@@ -217,7 +242,7 @@ func (m *clientEggManager) UpdateCNs(boxKey string, newCNsS []string) error {
 	return nil
 }
 
-func (m *clientEggManager) Update(boxKey string, newCIDRsS []string, newCNsS []string) error {
+func (m *clientEggManager) UpdateClientEgg(boxKey string, newCIDRsS []string, newCNsS []string) error {
 	err := m.UpdateCIDRs(boxKey, newCIDRsS)
 	if err != nil {
 		return err
