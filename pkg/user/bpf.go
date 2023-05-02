@@ -46,6 +46,7 @@ type ipv4LPMKey struct {
 type ipv4LPMVal struct {
 	ttl     uint64
 	counter uint64
+	id      uint16
 	status  uint8
 }
 
@@ -122,6 +123,7 @@ func (egg *egg) initCIDRs() {
 		val := ipv4LPMVal{
 			ttl:     0,
 			counter: 0,
+			id:      cidr.id,
 			status:  uint8(cidrSynced),
 		}
 
@@ -304,6 +306,7 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 								val := ipv4LPMVal{
 									ttl:     bootTtlNs,
 									counter: 0, //zero existsing elements :/
+									id:      666,
 									status:  uint8(cidrSynced),
 								}
 								err := updateACLValue(egg.acl, key, val)
@@ -368,7 +371,7 @@ func (egg *egg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup) {
 
 					//valBytes := acl[ipv4LPMKey{1,1}]
 					//fmt.Printf(" [bootTtlNs:%d,bootNs:%d][%s]%s/%d[%d]", ttl, bootNs, expired, ip, prefixLen, val.counter)
-					fmt.Printf(" [%s]%s/%d[%d|%d]", expired, ip, prefixLen, val.counter, val.status)
+					fmt.Printf(" [%s]%s/%d[counter:%d|status:%d|id:%d]", expired, ip, prefixLen, val.counter, val.status, val.id)
 
 				}
 			}
@@ -395,7 +398,8 @@ func unmarshalValue(bytes []byte) ipv4LPMVal {
 	return ipv4LPMVal{
 		ttl:     binary.LittleEndian.Uint64(bytes[0:8]),
 		counter: binary.LittleEndian.Uint64(bytes[8:16]),
-		status:  bytes[16:17][0],
+		id:      binary.LittleEndian.Uint16(bytes[16:18]),
+		status:  bytes[18:19][0],
 	}
 }
 
