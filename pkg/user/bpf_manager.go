@@ -17,7 +17,7 @@ type IClientEggManager interface {
 }
 
 type ClientEgg struct {
-	CNs              []string
+	CNs              *tools.SafeSlice[CN]
 	CIDRs            []*CIDR
 	IngressInterface string
 	EgressInterface  string
@@ -40,9 +40,9 @@ type clientEggManager struct {
 type assetStatus byte
 
 const (
-	cidrSynced assetStatus = iota
-	cidrStale              //could removed
-	cidrNew                //new to add to the ebpf map
+	assetSynced assetStatus = iota
+	assetStale              //could be removed
+	assetNew                //new to add to the ebpf map
 )
 
 type CIDR struct {
@@ -74,7 +74,7 @@ func (m *clientEggManager) ParseCIDR(cidrS string) (*CIDR, error) {
 
 	prefix, _ := ipv4Net.Mask.Size()
 	ip := ipv4Net.IP.To4()
-	return &CIDR{cidrS, m.seqIdGen.Next(), ipv4LPMKey{uint32(prefix), ip2Uint32(ip)}, cidrNew}, nil
+	return &CIDR{cidrS, m.seqIdGen.Next(), ipv4LPMKey{uint32(prefix), ip2Uint32(ip)}, assetNew}, nil
 }
 
 // ParseCIDRs TODO: only ipv4
@@ -89,6 +89,26 @@ func (m *clientEggManager) ParseCIDRs(cidrsS []string) ([]*CIDR, error) {
 	}
 
 	return cidrs, nil
+}
+
+// ParseCN returns CN object from string
+func (m *clientEggManager) ParseCN(cnS string) (CN, error) {
+	//TODO add some validation before returning CN
+	//we are sync - due to we do not have to update kernel side
+	return CN{cnS, m.seqIdGen.Next(), assetNew}, nil
+}
+
+func (m *clientEggManager) ParseCNs(cnsS []string) ([]CN, error) {
+	var cns []CN
+	for _, cnS := range cnsS {
+		cn, err := m.ParseCN(cnS)
+		if err != nil {
+			return nil, err
+		}
+		cns = append(cns, cn)
+	}
+
+	return cns, nil
 }
 
 func BpfManagerInstance() *clientEggManager {
@@ -179,6 +199,10 @@ func (m *clientEggManager) UpdateCIDRs(boxKey string, newCIDRsS []string) error 
 func (m *clientEggManager) UpdateCNs(boxKey string, newCNsS []string) error {
 
 	//TODO: parsing needed!!!
+	cns, err := m.ParseCNs(newCNsS)
+	if err != nil {
+		return fmt.Errorf("Parsing input data %#v", err)
+	}
 
 	box, found := m.boxes[boxKey]
 	if !found {
@@ -186,7 +210,7 @@ func (m *clientEggManager) UpdateCNs(boxKey string, newCNsS []string) error {
 	}
 
 	fmt.Printf("box.egg %#v\n", box.egg)
-	if err := box.egg.updateCNs(newCNsS); err != nil {
+	if err := box.egg.updateCNs(cns); err != nil {
 		return err
 	}
 
@@ -199,7 +223,7 @@ func (m *clientEggManager) Update(boxKey string, newCIDRsS []string, newCNsS []s
 		return err
 	}
 
-	err = m.UpdateCNs(boxKey, newCIDRsS)
+	err = m.UpdateCNs(boxKey, newCNsS)
 	if err != nil {
 		return err
 	}

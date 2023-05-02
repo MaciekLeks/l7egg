@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/MaciekLeks/l7egg/pkg/tools"
 	"github.com/MaciekLeks/l7egg/pkg/user"
 	"os"
 	"os/signal"
@@ -22,13 +23,13 @@ func (i *argList) Set(value string) error {
 }
 
 func main() {
-	var cns argList
-	var cidrsL argList
+	var cnList argList
+	var cidrList argList
 	iface := flag.String("iface", "", "Ingress interface to bind TC program to.")
 	eface := flag.String("eface", "", "Egress interface to bind TC program to.")
 	bpfObjectPath := flag.String("bpfobj", "l7egg.bpf.o", "Kernel module file path to load.")
-	flag.Var(&cidrsL, "cidr", "Add net address (CIDR format) to add to the white list.")
-	flag.Var(&cns, "cn", "Add Common Name to add to the white list.")
+	flag.Var(&cidrList, "cidr", "Add net address (CIDR format) to add to the white list.")
+	flag.Var(&cnList, "cn", "Add Common Name to add to the white list.")
 	flag.Parse()
 	if *iface == "" || *eface == "" {
 		fmt.Println("-iface and -eface are required.\n-cidr and -cn are optional.")
@@ -36,15 +37,24 @@ func main() {
 	}
 
 	manager := user.BpfManagerInstance()
-	cidrs, err := manager.ParseCIDRs(cidrsL)
+	cidrs, err := manager.ParseCIDRs(cidrList)
 	if err != nil {
 		fmt.Errorf("Parsing input data %#v", err)
 		return
 	}
+
+	cns, err := manager.ParseCNs(cnList)
+	if err != nil {
+		fmt.Errorf("Parsing input data %#v", err)
+		return
+	}
+	safeCNs := tools.SafeSlice[user.CN]{}
+	safeCNs.Append(cns...)
+
 	clientegg := &user.ClientEgg{
 		IngressInterface: *iface,
 		EgressInterface:  *eface,
-		CNs:              cns,
+		CNs:              &safeCNs,
 		CIDRs:            cidrs,
 		BPFObjectPath:    *bpfObjectPath,
 	}

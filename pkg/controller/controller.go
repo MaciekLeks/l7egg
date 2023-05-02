@@ -7,6 +7,7 @@ import (
 	ceggclientset "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned"
 	cegginformer "github.com/MaciekLeks/l7egg/pkg/client/informers/externalversions/maciekleks.dev/v1alpha1"
 	cegglister "github.com/MaciekLeks/l7egg/pkg/client/listers/maciekleks.dev/v1alpha1"
+	"github.com/MaciekLeks/l7egg/pkg/tools"
 	"github.com/MaciekLeks/l7egg/pkg/user"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -134,9 +135,9 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) {
 
 	manager := user.BpfManagerInstance()
 	if manager.Exists(cegg.Name) {
-		err := manager.UpdateCIDRs(cegg.Name, cegg.Spec.CIDRs)
+		err := manager.Update(cegg.Name, cegg.Spec.CIDRs, cegg.Spec.CommonNames)
 		if err != nil {
-			fmt.Printf("****>>>Updating CIDRs %#v", err)
+			fmt.Printf("****>>>Updating CIDRs, CNs %#v", err)
 			return
 		}
 		fmt.Println("****>>>Updating")
@@ -148,10 +149,19 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) {
 		fmt.Errorf("Parsing input data %#v", err)
 		return
 	}
+
+	cns, err := manager.ParseCNs(cegg.Spec.CommonNames)
+	if err != nil {
+		fmt.Errorf("Parsing input data %#v", err)
+		return
+	}
+	safeCNs := tools.SafeSlice[user.CN]{}
+	safeCNs.Append(cns...)
+
 	clientegg := &user.ClientEgg{ //TODO make a function to wrap this up (parsing, building the object)
 		IngressInterface: cegg.Spec.IngressInterface,
 		EgressInterface:  cegg.Spec.EgressInterface,
-		CNs:              cegg.Spec.CommonNames,
+		CNs:              &safeCNs,
 		CIDRs:            cidrs,
 		BPFObjectPath:    "./l7egg.bpf.o",
 	}

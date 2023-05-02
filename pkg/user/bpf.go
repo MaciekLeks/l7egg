@@ -96,6 +96,7 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup) {
 	must(err, "Can't get map")
 
 	egg.initCIDRs()
+	egg.initCNs()
 
 	wg.Add(1)
 	go func() {
@@ -124,34 +125,40 @@ func (egg *egg) initCIDRs() {
 			ttl:     0,
 			counter: 0,
 			id:      cidr.id,
-			status:  uint8(cidrSynced),
+			status:  uint8(assetSynced),
 		}
 
 		err := updateACLValue(egg.acl, cidr.ipv4LPMKey, val)
 		must(err, "Can't update ACL.")
-		cidr.status = cidrSynced
+		cidr.status = assetSynced
+	}
+}
+
+// initCNs
+func (egg *egg) initCNs() {
+	for i := 0; i < egg.CNs.Len(); i++ {
+		egg.CNs.Update(i, func(current *CN) {
+			//to have simmilar approach only with CIDRs
+			current.status = assetSynced
+		})
 	}
 }
 
 func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 
-	fmt.Println("%%%>>>1")
 	for _, current := range egg.CIDRs {
-		current.status = cidrStale
+		current.status = assetStale
 
-		fmt.Println("%%%>>>2")
 		for _, newone := range cidrs {
 			if current.prefixLen == newone.prefixLen && current.data == newone.data {
-				current.status = cidrSynced
-				newone.status = cidrSynced
+				current.status = assetSynced
+				newone.status = assetSynced
 			}
 		}
 	}
 
-	fmt.Println("%%%>>>4")
 	// delete
 	i := egg.acl.Iterator() //determineHost Endian search by Itertaot in libbfpgo
-	fmt.Println("%%%>>>4.1 egg.acl: %vm %v", egg.acl, i)
 	for i.Next() {
 		fmt.Println("%%%>>>4.2")
 		if i.Err() != nil {
@@ -162,18 +169,13 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 		key := unmarshalACLKey(keyBytes)
 		val := getACLValue(egg.acl, key)
 
-		fmt.Println("%%%>>>4.4")
-
 		//we control CIDR with ttl=0 only
 		if val.ttl == 0 {
-			fmt.Println("%%%>>>4.5")
 			for _, cidr := range egg.CIDRs {
 				if key.prefixLen == cidr.prefixLen && key.data == cidr.data {
-					if cidr.status == cidrStale {
+					if cidr.status == assetStale {
 
-						fmt.Println("%%%>>>4.6")
-
-						val.status = uint8(cidrStale)
+						val.status = uint8(assetStale)
 						err := updateACLValue(egg.acl, key, val)
 						if err != nil {
 							return fmt.Errorf("Updating value status", egg)
@@ -184,24 +186,20 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 		}
 	}
 
-	fmt.Println("%%%>>>5")
 	//add
 	for _, cidr := range cidrs {
-		fmt.Println("%%%>>> adding ")
-		if cidr.status == cidrNew {
+		if cidr.status == assetNew {
 			val := ipv4LPMVal{
 				ttl:     0,
 				counter: 0,
-				status:  uint8(cidrSynced),
+				status:  uint8(assetSynced),
 			}
 
-			fmt.Println("%%%>>> adding 2")
 			err := updateACLValue(egg.acl, cidr.ipv4LPMKey, val)
-			fmt.Println("%%%>>> adding 3")
 			if err != nil {
 				return fmt.Errorf("Can't update ACL %#v", err)
 			}
-			cidr.status = cidrSynced
+			cidr.status = assetSynced
 			//shallow copy of cidr
 			newOne := *cidr
 			egg.CIDRs = append(egg.CIDRs, &newOne)
@@ -209,7 +207,7 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 	}
 
 	for _, cidr := range egg.CIDRs {
-		if cidr.status != cidrSynced {
+		if cidr.status != assetSynced {
 			fmt.Printf("Stale keys %#v\n", cidr)
 
 		}
@@ -218,8 +216,69 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 	return nil
 }
 
-func (egg *egg) updateCNs(cns []string) error {
-	//TODO to be implemented
+func (egg *egg) updateCNs(cns []CN) error {
+	for i := 0; i < egg.CNs.Len(); i++ {
+		egg.CNs.Update(i, func(current *CN) {
+			current.status = assetStale
+		})
+
+		current := egg.CNs.Get(i)
+		for _, newone := range cns {
+			if current.cn == newone.cn {
+				egg.CNs.Update(i, func(current *CN) {
+					fmt.Println("%%%>>> egg.CNs.Update")
+					current.status = assetSynced
+				})
+				newone.status = assetSynced
+			}
+		}
+	}
+
+	// delete
+	i := egg.acl.Iterator() //determineHost Endian search by Itertaot in libbfpgo
+	for i.Next() {
+		if i.Err() != nil {
+			return fmt.Errorf("BPF Map Iterator error", i.Err())
+		}
+
+		keyBytes := i.Key()
+		key := unmarshalACLKey(keyBytes)
+		val := getACLValue(egg.acl, key)
+
+		//we control CNs with ttl!=0 only
+		if val.ttl != 0 {
+			fmt.Println("%%%>>> Found ttl!=0")
+			for i := 0; i < egg.CNs.Len(); i++ {
+				current := egg.CNs.Get(i)
+				if val.id == current.id {
+					if current.status == assetStale {
+						fmt.Println("%%%>>> current.Status is Stale")
+						val.status = uint8(assetStale)
+						err := updateACLValue(egg.acl, key, val) //invalidate all IPs for stale CNs
+						if err != nil {
+							return fmt.Errorf("Updating value status", egg)
+						}
+					}
+				}
+			}
+		}
+	}
+	//add
+	for _, cn := range cns {
+		fmt.Println("%%%>>> adding new cn %v", cn)
+		if cn.status == assetNew {
+			cn.status = assetSynced
+			egg.CNs.Append(cn)
+		}
+	}
+
+	for i := 0; i < egg.CNs.Len(); i++ {
+		current := egg.CNs.Get(i)
+		if current.status != assetSynced {
+			fmt.Printf("CN: Stale key %#v\n", current)
+		}
+	}
+
 	return nil
 }
 
@@ -297,17 +356,12 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 							//fmt.Println("key size:", unsafe.Sizeof(key))
 							//fmt.Println("key data:", key.data)
 
-							if contains(egg.CNs[:], cn) {
-								////{check current value
-								//upKey := unsafe.Pointer(&key)
-								//valBytes, err := acl.GetValue(upKey)
-								////check}
-
+							if cn, found := containsCN(egg.CNs, cn); found {
 								val := ipv4LPMVal{
 									ttl:     bootTtlNs,
 									counter: 0, //zero existsing elements :/
-									id:      666,
-									status:  uint8(cidrSynced),
+									id:      cn.id,
+									status:  uint8(assetSynced),
 								}
 								err := updateACLValue(egg.acl, key, val)
 								must(err, "Can't update ACL.")
@@ -348,7 +402,7 @@ func (egg *egg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup) {
 				break mapLoop
 			default:
 				time.Sleep(5 * time.Second)
-				fmt.Printf("\n[ACL]:")
+				fmt.Printf("\n\n----\n")
 				i := egg.acl.Iterator() //determineHost Endian search by Itertaot in libbfpgo
 				for i.Next() {
 					if i.Err() != nil {
@@ -363,15 +417,26 @@ func (egg *egg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup) {
 					val := getACLValue(egg.acl, key)
 					bootNs := uint64(C.get_nsecs())
 					//var expired string = fmt.Sprintf("%d-%d", bootNs, ttl)
-					var expired string = " "
+					var expired string
 					if val.ttl != 0 && val.ttl < bootNs {
 						//fmt.Printf("\nttl(%d)<bootNs(%d)=%t | ", ttl, bootNs, ttl < bootNs)
 						expired = "x"
 					}
 
+					//test only
+					var cn string
+					if val.ttl != 0 {
+						for i := 0; i < egg.CNs.Len(); i++ {
+							current := egg.CNs.Get(i)
+							if current.id == val.id {
+								cn = current.cn
+							}
+						}
+					}
+
 					//valBytes := acl[ipv4LPMKey{1,1}]
 					//fmt.Printf(" [bootTtlNs:%d,bootNs:%d][%s]%s/%d[%d]", ttl, bootNs, expired, ip, prefixLen, val.counter)
-					fmt.Printf(" [%s]%s/%d[counter:%d|status:%d|id:%d]", expired, ip, prefixLen, val.counter, val.status, val.id)
+					fmt.Printf("id: %d cn:%s expired:%s ip: %s/%d counter:%d status:%d\n", val.id, cn, expired, ip, prefixLen, val.counter, val.status)
 
 				}
 			}
@@ -505,7 +570,7 @@ func insertNth(s string, n int) string {
 	return buffer.String()
 }
 
-func contains(s []string, str string) bool {
+func containsStr(s []string, str string) bool {
 	for _, v := range s {
 		if strings.Contains(str, v) { //e.g. DNS returns str="abc.example.com" and v=".example.com"
 			return true
@@ -513,6 +578,20 @@ func contains(s []string, str string) bool {
 	}
 
 	return false
+}
+
+func containsCN(cns *tools.SafeSlice[CN], cnS string) (CN, bool) {
+	var current CN
+	for i := 0; i < cns.Len(); i++ {
+		current = cns.Get(i)
+		fmt.Printf("))) current=%#v cnS=%s\n", current, cnS)
+		if current.status == assetSynced && strings.Contains(cnS, current.cn) { //e.g. DNS returns cnS="abc.example.com" and current.cn=".example.com"
+			fmt.Printf(" ^ found\n")
+			return current, true
+		}
+	}
+	fmt.Printf(" ^ not-found\n")
+	return current, false
 }
 
 func ip2Uint32(ip net.IP) uint32 {
