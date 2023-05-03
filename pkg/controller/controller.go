@@ -22,7 +22,7 @@ type Controller struct {
 	ceggLister      cegglister.ClusterEggLister
 	queue           workqueue.RateLimitingInterface
 	//wg              sync.WaitGroup
-	clienteggs map[string]user.ClientEgg
+	//clienteggs map[string]user.ClientEgg
 }
 
 const (
@@ -35,7 +35,7 @@ func NewController(ceggClientset ceggclientset.Interface, ceggInformer cegginfor
 		ceggLister:      ceggInformer.Lister(),
 		ceggCacheSynced: ceggInformer.Informer().HasSynced,
 		queue:           workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), queueName),
-		clienteggs:      map[string]user.ClientEgg{},
+		//clienteggs:      map[string]user.ClientEgg{},
 	}
 
 	ceggInformer.Informer().AddEventHandler(
