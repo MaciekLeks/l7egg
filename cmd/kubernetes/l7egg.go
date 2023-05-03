@@ -5,15 +5,14 @@ import (
 	"flag"
 	"fmt"
 	ceggclientset "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned"
+	"github.com/MaciekLeks/l7egg/pkg/tools"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 	"log"
 	"os"
-	"os/signal"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	cegginformerfactory "github.com/MaciekLeks/l7egg/pkg/client/informers/externalversions"
@@ -61,15 +60,8 @@ func main() {
 
 	fmt.Printf("ceggController %v\n", c)
 
-	rootCtx := context.Background()
-	ctx, cancelFunc := context.WithCancel(rootCtx)
+	ctx := tools.SetupSignalHandler()
 	//defer close(stopper)
-	sig := make(chan os.Signal, 0)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
-	go func() {
-		<-sig
-		cancelFunc()
-	}()
 
 	//informerFactory.Start(done)
 	informerFactory.Start(ctx.Done())

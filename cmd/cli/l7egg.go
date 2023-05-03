@@ -1,13 +1,11 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
+	"github.com/MaciekLeks/l7egg/pkg/tools"
 	"github.com/MaciekLeks/l7egg/pkg/user"
 	"os"
-	"os/signal"
-	"syscall"
 )
 
 type argList []string
@@ -42,15 +40,7 @@ func main() {
 		fmt.Errorf("Creating client egg.", err)
 		os.Exit(1)
 	}
-
-	rootCtx := context.Background()
-	ctx, cancelFunc := context.WithCancel(rootCtx)
-	sig := make(chan os.Signal, 0)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
-	go func() {
-		<-sig
-		cancelFunc()
-	}()
+	ctx := tools.SetupSignalHandler()
 
 	manager.Start(ctx, "default", clientegg)
 	manager.Wait()
