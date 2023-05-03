@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	ceggclientset "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned"
 	"github.com/MaciekLeks/l7egg/pkg/tools"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,7 +34,7 @@ func main() {
 
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		fmt.Println("Not in cluster config")
+		logger.Info("Not in cluster config")
 		// fallback to kubeconfig
 		//var kubeconfig *string
 		//if home := homedir.HomeDir(); home != "" {
@@ -63,7 +62,7 @@ func main() {
 		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 	}
 
-	fmt.Printf("eggclientset %v\n", ceggClientset)
+	logger.V(2).Info("eggclientset %v\n", ceggClientset)
 
 	ceggs, err := ceggClientset.MaciekleksV1alpha1().ClusterEggs().List(context.Background(), metav1.ListOptions{})
 	if err != nil {
@@ -72,21 +71,13 @@ func main() {
 		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 	}
 
-	fmt.Printf("Length of clustereggs: %d\n", len(ceggs.Items))
+	logger.V(2).Info("Length of clustereggs: %d\n", len(ceggs.Items))
 
 	informerFactory := cegginformerfactory.NewSharedInformerFactory(ceggClientset, 10*time.Minute)
 	c := ceggcontroller.NewController(ceggClientset, informerFactory.Maciekleks().V1alpha1().ClusterEggs())
 
-	fmt.Printf("ceggController %v\n", c)
-
-	//ctx := tools.SetupSignalHandler()
-	//defer close(stopper)
-
-	//informerFactory.Start(done)
 	informerFactory.Start(ctx.Done())
-	//if err := c.Run(); err != nil {
-	//	log.Printf("Error running controller %v", err)
-	//}
+
 	c.Run(ctx)
 	c.Wait()
 }
