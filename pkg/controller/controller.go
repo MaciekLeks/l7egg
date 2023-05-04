@@ -14,7 +14,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
-	"log"
 	"time"
 )
 
@@ -62,16 +61,16 @@ func (c *Controller) Run(ctx context.Context, workers int) error {
 	logger.Info("Starting l7egg controller.")
 
 	// Wait for the caches to be synced before starting workers
-	logger.Info("Waiting for informer caches to sync")
+	logger.Info("Waiting for informer caches to sync.")
 	if ok := cache.WaitForCacheSync(ctx.Done(), c.ceggCacheSynced); !ok {
 		return fmt.Errorf("Failed to wait for cache to sync.")
 	}
 
-	logger.Info("Starting workers", "count", workers)
+	logger.Info("Starting workers.", "count", workers)
 	// Launch two workers to process Foo resources
 	for i := 0; i < workers; i++ {
-		// Run c.worker again after 1 sec only the previous launch ends
-		go wait.UntilWithContext(ctx, c.worker, 1*time.Second)
+		// Run c.runWorker again after 1 sec only the previous launch ends
+		go wait.UntilWithContext(ctx, c.runWorker, 1*time.Second)
 	}
 
 	logger.Info("Started workers.")
@@ -81,62 +80,117 @@ func (c *Controller) Run(ctx context.Context, workers int) error {
 	return nil
 }
 
-func (c *Controller) worker(ctx context.Context) {
-	workFunc := func() bool {
+// enqueueFoo takes a Foo resource and converts it into a namespace/name
+// string which is then put onto the work queue. This method should *not* be
+// passed resources of any type other than Foo.
+func (c *Controller) enqueueClusterEgg(obj interface{}) {
+	var key string
+	var err error
+	if key, err = cache.MetaNamespaceKeyFunc(obj); err != nil {
+		utilruntime.HandleError(err)
+		return
+	}
+	c.workqueue.Add(key)
+}
 
-		fmt.Println("--->>>before BpfManagerInstance")
-		keyObj, quit := c.workqueue.Get() //blocking op
-		defer fmt.Println("--->>>processNextItem ended.")
-		if quit {
-			log.Println("--->>> Cache shut down.")
-			return true
-		}
-		defer c.workqueue.Done(keyObj)
+// runWorker is a long-running function that will continually call the
+// processNextWorkItem function in order to read and process a message on the
+// workqueue.
+func (c *Controller) runWorker(ctx context.Context) {
+	for c.processNextWorkItem(ctx) {
+	}
+}
 
-		fmt.Println("--->>>after BpfManagerInstance")
+// processNextWorkItem will read a single work item off the workqueue and
+// attempt to process it, by calling the syncHandler.
+func (c *Controller) processNextWorkItem(ctx context.Context) bool {
+	obj, quit := c.workqueue.Get() //blocking op
+	logger := klog.FromContext(ctx)
 
-		key, err := cache.MetaNamespaceKeyFunc(keyObj)
-		if err != nil {
-			log.Printf("--->>>Getting key(<ns>/<name>) from cache %s\n", err)
-			return false
-		}
-		_, name, err := cache.SplitMetaNamespaceKey(key) //namespace not expected here
-		if err != nil {
-			log.Printf("--->>>Splitting key (<ns>/<name>) into name %s\n", err)
-			return false
-		}
-
-		fmt.Printf("--->>>cluster object name: %s\n", name)
-
-		cegg, err := c.ceggLister.Get(name)
-		if err == nil {
-			// The ClusterEgg still exists in informer cache, the event must have
-			// been add/update
-			fmt.Printf("--->>>clusteregg object: %+v\n", cegg)
-			c.updateEgg(ctx, *cegg)
-			return false
-		}
-		//check directly on the server (not lister) if the object has been deleted form the k8s cluster
-		//cegg, err := c.ceggClientset.MaciekleksV1alpha1().ClusterEggs().BpfManagerInstance(ctx, name, metav1.GetOptions{})
-		if apierrors.IsNotFound(err) {
-			log.Printf("--->>>Handle delete for clusteregg %s\n", name)
-		}
-
-		//err = c.reconcile(ns, name)
-		//if err != nil {
-		//	//re-try
-		//	fmt.Printf("Reconciling %s\n", err)
-		//	return false
-		//}
-		c.deleteEgg(ctx, name)
+	if quit {
 		return false
 	}
-	for {
-		if quit := workFunc(); quit {
-			fmt.Println("--->>>Worker workqueue shutting down")
-			return
+
+	// We wrap this block in a func so we can defer c.workqueue.Done.
+	err := func(obj interface{}) error {
+		// We call Done here so the workqueue knows we have finished
+		// processing this item. We also must remember to call Forget if we
+		// do not want this work item being re-queued. For example, we do
+		// not call Forget if a transient error occurs, instead the item is
+		// put back on the workqueue and attempted again after a back-off
+		// period.
+		defer c.workqueue.Done(obj)
+		var key string
+		var ok bool
+
+		// We expect strings to come off the workqueue. These are of the
+		// form namespace/name. We do this as the delayed nature of the
+		// workqueue means the items in the informer cache may actually be
+		// more up to date that when the item was initially put onto the
+		// workqueue.
+		if key, ok = obj.(string); !ok {
+			// As the item in the workqueue is actually invalid, we call
+			// Forget here else we'd go into a loop of attempting to
+			// process a work item that is invalid.
+			c.workqueue.Forget(obj)
+			utilruntime.HandleError(fmt.Errorf("Expected string in workqueue but got %#v.", obj))
+			return nil
 		}
+
+		// Run the syncHandler, passing it the namespace/name string of the
+		// Foo resource to be synced.
+		if err := c.syncHandler(ctx, key); err != nil {
+			// Put the item back on the workqueue to handle any transient errors.
+			c.workqueue.AddRateLimited(key)
+			return fmt.Errorf("error syncing '%s': %s, requeuing", key, err.Error())
+		}
+		// Finally, if no error occurs we Forget this item so it does not
+		// get queued again until another change happens.
+		c.workqueue.Forget(obj)
+		logger.Info("Successfully synced.", "resourceName", key)
+		return nil
+
+	}(obj)
+
+	if err != nil {
+		utilruntime.HandleError(err)
+		return true
 	}
+
+	return true
+}
+
+// syncHandler compares the actual state with the desired, and attempts to
+// converge the two. It then updates the Status block of the Foo resource
+// with the current status of the resource.
+func (c *Controller) syncHandler(ctx context.Context, key string) error {
+	// Convert the namespace/name string into a distinct namespace and name
+	logger := klog.LoggerWithValues(klog.FromContext(ctx), "resourceName", key)
+
+	_, name, err := cache.SplitMetaNamespaceKey(key)
+	if err != nil {
+		utilruntime.HandleError(fmt.Errorf("Invalid resource key: %s.", key))
+		return nil
+	}
+
+	// Get the ClusterEgg with this /name
+	cegg, err := c.ceggLister.Get(name)
+	if err != nil {
+		// The ClusterEgg  may no longer exist, in which case we stop
+		// processing.
+		if apierrors.IsNotFound(err) {
+			utilruntime.HandleError(fmt.Errorf("clusteregg '%s' in work queue no longer exists", key))
+			logger.Info("Delete clusteregg.")
+			c.deleteEgg(ctx, name)
+			return nil
+		}
+		return err
+	}
+
+	logger.Info("Update clusteregg.")
+	c.updateEgg(ctx, *cegg)
+
+	return nil
 }
 
 func (c *Controller) Wait() {
@@ -176,22 +230,18 @@ func (c *Controller) deleteEgg(ctx context.Context, name string) {
 }
 
 func (c *Controller) handleAdd(obj interface{}) {
-	log.Println("handleAdd was called.")
-
-	c.workqueue.Add(obj)
+	c.enqueueClusterEgg(obj)
 }
 
 func (c *Controller) handleDelete(obj interface{}) {
-	log.Println("handleDelete was called.")
-	c.workqueue.Add(obj)
+	c.enqueueClusterEgg(obj)
 }
 
 func (c *Controller) handleUpdate(prev interface{}, obj interface{}) {
-	log.Println("handleUpdate was called.")
 	ceggPrev := prev.(*v1alpha1.ClusterEgg)
 	cegg := obj.(*v1alpha1.ClusterEgg)
 	if ceggPrev.GetResourceVersion() != cegg.GetResourceVersion() {
 		//handle only update not sync event
-		c.workqueue.Add(obj)
+		c.enqueueClusterEgg(obj)
 	}
 }
