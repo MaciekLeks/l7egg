@@ -9,9 +9,11 @@ import (
 	cegglister "github.com/MaciekLeks/l7egg/pkg/client/listers/maciekleks.dev/v1alpha1"
 	"github.com/MaciekLeks/l7egg/pkg/user"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
+	"k8s.io/klog/v2"
 	"log"
 	"time"
 )
@@ -20,7 +22,7 @@ type Controller struct {
 	ceggClientset   ceggclientset.Interface
 	ceggCacheSynced cache.InformerSynced
 	ceggLister      cegglister.ClusterEggLister
-	queue           workqueue.RateLimitingInterface
+	workqueue       workqueue.RateLimitingInterface
 	//wg              sync.WaitGroup
 	//clienteggs map[string]user.ClientEgg
 }
@@ -34,7 +36,7 @@ func NewController(ceggClientset ceggclientset.Interface, ceggInformer cegginfor
 		ceggClientset:   ceggClientset,
 		ceggLister:      ceggInformer.Lister(),
 		ceggCacheSynced: ceggInformer.Informer().HasSynced,
-		queue:           workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), queueName),
+		workqueue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), queueName),
 		//clienteggs:      map[string]user.ClientEgg{},
 	}
 
@@ -48,37 +50,48 @@ func NewController(ceggClientset ceggclientset.Interface, ceggInformer cegginfor
 	return c
 }
 
-func (c *Controller) Run(ctx context.Context) {
-	fmt.Println("Starting controller.")
-	defer c.queue.ShutDown()
-	defer fmt.Println("###>>>Run ending...")
+// Run will set up the event handlers for types we are interested in, as well
+// as syncing informer caches and starting workers. It will block until stopCh
+// is closed, at which point it will shut down the workqueue and wait for
+// workers to finish processing their current work items.
+func (c *Controller) Run(ctx context.Context, workers int) error {
+	defer utilruntime.HandleCrash()
+	defer c.workqueue.ShutDown()
+	logger := klog.FromContext(ctx)
 
-	if !cache.WaitForCacheSync(ctx.Done(), c.ceggCacheSynced) {
-		log.Println("Cache not synced.")
+	logger.Info("Starting l7egg controller.")
+
+	// Wait for the caches to be synced before starting workers
+	logger.Info("Waiting for informer caches to sync")
+	if ok := cache.WaitForCacheSync(ctx.Done(), c.ceggCacheSynced); !ok {
+		return fmt.Errorf("Failed to wait for cache to sync.")
 	}
 
-	fmt.Println("---1")
-	// spin up only one gorouitne for now
-	go wait.UntilWithContext(ctx, c.worker, 1*time.Second) //runs again after 1 sec only if c.worker ends
-	fmt.Println("---2")
+	logger.Info("Starting workers", "count", workers)
+	// Launch two workers to process Foo resources
+	for i := 0; i < workers; i++ {
+		// Run c.worker again after 1 sec only the previous launch ends
+		go wait.UntilWithContext(ctx, c.worker, 1*time.Second)
+	}
 
+	logger.Info("Started workers.")
 	<-ctx.Done()
-	fmt.Println("---3")
-	//TOOD wait for user space bpf to terminate
-	fmt.Println("---4")
+	logger.Info("Shutting down workers.")
+
+	return nil
 }
 
 func (c *Controller) worker(ctx context.Context) {
 	workFunc := func() bool {
 
 		fmt.Println("--->>>before BpfManagerInstance")
-		keyObj, quit := c.queue.Get() //blocking op
+		keyObj, quit := c.workqueue.Get() //blocking op
 		defer fmt.Println("--->>>processNextItem ended.")
 		if quit {
 			log.Println("--->>> Cache shut down.")
 			return true
 		}
-		defer c.queue.Done(keyObj)
+		defer c.workqueue.Done(keyObj)
 
 		fmt.Println("--->>>after BpfManagerInstance")
 
@@ -120,7 +133,7 @@ func (c *Controller) worker(ctx context.Context) {
 	}
 	for {
 		if quit := workFunc(); quit {
-			fmt.Println("--->>>Worker queue shutting down")
+			fmt.Println("--->>>Worker workqueue shutting down")
 			return
 		}
 	}
@@ -165,12 +178,12 @@ func (c *Controller) deleteEgg(ctx context.Context, name string) {
 func (c *Controller) handleAdd(obj interface{}) {
 	log.Println("handleAdd was called.")
 
-	c.queue.Add(obj)
+	c.workqueue.Add(obj)
 }
 
 func (c *Controller) handleDelete(obj interface{}) {
 	log.Println("handleDelete was called.")
-	c.queue.Add(obj)
+	c.workqueue.Add(obj)
 }
 
 func (c *Controller) handleUpdate(prev interface{}, obj interface{}) {
@@ -179,6 +192,6 @@ func (c *Controller) handleUpdate(prev interface{}, obj interface{}) {
 	cegg := obj.(*v1alpha1.ClusterEgg)
 	if ceggPrev.GetResourceVersion() != cegg.GetResourceVersion() {
 		//handle only update not sync event
-		c.queue.Add(obj)
+		c.workqueue.Add(obj)
 	}
 }

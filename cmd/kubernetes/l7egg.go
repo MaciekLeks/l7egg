@@ -78,6 +78,10 @@ func main() {
 
 	informerFactory.Start(ctx.Done())
 
-	c.Run(ctx)
+	if err = c.Run(ctx, 1); err != nil {
+		logger.Error(err, "Error running controller.")
+		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
+	}
+
 	c.Wait()
 }
