@@ -77,7 +77,7 @@ func newEgg(clientegg *ClientEgg) *egg {
 	return &egg
 }
 
-func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup) {
+func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup) error {
 	rb, err := egg.bpfModule.InitRingBuf("packets", egg.packets)
 	must(err, "Can't initialize ring buffer map.")
 
@@ -93,7 +93,7 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup) {
 	}()
 
 	egg.acl, err = egg.bpfModule.GetMap("ipv4_lpm_map")
-	must(err, "Can't get map")
+	must(err, "Can't get map") //TODO remove Must
 
 	egg.initCIDRs()
 	egg.initCNs()
@@ -115,6 +115,7 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup) {
 		rb.Close()
 	}()
 
+	return nil
 }
 
 func (egg *egg) initCIDRs() {

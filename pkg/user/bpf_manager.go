@@ -157,7 +157,7 @@ func (m *clientEggManager) NewClientEgg(iiface string, eiface string, cnsS []str
 	return clientegg, nil
 }
 
-func (m *clientEggManager) Start(ctx context.Context, key string, clientegg *ClientEgg) {
+func (m *clientEggManager) Start(ctx context.Context, key string, clientegg *ClientEgg) error {
 	subCtx, stopFunc := context.WithCancel(ctx)
 	var subWaitGroup sync.WaitGroup
 
@@ -168,15 +168,14 @@ func (m *clientEggManager) Start(ctx context.Context, key string, clientegg *Cli
 		egg:       egg,
 	}
 
-	egg.run(subCtx, &subWaitGroup) //TODO add some error handling
+	return egg.run(subCtx, &subWaitGroup) //TODO add some error handling
 }
 
 // Stop Stops one box
-func (m *clientEggManager) Stop(key string) {
+func (m *clientEggManager) Stop(key string) error {
 	box, found := m.boxes[key]
 	if !found {
-		fmt.Printf("Checking key in map %s\n", key)
-		return
+		return fmt.Errorf("box key '%s' not found\n", key)
 	}
 	fmt.Println("$$$>>>deleteEgg: stopping")
 	box.stopFunc()
@@ -184,6 +183,8 @@ func (m *clientEggManager) Stop(key string) {
 	box.waitGroup.Wait()
 	fmt.Println("$$$>>>deleteEgg: done")
 	delete(m.boxes, key)
+
+	return nil
 }
 
 // Wait Waits for root context cancel (e.g. SIGTERM),

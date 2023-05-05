@@ -3,6 +3,8 @@ package controller
 import (
 	"context"
 	"fmt"
+
+	//"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
 	ceggclientset "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned"
 	cegginformer "github.com/MaciekLeks/l7egg/pkg/client/informers/externalversions/maciekleks.dev/v1alpha1"
@@ -133,7 +135,7 @@ func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 			// Forget here else we'd go into a loop of attempting to
 			// process a work item that is invalid.
 			c.workqueue.Forget(obj)
-			utilruntime.HandleError(fmt.Errorf("Expected string in workqueue but got %#v.", obj))
+			utilruntime.HandleError(fmt.Errorf("expected string in workqueue but got %#v", obj))
 			return nil
 		}
 
@@ -169,7 +171,7 @@ func (c *Controller) syncHandler(ctx context.Context, key string) error {
 
 	_, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
-		utilruntime.HandleError(fmt.Errorf("Invalid resource key: %s.", key))
+		utilruntime.HandleError(fmt.Errorf("invalid resource key: %s", key))
 		return nil
 	}
 
@@ -179,16 +181,22 @@ func (c *Controller) syncHandler(ctx context.Context, key string) error {
 		// The ClusterEgg  may no longer exist, in which case we stop
 		// processing.
 		if apierrors.IsNotFound(err) {
-			utilruntime.HandleError(fmt.Errorf("clusteregg '%s' in work queue no longer exists", key))
+			//utilruntime.HandleError(fmt.Errorf("clusteregg '%s' in work queue no longer exists", key))
 			logger.Info("Delete clusteregg.")
-			c.deleteEgg(ctx, name)
+			err = c.deleteEgg(ctx, name)
+			if err != nil {
+				return fmt.Errorf("delete clusteregg '%s':%s failed", name, err)
+			}
 			return nil
 		}
 		return err
 	}
 
 	logger.Info("Update clusteregg.")
-	c.updateEgg(ctx, *cegg)
+	err = c.updateEgg(ctx, *cegg)
+	if err != nil {
+		return fmt.Errorf("update clusteregg '%s':%s failed", name, err)
+	}
 
 	return nil
 }
@@ -197,36 +205,37 @@ func (c *Controller) Wait() {
 	user.BpfManagerInstance().Wait()
 }
 
-func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) {
+func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) error {
+	logger := klog.LoggerWithValues(klog.FromContext(ctx), "resourceName", cegg.Name)
 
 	manager := user.BpfManagerInstance()
 	if manager.Exists(cegg.Name) {
 		err := manager.UpdateClientEgg(cegg.Name, cegg.Spec.CIDRs, cegg.Spec.CommonNames)
 		if err != nil {
-			fmt.Printf("****>>>Updating CIDRs, CNs %#v", err)
-			return
+			return fmt.Errorf("updating clusteregg '%s': %s failed", cegg.Name, err.Error())
 		}
-		fmt.Println("****>>>Updating")
-		return
+		return nil
 	}
 
 	clientegg, err := manager.NewClientEgg(cegg.Spec.IngressInterface, cegg.Spec.EgressInterface, cegg.Spec.CommonNames, cegg.Spec.CIDRs)
 	if err != nil {
-		return
+		return fmt.Errorf("creating clusteregg '%s': %s failed", cegg.Name, err.Error())
 	}
 
 	boxKey := cegg.Name
-	manager.Start(ctx, boxKey, clientegg)
 
+	logger.Info("Staring box with clientegg.")
+	err = manager.Start(ctx, boxKey, clientegg)
+	if err != nil {
+		return fmt.Errorf("starting clusteregg '%s': %s box failed", cegg.Name, err.Error())
+	}
+
+	return nil
 }
 
-func (c *Controller) deleteEgg(ctx context.Context, name string) {
-	fmt.Println("$$$>>>deleteEgg")
-
+func (c *Controller) deleteEgg(ctx context.Context, name string) error {
 	manager := user.BpfManagerInstance()
-	manager.Stop(name)
-
-	fmt.Println("$$$>>>deleteEgg: map entry deleted")
+	return manager.Stop(name)
 }
 
 func (c *Controller) handleAdd(obj interface{}) {
