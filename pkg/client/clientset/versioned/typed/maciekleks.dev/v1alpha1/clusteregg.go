@@ -40,6 +40,7 @@ type ClusterEggsGetter interface {
 type ClusterEggInterface interface {
 	Create(ctx context.Context, clusterEgg *v1alpha1.ClusterEgg, opts v1.CreateOptions) (*v1alpha1.ClusterEgg, error)
 	Update(ctx context.Context, clusterEgg *v1alpha1.ClusterEgg, opts v1.UpdateOptions) (*v1alpha1.ClusterEgg, error)
+	UpdateStatus(ctx context.Context, clusterEgg *v1alpha1.ClusterEgg, opts v1.UpdateOptions) (*v1alpha1.ClusterEgg, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
 	Get(ctx context.Context, name string, opts v1.GetOptions) (*v1alpha1.ClusterEgg, error)
@@ -121,6 +122,21 @@ func (c *clusterEggs) Update(ctx context.Context, clusterEgg *v1alpha1.ClusterEg
 	err = c.client.Put().
 		Resource("clustereggs").
 		Name(clusterEgg.Name).
+		VersionedParams(&opts, scheme.ParameterCodec).
+		Body(clusterEgg).
+		Do(ctx).
+		Into(result)
+	return
+}
+
+// UpdateStatus was generated because the type contains a Status member.
+// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
+func (c *clusterEggs) UpdateStatus(ctx context.Context, clusterEgg *v1alpha1.ClusterEgg, opts v1.UpdateOptions) (result *v1alpha1.ClusterEgg, err error) {
+	result = &v1alpha1.ClusterEgg{}
+	err = c.client.Put().
+		Resource("clustereggs").
+		Name(clusterEgg.Name).
+		SubResource("status").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(clusterEgg).
 		Do(ctx).

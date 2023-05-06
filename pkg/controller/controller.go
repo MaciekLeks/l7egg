@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	//"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
@@ -198,7 +199,21 @@ func (c *Controller) syncHandler(ctx context.Context, key string) error {
 		return fmt.Errorf("update clusteregg '%s':%s failed", name, err)
 	}
 
+	logger.Info("Update clusteregg status.")
+	err = c.updateStatus(ctx, cegg)
+	if err != nil {
+		return err
+	}
+
 	return nil
+}
+
+func (c *Controller) updateStatus(ctx context.Context, cegg *v1alpha1.ClusterEgg) error {
+	// cegg is from the store, so we can't modify it, we need to deep copy it first
+	ceggCopy := cegg.DeepCopy()
+	ceggCopy.Status.Ready = true
+	_, err := c.ceggClientset.MaciekleksV1alpha1().ClusterEggs().UpdateStatus(context.TODO(), ceggCopy, metav1.UpdateOptions{})
+	return err
 }
 
 func (c *Controller) Wait() {
