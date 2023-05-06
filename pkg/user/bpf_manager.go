@@ -33,7 +33,8 @@ type clientEggBox struct {
 }
 
 type clientEggManager struct {
-	boxes    map[string]clientEggBox
+	//boxes    map[string]clientEggBox
+	boxes    sync.Map
 	seqIdGen tools.ISeqId[uint16]
 }
 
@@ -114,7 +115,7 @@ func (m *clientEggManager) parseCNs(cnsS []string) ([]CN, error) {
 func BpfManagerInstance() *clientEggManager {
 	once.Do(func() {
 		instance = &clientEggManager{
-			boxes:    map[string]clientEggBox{},
+			boxes:    sync.Map{},
 			seqIdGen: tools.New[uint16](),
 		}
 	})
@@ -126,7 +127,7 @@ func parseClientEgg(clientegg *ClientEgg) {
 }
 
 func (m *clientEggManager) Exists(key string) bool {
-	if _, found := m.boxes[key]; found {
+	if _, found := m.getBox(key); found {
 		return true
 	}
 	return false
@@ -162,18 +163,18 @@ func (m *clientEggManager) Start(ctx context.Context, key string, clientegg *Cli
 	var subWaitGroup sync.WaitGroup
 
 	egg := newEgg(clientegg)
-	m.boxes[key] = clientEggBox{
+	m.boxes.Store(key, &clientEggBox{
 		stopFunc:  stopFunc,
 		waitGroup: &subWaitGroup,
 		egg:       egg,
-	}
+	})
 
 	return egg.run(subCtx, &subWaitGroup) //TODO add some error handling
 }
 
 // Stop Stops one box
 func (m *clientEggManager) Stop(key string) error {
-	box, found := m.boxes[key]
+	box, found := m.getBox(key)
 	if !found {
 		return fmt.Errorf("box key '%s' not found\n", key)
 	}
@@ -182,7 +183,7 @@ func (m *clientEggManager) Stop(key string) error {
 	fmt.Println("$$$>>>deleteEgg: waiting")
 	box.waitGroup.Wait()
 	fmt.Println("$$$>>>deleteEgg: done")
-	delete(m.boxes, key)
+	m.boxes.Delete(key)
 
 	return nil
 }
@@ -191,15 +192,46 @@ func (m *clientEggManager) Stop(key string) error {
 // that's why we do not use m.stopFunc because cancelling comes from the root context
 func (m *clientEggManager) Wait() {
 	var stopWaitGroup sync.WaitGroup
-	for key, box := range m.boxes {
+	//for key, box := range m.boxes. {
+	//	stopWaitGroup.Add(1)
+	//	go func() {
+	//		defer stopWaitGroup.Done()
+	//		fmt.Printf("Waiting - %s\n", key)
+	//		box.waitGroup.Wait()
+	//	}()
+	//}
+	m.boxes.Range(func(key interface{}, value interface{}) bool {
 		stopWaitGroup.Add(1)
 		go func() {
 			defer stopWaitGroup.Done()
 			fmt.Printf("Waiting - %s\n", key)
+			box, ok := value.(*clientEggBox)
+			if !ok {
+				//do as runtimeutill error
+				fmt.Printf("Cant' do type assertion - %s\n", key)
+				return
+			}
 			box.waitGroup.Wait()
 		}()
-	}
+		return true
+	})
+
 	stopWaitGroup.Wait()
+}
+
+func (m *clientEggManager) getBox(key string) (*clientEggBox, bool) {
+	var box *clientEggBox
+
+	value, found := m.boxes.Load(key)
+	if !found {
+		return nil, false
+	}
+	box, ok := value.(*clientEggBox)
+	if !ok {
+		return nil, false
+	}
+
+	return box, true
 }
 
 func (m *clientEggManager) UpdateCIDRs(boxKey string, newCIDRsS []string) error {
@@ -209,9 +241,9 @@ func (m *clientEggManager) UpdateCIDRs(boxKey string, newCIDRsS []string) error 
 		return fmt.Errorf("Parsing input data %#v", err)
 	}
 
-	box, found := m.boxes[boxKey]
+	box, found := m.getBox(boxKey)
 	if !found {
-		return fmt.Errorf("Checking key in map %s\n", boxKey)
+		return fmt.Errorf("can't find box")
 	}
 
 	fmt.Printf("box.egg %#v\n", box.egg)
@@ -230,9 +262,9 @@ func (m *clientEggManager) UpdateCNs(boxKey string, newCNsS []string) error {
 		return fmt.Errorf("Parsing input data %#v", err)
 	}
 
-	box, found := m.boxes[boxKey]
+	box, found := m.getBox(boxKey)
 	if !found {
-		return fmt.Errorf("Checking key in map %s\n", boxKey)
+		return fmt.Errorf("can't find box")
 	}
 
 	fmt.Printf("box.egg %#v\n", box.egg)
