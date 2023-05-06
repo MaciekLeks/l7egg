@@ -6,6 +6,7 @@ import (
 	ceggclientset "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned"
 	"github.com/MaciekLeks/l7egg/pkg/tools"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
@@ -54,6 +55,11 @@ func main() {
 			klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 		}
 	}
+	kubeClientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		logger.Error(err, "Error building kubernetes clientset.")
+		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
+	}
 
 	ceggClientset, err := ceggclientset.NewForConfig(config)
 	if err != nil {
@@ -74,7 +80,7 @@ func main() {
 	logger.V(2).Info("Length of clustereggs: %d\n", len(ceggs.Items))
 
 	informerFactory := cegginformerfactory.NewSharedInformerFactory(ceggClientset, 10*time.Minute)
-	c := ceggcontroller.NewController(ceggClientset, informerFactory.Maciekleks().V1alpha1().ClusterEggs())
+	c := ceggcontroller.NewController(ctx, kubeClientset, ceggClientset, informerFactory.Maciekleks().V1alpha1().ClusterEggs())
 
 	informerFactory.Start(ctx.Done())
 

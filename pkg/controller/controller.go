@@ -3,7 +3,14 @@ package controller
 import (
 	"context"
 	"fmt"
+	ceggscheme "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned/scheme"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
+	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/tools/record"
+
+	corev1 "k8s.io/api/core/v1"
 
 	//"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
@@ -20,26 +27,52 @@ import (
 	"time"
 )
 
+const controllerAgentName = "l7egg-controller"
+
+const (
+	// SuccessSynced is used as part of the Event 'reason' when a CllusterEgg is synced
+	SuccessSynced = "Synced"
+	// ErrResourceExists is used as part of the Event 'reason' when a ClusterEgg fails
+	// to sync due to a Deployment of the same name already existing.
+	ErrResourceExists = "ErrResourceExists"
+
+	// MessageResourceSynced is the message used for an Event fired when a ClusterEgg
+	// is synced successfully
+	MessageResourceSynced = "ClusterEgg synced successfully"
+)
+
 type Controller struct {
 	ceggClientset   ceggclientset.Interface
 	ceggCacheSynced cache.InformerSynced
 	ceggLister      cegglister.ClusterEggLister
 	workqueue       workqueue.RateLimitingInterface
-	//wg              sync.WaitGroup
-	//clienteggs map[string]user.ClientEgg
+
+	recorder record.EventRecorder
 }
 
 const (
 	queueName string = "clusterEgg"
 )
 
-func NewController(ceggClientset ceggclientset.Interface, ceggInformer cegginformer.ClusterEggInformer) *Controller {
+func NewController(ctx context.Context, kubeClientset kubernetes.Interface, ceggClientset ceggclientset.Interface, ceggInformer cegginformer.ClusterEggInformer) *Controller {
+	logger := klog.FromContext(ctx)
+	// Create event broadcaster
+	// Add clientegg types to the default Kubernetes Scheme so Events can be
+	// logged for clientegg types.
+	utilruntime.Must(ceggscheme.AddToScheme(scheme.Scheme))
+	logger.V(2).Info("Creating event broadcaster")
+
+	eventBroadcaster := record.NewBroadcaster()
+	eventBroadcaster.StartStructuredLogging(0)
+	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: kubeClientset.CoreV1().Events("")})
+	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: controllerAgentName})
+
 	c := &Controller{
 		ceggClientset:   ceggClientset,
 		ceggLister:      ceggInformer.Lister(),
 		ceggCacheSynced: ceggInformer.Informer().HasSynced,
 		workqueue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), queueName),
-		//clienteggs:      map[string]user.ClientEgg{},
+		recorder:        recorder,
 	}
 
 	ceggInformer.Informer().AddEventHandler(
@@ -204,6 +237,8 @@ func (c *Controller) syncHandler(ctx context.Context, key string) error {
 	if err != nil {
 		return err
 	}
+
+	c.recorder.Event(cegg, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
 
 	return nil
 }
