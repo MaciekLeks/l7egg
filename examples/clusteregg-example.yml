@@ -3,8 +3,8 @@ kind: ClusterEgg
 metadata:
   name: clusteregg-example
 spec:
-  ingressInterface: enp0s3
-  egressInterface: enp0s3
+  ingressInterface: cali0e74e1427db
+  egressInterface: cali0e74e1427db
   commonNames:
   - www.onet.pl
   - .ubuntu.com

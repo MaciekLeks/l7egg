@@ -1,10 +1,14 @@
+# l7egg
 L7egg - Level 7 Egress Good Gateway 
 
 Simple L7 egress firewall for use either as standalone program or K8s Operator. 
 
+# Status 
+It is now actively developing hence not stable yet. So, don't try this at home right now.
+
 # Building 
 ## Prerequisites
-You need static or shared libpf library installed. 
+You need static or shared libpf installed. 
 1. Clone [libpf](https://github.com/libbpf/libbpf) upstream
 2. Build your static `libbpf.a` and shared `libbpf.so`, e.g.
 ```bash
@@ -79,5 +83,5 @@ TODO:
 - `tools` - common tools 
 - `user` - eBPF user space GO source files
 
-# When2 
-TODO
+# When
+I'll definitely right down here _when_... Not now ;)

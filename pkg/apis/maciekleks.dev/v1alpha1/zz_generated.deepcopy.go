@@ -22,6 +22,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -98,6 +99,11 @@ func (in *ClusterEggSpec) DeepCopyInto(out *ClusterEggSpec) {
 		in, out := &in.CIDRs, &out.CIDRs
 		*out = make([]string, len(*in))
 		copy(*out, *in)
+	}
+	if in.PodSelector != nil {
+		in, out := &in.PodSelector, &out.PodSelector
+		*out = new(v1.LabelSelector)
+		(*in).DeepCopyInto(*out)
 	}
 	return
 }

@@ -46,4 +46,7 @@ type ClusterEggSpec struct {
 	CommonNames []string `json:"commonNames,omitempty"`
 
 	CIDRs []string `json:"cidrs,omitempty"`
+
+	// +optional
+	PodSelector *metav1.LabelSelector `json:"podSelector,omitempty"`
 }
