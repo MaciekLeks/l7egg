@@ -15,7 +15,8 @@
 //#include <linux/filter.h>
 
 #define ETH_HLEN 14		/* Total octets in header.	 */
-#define ETH_P_IP 0x0800
+#define ETH_P_IPv4 0x0800
+#define ETH_P_IPv6 0x86DD
 #define ETH_FRAME_LEN 1514
 
 #define IP_SYNCED 0
@@ -125,6 +126,8 @@ static __always_inline int process(struct __sk_buff *skb, bool is_egress) {
     void *data = (void *) (long) skb->data;
     void *data_end = (void *) (long) skb->data_end;
     int off;
+    bool is_ipv6 = false;
+    __u8 protocol;
 
     //L2
     if (data + ETH_HLEN > data_end)
@@ -133,29 +136,67 @@ static __always_inline int process(struct __sk_buff *skb, bool is_egress) {
     /* for easy access we re-use the Kernel's struct definitions */
     struct ethhdr *eth = data;
     /* Only actual IP packets are allowed */
-    if (eth->h_proto != bpf_htons(ETH_P_IP))
+    if (eth->h_proto == bpf_htons(ETH_P_IPv6)) {
+        bpf_printk("[IPv6] --- ipv6");
+        is_ipv6 = true;
+    } else if (eth->h_proto == bpf_htons(ETH_P_IPv4)) {
+        bpf_printk("[IPv4] --- ipv4");
+    } else {
         return 0;
+    }
+
 
     //L3
     off = ETH_HLEN;
-    if (data + off + sizeof(struct iphdr) > data_end)
-        return 0;
 
+
+    //struct iphdr *ip = (data + off);
+    __u8 version = *(__u8 *)(long)(data + off) & 0xF0 >> 2;
+    if (data + off + sizeof(__u8) > data_end) {
+        return 0;
+    }
+    if (is_ipv6 && version != 6) {
+        bpf_printk("[IPv6] --- version:%d", version);
+        return 0;
+    } else if (version != 4) {
+        bpf_printk("[IPv4] --- version:%d!=%d", version, 4);
+        return 0;
+    }
+
+    __u16 ihl;
+    if (!is_ipv6) {
+        struct iphdr *ipv4 = (data + off);
+        if (data + off + sizeof(struct iphdr) > data_end)
+            return 0;
+        ihl = (ipv4->ihl & 0xF) << 2;
+        if (data + off + ihl > data_end)
+            return 0;
+        protocol = ipv4->protocol;
+        bpf_printk("[IPv4] --- protocol:%d", protocol);
+    } else {
+        struct ipv6hdr *ipv6 = data + off;
+        ihl = sizeof(struct ipv6hdr);
+        if (data + off + ihl > data_end)  {
+            return 0;
+        }
+        protocol = ipv6->nexthdr;
+        bpf_printk("[IPv6] --- protocol:%d", protocol);
+    }
+
+    //TODO done to this place
+    if (is_ipv6) {
+        return 0; //TODO REMOVE
+    }
     struct iphdr *ip = (data + off);
-    if (ip->version != 4)
-        return 0;
 
-    __u16 ihl = (ip->ihl & 0xF) << 2;
 
-    if (data + off + ihl > data_end)
-        return 0;
 
     //L4
     __u16 sport = 0;
     __u16 dport = 0;
     off += ihl;
     /* We handle only UDP traffic */
-    if (ip->protocol == IPPROTO_UDP) {
+    if (protocol == IPPROTO_UDP) {
         if (data + off + sizeof(struct udphdr) > data_end)
             return 0;
 
@@ -166,7 +207,7 @@ static __always_inline int process(struct __sk_buff *skb, bool is_egress) {
         sport = bpf_ntohs(udp->source);
         dport = bpf_ntohs(udp->dest);
         bpf_printk("[UDP] sport:%d, dport:%d", sport, dport);
-    } else if (ip->protocol == IPPROTO_TCP) {
+    } else if (protocol == IPPROTO_TCP) {
         if (data + off + sizeof(struct tcphdr) > data_end)
             return 0;
 
