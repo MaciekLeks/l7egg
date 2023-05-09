@@ -22,6 +22,13 @@
 #define IP_SYNCED 0
 #define IP_STALE 1
 
+#define TC_ACT_OK 0 // will terminate the packet processing pipeline and allows the packet to proceed
+#define TC_ACT_SHOT 2 // will terminate the packet processing pipeline and drops the packet
+#define TC_ACT_UNSPEC -1  //will use the default action configured from tc (similarly as returning -1 from a classifier)
+#define TC_ACT_PIPE 3 //will iterate to the next action, if available
+#define TC_ACT_RECLASSIFY 1  //will terminate the packet processing pipeline and start classification from the beginning
+#define TC_MOVE_ONE -3 //local code to move further
+
 #ifdef asm_inline
 #undef asm_inline
 #define asm_inline asm
@@ -122,6 +129,43 @@ static __always_inline void print_ip(char * str, __u32 ip)
     bpf_printk("%s:%d.%d.%d.%d\n", str, bytes[0], bytes[1], bytes[2], bytes[3]);
 }
 
+static __always_inline int ipv4_check_and_updat(struct iphdr * ip){
+    __u32 daddr = ip->daddr;
+    __u32 saddr = ip->saddr;
+    bpf_printk("[egress]: daddr:%u, saddr:%u", daddr, saddr);
+    void *pv = lookup(daddr);
+    if (!pv) {
+        bpf_printk("[egress]: drop:%u", daddr);
+        print_ip("[egress] DROP", daddr);
+        return TC_ACT_SHOT;
+    }
+    //}egress gate
+    struct value_t* pval = pv;
+    // does not process STALE IPs
+    if (pval->status == IP_STALE) {
+        print_ip("[egress] STALE, DROP", daddr);
+        return TC_ACT_SHOT;
+    }
+    __u64 boot_plus_ttl_ns = pval->ttl;
+    __u64 boot_ns =  bpf_ktime_get_boot_ns();
+    if (boot_plus_ttl_ns != 0 &&  boot_plus_ttl_ns < boot_ns) { //0 means no TTL
+        bpf_printk("[egress]: TTL expired:%u, boot_plus_ttl_ns:%u boot_ns:%u", daddr, boot_plus_ttl_ns, boot_ns);
+        print_ip("[egress] DROP_TTL", daddr);
+        return TC_ACT_SHOT;
+    }
+    pval->counter=pval->counter+1; //it would not work /24 subnet and /32 ip addr
+    long ret  = update(daddr, *pval); //it creates /32 ip addr if you hit some subnet e.g. /24
+    if (ret) {
+        bpf_printk("[egress]: can't update counter, code:%d", ret);
+    } else {
+        bpf_printk("[egress]: Counter updated");
+    }
+    bpf_printk("[egress]: accept:%u, boot_plus_ttl_ns:%u boot_ns:%u", daddr, boot_plus_ttl_ns, boot_ns);
+    print_ip("[egress] ACCEPT", daddr);
+
+    return TC_MOVE_ONE; //process further inside bpf
+}
+
 static __always_inline int process(struct __sk_buff *skb, bool is_egress) {
     void *data = (void *) (long) skb->data;
     void *data_end = (void *) (long) skb->data_end;
@@ -183,11 +227,12 @@ static __always_inline int process(struct __sk_buff *skb, bool is_egress) {
         bpf_printk("[IPv6] --- protocol:%d", protocol);
     }
 
-    //TODO done to this place
+//    //TODO done to this place
     if (is_ipv6) {
         return 0; //TODO REMOVE
     }
-    struct iphdr *ip = (data + off);
+    void *ipx = (void *) (long)(data + off);
+    struct iphdr* ip = (data + off);
 
 
 
@@ -229,39 +274,14 @@ static __always_inline int process(struct __sk_buff *skb, bool is_egress) {
     if (sport != 53 && dport != 53) {
 
         if (is_egress) {
-            //{egress gate
-            __u32 daddr = ip->daddr;
-            __u32 saddr = ip->saddr;
-            bpf_printk("[egress]: daddr:%u, saddr:%u", daddr, saddr);
-            void *pv = lookup(daddr);
-            if (!pv) {
-                bpf_printk("[egress]: drop:%u", daddr);
-                print_ip("[egress] DROP", daddr);
-                return 2; //TC_ACT_SHOT
-            }
-            //}egress gate
-            struct value_t* pval = pv;
-            // does not process STALE IPs
-            if (pval->status == IP_STALE) {
-                print_ip("[egress] STALE, DROP", daddr);
-                return 2; //TC_ACT_SHOT
-            }
-            __u64 boot_plus_ttl_ns = pval->ttl;
-            __u64 boot_ns =  bpf_ktime_get_boot_ns();
-            if (boot_plus_ttl_ns != 0 &&  boot_plus_ttl_ns < boot_ns) { //0 means no TTL
-                bpf_printk("[egress]: TTL expired:%u, boot_plus_ttl_ns:%u boot_ns:%u", daddr, boot_plus_ttl_ns, boot_ns);
-                print_ip("[egress] DROP_TTL", daddr);
-                return 2; //TC_ACT_SHOT
-            }
-            pval->counter=pval->counter+1; //it would not work /24 subnet and /32 ip addr
-            long ret  = update(daddr, *pval); //it creates /32 ip addr if you hit some subnet e.g. /24
-            if (ret) {
-                bpf_printk("[egress]: can't update counter, code:%d", ret);
+            int ret;
+            if (!is_ipv6) {
+                ret = ipv4_check_and_updat((struct iphdr *) ip);
+                if (ret != TC_MOVE_ONE)
+                    return ret;
             } else {
-                bpf_printk("[egress]: Counter updated");
+
             }
-            bpf_printk("[egress]: accept:%u, boot_plus_ttl_ns:%u boot_ns:%u", daddr, boot_plus_ttl_ns, boot_ns);
-            print_ip("[egress] ACCEPT", daddr);
         }
         return 0;
 
