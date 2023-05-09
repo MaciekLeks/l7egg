@@ -33,21 +33,10 @@ type egg struct {
 	// Depreciated: should all part of egg struct
 	ClientEgg //TOOD remove from here
 	bpfModule *bpf.Module
-	acl       *bpf.BPFMap
+	ipv4ACL   *bpf.BPFMap
+	ipv6ACL   *bpf.BPFMap
 	packets   chan []byte
 	//aclLoock  sync.RWMutex
-}
-
-type ipv4LPMKey struct {
-	prefixLen uint32
-	data      uint32
-}
-
-type ipv4LPMVal struct {
-	ttl     uint64
-	counter uint64
-	id      uint16
-	status  uint8
 }
 
 func newEgg(clientegg *ClientEgg) *egg {
@@ -85,14 +74,17 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup) error {
 	//TODO: remove this:
 	go func() {
 		time.Sleep(3 * time.Second)
-		_, err := exec.Command("curl", "https://www.onet.pl").Output()
+		//_, err := exec.Command("curl", "https://www.onet.pl").Output()
+		//_, err := exec.Command("curl", "-g", "-6", "https://bbc.com").Output()
+		_, err := exec.Command("curl", "-g", "https://bbc.com").Output()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(-1)
 		}
 	}()
 
-	egg.acl, err = egg.bpfModule.GetMap("ipv4_lpm_map")
+	egg.ipv4ACL, err = egg.bpfModule.GetMap("ipv4_lpm_map")
+	egg.ipv6ACL, err = egg.bpfModule.GetMap("ipv6_lpm_map")
 	must(err, "Can't get map") //TODO remove Must
 
 	egg.initCIDRs()
@@ -129,7 +121,13 @@ func (egg *egg) initCIDRs() {
 			status:  uint8(assetSynced),
 		}
 
-		err := updateACLValue(egg.acl, cidr.ipv4LPMKey, val)
+		var err error
+		switch ip := cidr.lpmKey.(type) {
+		case ipv4LPMKey:
+			err = updateACLValueNew(egg.ipv4ACL, ip, val)
+		case ipv6LPMKey:
+			err = updateACLValueNew(egg.ipv6ACL, ip, val)
+		}
 		must(err, "Can't update ACL.")
 		cidr.status = assetSynced
 	}
@@ -151,7 +149,7 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 		current.status = assetStale
 
 		for _, newone := range cidrs {
-			if current.prefixLen == newone.prefixLen && current.data == newone.data {
+			if current.cidr == newone.cidr {
 				current.status = assetSynced
 				newone.status = assetSynced
 			}
@@ -159,7 +157,7 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 	}
 
 	// delete
-	i := egg.acl.Iterator() //determineHost Endian search by Itertaot in libbfpgo
+	i := egg.ipv4ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
 	for i.Next() {
 		fmt.Println("%%%>>>4.2")
 		if i.Err() != nil {
@@ -168,18 +166,53 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 
 		keyBytes := i.Key()
 		key := unmarshalACLKey(keyBytes)
-		val := getACLValue(egg.acl, key)
+		val := getACLValue(egg.ipv4ACL, key)
 
 		//we control CIDR with ttl=0 only
 		if val.ttl == 0 {
 			for _, cidr := range egg.CIDRs {
-				if key.prefixLen == cidr.prefixLen && key.data == cidr.data {
-					if cidr.status == assetStale {
+				ipv4Key, ok := cidr.lpmKey.(ipv4LPMKey)
+				if ok {
+					if key.prefixLen == ipv4Key.prefixLen && key.data == ipv4Key.data {
+						if cidr.status == assetStale {
 
-						val.status = uint8(assetStale)
-						err := updateACLValue(egg.acl, key, val)
-						if err != nil {
-							return fmt.Errorf("Updating value status", egg)
+							val.status = uint8(assetStale)
+							err := updateACLValueNew(egg.ipv4ACL, key, val)
+							if err != nil {
+								return fmt.Errorf("Updating value status", egg)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// delete
+	i = egg.ipv6ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
+	for i.Next() {
+		fmt.Println("%%%>>>4.2")
+		if i.Err() != nil {
+			return fmt.Errorf("BPF Map Iterator error", i.Err())
+		}
+
+		keyBytes := i.Key()
+		key := unmarshalIp6ACLKey(keyBytes)
+		val := getACLValue(egg.ipv6ACL, key)
+
+		//we control CIDR with ttl=0 only
+		if val.ttl == 0 {
+			for _, cidr := range egg.CIDRs {
+				ipv6Key, ok := cidr.lpmKey.(ipv6LPMKey)
+				if ok {
+					if key.prefixLen == ipv6Key.prefixLen && key.data == ipv6Key.data {
+						if cidr.status == assetStale {
+
+							val.status = uint8(assetStale)
+							err := updateACLValueNew(egg.ipv6ACL, key, val)
+							if err != nil {
+								return fmt.Errorf("Updating value status", egg)
+							}
 						}
 					}
 				}
@@ -196,7 +229,7 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 				status:  uint8(assetSynced),
 			}
 
-			err := updateACLValue(egg.acl, cidr.ipv4LPMKey, val)
+			err := updateACLValueNew(egg.ipv4ACL, cidr.lpmKey, val)
 			if err != nil {
 				return fmt.Errorf("Can't update ACL %#v", err)
 			}
@@ -236,7 +269,7 @@ func (egg *egg) updateCNs(cns []CN) error {
 	}
 
 	// delete
-	i := egg.acl.Iterator() //determineHost Endian search by Itertaot in libbfpgo
+	i := egg.ipv4ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
 	for i.Next() {
 		if i.Err() != nil {
 			return fmt.Errorf("BPF Map Iterator error", i.Err())
@@ -244,7 +277,7 @@ func (egg *egg) updateCNs(cns []CN) error {
 
 		keyBytes := i.Key()
 		key := unmarshalACLKey(keyBytes)
-		val := getACLValue(egg.acl, key)
+		val := getACLValue(egg.ipv4ACL, key)
 
 		//we control CNs with ttl!=0 only
 		if val.ttl != 0 {
@@ -255,7 +288,25 @@ func (egg *egg) updateCNs(cns []CN) error {
 					if current.status == assetStale {
 						fmt.Println("%%%>>> current.Status is Stale")
 						val.status = uint8(assetStale)
-						err := updateACLValue(egg.acl, key, val) //invalidate all IPs for stale CNs
+						err := updateACLValueNew(egg.ipv4ACL, key, val) //invalidate all IPs for stale CNs
+						if err != nil {
+							return fmt.Errorf("Updating value status", egg)
+						}
+					}
+				}
+			}
+		}
+
+		//we control CNs with ttl!=0 only
+		if val.ttl != 0 {
+			fmt.Println("%%%>>> Found ttl!=0")
+			for i := 0; i < egg.CNs.Len(); i++ {
+				current := egg.CNs.Get(i)
+				if val.id == current.id {
+					if current.status == assetStale {
+						fmt.Println("%%%>>> current.Status is Stale")
+						val.status = uint8(assetStale)
+						err := updateACLValueNew(egg.ipv4ACL, key, val) //invalidate all IPs for stale CNs
 						if err != nil {
 							return fmt.Errorf("Updating value status", egg)
 						}
@@ -345,7 +396,7 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 					}
 					answers := dns.Answers
 					for _, a := range answers {
-						fmt.Printf("Type: %s, Answer: IP:%s Name:%s CName:%s\n", a.Type, a.IP, string(a.Name), string(a.CNAME))
+						fmt.Printf("@@@@Type: %s, Answer: IP:%s Name:%s CName:%s\n", a.Type, a.IP, string(a.Name), string(a.CNAME))
 						if a.Type == layers.DNSTypeA {
 
 							cn := string(a.Name)
@@ -366,15 +417,40 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 									id:      cn.id,
 									status:  uint8(assetSynced),
 								}
-								err := updateACLValue(egg.acl, key, val)
+								err := updateACLValueNew(egg.ipv4ACL, key, val)
 								must(err, "Can't update ACL.")
 								fmt.Printf("Updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", cn, ip, ttlSec, ttlNs, bootTtlNs)
 
 							} else {
 								fmt.Println("DROP")
 							}
-						} else {
-							fmt.Println("Anser.Type:", a.Type)
+						} else if a.Type == layers.DNSTypeAAAA {
+							fmt.Println("!!!Answer.Type:", a.Type)
+							cn := string(a.Name)
+							ip := a.IP
+							ttlSec := a.TTL //!!! remove * 5
+
+							key := ipv6LPMKey{128, [16]uint8(ip[0:16])}
+							//val := time.Now().Unix() + int64(ttl) //Now + ttl
+							ttlNs := uint64(ttlSec) * 1000000000
+							bootTtlNs := uint64(C.get_nsecs()) + ttlNs //boot time[ns] + ttl[ns]
+							//fmt.Println("key size:", unsafe.Sizeof(key))
+							//fmt.Println("key data:", key.data)
+
+							if cn, found := containsCN(egg.CNs, cn); found {
+								val := ipv4LPMVal{
+									ttl:     bootTtlNs,
+									counter: 0, //zero existsing elements :/
+									id:      cn.id,
+									status:  uint8(assetSynced),
+								}
+								err := updateACLValueNew(egg.ipv6ACL, key, val)
+								must(err, "Can't update ACL.")
+								fmt.Printf("Updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", cn, ip, ttlSec, ttlNs, bootTtlNs)
+
+							} else {
+								fmt.Println("DROP")
+							}
 
 						}
 
@@ -406,7 +482,7 @@ func (egg *egg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup) {
 			default:
 				time.Sleep(5 * time.Second)
 				fmt.Printf("\n\n----\n")
-				i := egg.acl.Iterator() //determineHost Endian search by Itertaot in libbfpgo
+				i := egg.ipv4ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
 				for i.Next() {
 					if i.Err() != nil {
 						fatal("Iterator error", i.Err())
@@ -417,7 +493,7 @@ func (egg *egg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup) {
 					ip := bytes2ip(ipBytes)
 
 					key := ipv4LPMKey{prefixLen, ip2Uint32(ip)}
-					val := getACLValue(egg.acl, key)
+					val := getACLValue(egg.ipv4ACL, key)
 					bootNs := uint64(C.get_nsecs())
 					//var expired string = fmt.Sprintf("%d-%d", bootNs, ttl)
 					var expired string
@@ -437,7 +513,7 @@ func (egg *egg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup) {
 						}
 					}
 
-					//valBytes := acl[ipv4LPMKey{1,1}]
+					//valBytes := ipv4ACL[ipv4LPMKey{1,1}]
 					//fmt.Printf(" [bootTtlNs:%d,bootNs:%d][%s]%s/%d[%d]", ttl, bootNs, expired, ip, prefixLen, val.counter)
 					fmt.Printf("id: %d cn:%s expired:%s ip: %s/%d counter:%d status:%d\n", val.id, cn, expired, ip, prefixLen, val.counter, val.status)
 
@@ -455,8 +531,15 @@ func unmarshalACLKey(bytes []byte) ipv4LPMKey {
 	return ipv4LPMKey{prefixLen, ip2Uint32(ip)}
 }
 
-func getACLValue(acl *bpf.BPFMap, key ipv4LPMKey) ipv4LPMVal {
-	upKey := unsafe.Pointer(&key)
+func unmarshalIp6ACLKey(bytes []byte) ipv6LPMKey {
+	prefixLen := binary.LittleEndian.Uint32(bytes[0:4])
+	ipBytes := bytes[4:20]
+
+	return ipv6LPMKey{prefixLen, [16]uint8(ipBytes)}
+}
+
+func getACLValue(acl *bpf.BPFMap, ikey ILPMKey) ipv4LPMVal {
+	upKey := ikey.GetPointer()
 	valBytes, err := acl.GetValue(upKey)
 	must(err, "Can't get value.")
 	return unmarshalValue(valBytes)
@@ -471,21 +554,91 @@ func unmarshalValue(bytes []byte) ipv4LPMVal {
 	}
 }
 
-func updateACLValue(acl *bpf.BPFMap, key ipv4LPMKey, val ipv4LPMVal) error {
+//func updateACLValue(acl *bpf.BPFMap, key ipv4LPMKey, val ipv4LPMVal) error {
+//	//alyternative way
+//	//aclKeyEnc := bytes.NewBuffer(encodeUint32(32))
+//	//aclKeyEnc.Write(encodeUint32(ip2Uint32(ip)))
+//	//aclValEnc := encodeUint32(1)
+//	//fmt.Printf("IP:%s val:%d, hex:%x\n", ip, ip2Uint32(ip), ip2Uint32(ip))
+//	//fmt.Printf("Key:%s val:%s\n", insertNth(hex.EncodeToString(aclKeyEnc.Bytes()), 2), insertNth(hex.EncodeToString(aclValEnc), 2))
+//	//ipv4ACL.UpdateClientEgg(&aclKeyEnc.Bytes, &aclValEnc)
+//
+//	upKey := unsafe.Pointer(&key)
+//	//check if not exists first
+//	oldValBytes, err := acl.GetValue(upKey)
+//	var oldVal ipv4LPMVal
+//	if err == nil { //update in any cases
+//		fmt.Println("Key/Value exists.", key, oldValBytes)
+//		oldVal = unmarshalValue(oldValBytes)
+//		val.counter += oldVal.counter
+//		fmt.Println("Counters:", oldVal.counter, val.counter)
+//	}
+//
+//	upVal := unsafe.Pointer(&val)
+//
+//	err = acl.Update(upKey, upVal)
+//	if err != nil {
+//		fmt.Println("[updatACL] Can't upate ACLP, err:", err)
+//		return err
+//	} else {
+//		fmt.Printf("[updateACLValue] ACL updated for, key:%v, val:%v\n", key, val)
+//	}
+//	//!!} else {
+//	//!!	fmt.Printf("[updateACLValue] Key already exists in ACL, key:%v val:%v\n", key, binary.LittleEndian.Uint64(v))
+//	//!!}
+//	return nil
+//}
+
+//func updateACLValue2(acl *bpf.BPFMap, key ipv6LPMKey, val ipv4LPMVal) error {
+//	//alyternative way
+//	//aclKeyEnc := bytes.NewBuffer(encodeUint32(32))
+//	//aclKeyEnc.Write(encodeUint32(ip2Uint32(ip)))
+//	//aclValEnc := encodeUint32(1)
+//	//fmt.Printf("IP:%s val:%d, hex:%x\n", ip, ip2Uint32(ip), ip2Uint32(ip))
+//	//fmt.Printf("Key:%s val:%s\n", insertNth(hex.EncodeToString(aclKeyEnc.Bytes()), 2), insertNth(hex.EncodeToString(aclValEnc), 2))
+//	//ipv4ACL.UpdateClientEgg(&aclKeyEnc.Bytes, &aclValEnc)
+//
+//	upKey := unsafe.Pointer(&key)
+//	//check if not exists first
+//	oldValBytes, err := acl.GetValue(upKey)
+//	var oldVal ipv4LPMVal
+//	if err == nil { //update in any cases
+//		fmt.Println("Key/Value exists.", key, oldValBytes)
+//		oldVal = unmarshalValue(oldValBytes)
+//		val.counter += oldVal.counter
+//		fmt.Println("Counters:", oldVal.counter, val.counter)
+//	}
+//
+//	upVal := unsafe.Pointer(&val)
+//
+//	err = acl.Update(upKey, upVal)
+//	if err != nil {
+//		fmt.Println("[updatACL] Can't upate ACLP, err:", err)
+//		return err
+//	} else {
+//		fmt.Printf("[updateACLValue] ACL updated for, key:%v, val:%v\n", key, val)
+//	}
+//	//!!} else {
+//	//!!	fmt.Printf("[updateACLValue] Key already exists in ACL, key:%v val:%v\n", key, binary.LittleEndian.Uint64(v))
+//	//!!}
+//	return nil
+//}
+
+func updateACLValueNew(acl *bpf.BPFMap, ikey ILPMKey, val ipv4LPMVal) error {
 	//alyternative way
 	//aclKeyEnc := bytes.NewBuffer(encodeUint32(32))
 	//aclKeyEnc.Write(encodeUint32(ip2Uint32(ip)))
 	//aclValEnc := encodeUint32(1)
 	//fmt.Printf("IP:%s val:%d, hex:%x\n", ip, ip2Uint32(ip), ip2Uint32(ip))
 	//fmt.Printf("Key:%s val:%s\n", insertNth(hex.EncodeToString(aclKeyEnc.Bytes()), 2), insertNth(hex.EncodeToString(aclValEnc), 2))
-	//acl.UpdateClientEgg(&aclKeyEnc.Bytes, &aclValEnc)
+	//ipv4ACL.UpdateClientEgg(&aclKeyEnc.Bytes, &aclValEnc)
 
-	upKey := unsafe.Pointer(&key)
 	//check if not exists first
+	upKey := ikey.GetPointer()
 	oldValBytes, err := acl.GetValue(upKey)
 	var oldVal ipv4LPMVal
 	if err == nil { //update in any cases
-		fmt.Println("Key/Value exists.", key, oldValBytes)
+		//fmt.Println("Key/Value exists.", ikey, oldValBytes)
 		oldVal = unmarshalValue(oldValBytes)
 		val.counter += oldVal.counter
 		fmt.Println("Counters:", oldVal.counter, val.counter)
@@ -498,7 +651,7 @@ func updateACLValue(acl *bpf.BPFMap, key ipv4LPMKey, val ipv4LPMVal) error {
 		fmt.Println("[updatACL] Can't upate ACLP, err:", err)
 		return err
 	} else {
-		fmt.Printf("[updateACLValue] ACL updated for, key:%v, val:%v\n", key, val)
+		fmt.Printf("[updateACLValue] ACL updated for, key:%v, val:%v\n", ikey, val)
 	}
 	//!!} else {
 	//!!	fmt.Printf("[updateACLValue] Key already exists in ACL, key:%v val:%v\n", key, binary.LittleEndian.Uint64(v))
@@ -614,6 +767,13 @@ func encodeUint32(val uint32) []byte {
 func bytes2ip(bb []byte) net.IP {
 	ip := make(net.IP, 4)
 	binary.LittleEndian.PutUint32(ip, binary.LittleEndian.Uint32(bb[0:4]))
+	return ip
+}
+
+func bytes2ipv6(bb []byte) net.IP {
+	ip := make(net.IP, 16)
+	copy(ip, bb[0:16])
+	//binary.LittleEndian.PutUint32(ip, binary.LittleEndian.Uint32(bb[0:16]))
 	return ip
 }
 

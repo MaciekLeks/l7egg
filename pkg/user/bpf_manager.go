@@ -48,9 +48,9 @@ const (
 
 type CIDR struct {
 	//TODO ipv6 needed
-	cidr string
-	id   uint16
-	ipv4LPMKey
+	cidr   string
+	id     uint16
+	lpmKey ILPMKey
 	status assetStatus
 }
 
@@ -67,15 +67,22 @@ var (
 
 // parseCIDR TODO: only ipv4
 func (m *clientEggManager) parseCIDR(cidrS string) (*CIDR, error) {
-	_, ipv4Net, err := net.ParseCIDR(cidrS)
+	ip, ipNet, err := net.ParseCIDR(cidrS)
 	must(err, "Can't parse ipv4 Net.")
 	if err != nil {
-		return nil, fmt.Errorf("Can't parse IPv4 CIDR")
+		return nil, fmt.Errorf("can't parse CIDR %s", cidrS)
 	}
 
-	prefix, _ := ipv4Net.Mask.Size()
-	ip := ipv4Net.IP.To4()
-	return &CIDR{cidrS, m.seqIdGen.Next(), ipv4LPMKey{uint32(prefix), ip2Uint32(ip)}, assetNew}, nil
+	fmt.Println("#### parseCID ", ip, " ipNEt", ipNet)
+
+	prefix, _ := ipNet.Mask.Size()
+	if ipv4 := ip.To4(); ipv4 != nil {
+		return &CIDR{cidrS, m.seqIdGen.Next(), ipv4LPMKey{uint32(prefix), ip2Uint32(ipv4)}, assetNew}, nil
+	} else if ipv6 := ip.To16(); ipv6 != nil {
+		return &CIDR{cidrS, m.seqIdGen.Next(), ipv6LPMKey{uint32(prefix), [16]uint8(ipv6)}, assetNew}, nil
+	}
+
+	return nil, fmt.Errorf("can't converts CIDR to IPv4/IPv6 %s", cidrS)
 }
 
 // ParseCIDRs TODO: only ipv4
