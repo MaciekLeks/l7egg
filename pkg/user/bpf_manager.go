@@ -77,9 +77,11 @@ func (m *clientEggManager) parseCIDR(cidrS string) (*CIDR, error) {
 
 	prefix, _ := ipNet.Mask.Size()
 	if ipv4 := ip.To4(); ipv4 != nil {
-		return &CIDR{cidrS, m.seqIdGen.Next(), ipv4LPMKey{uint32(prefix), ip2Uint32(ipv4)}, assetNew}, nil
+		ipB := make([]uint8, 16)
+		copy(ipB, ipv4)
+		return &CIDR{cidrS, m.seqIdGen.Next(), ipv4LPMKey{uint32(prefix), [16]uint8(ipB)}, assetNew}, nil
 	} else if ipv6 := ip.To16(); ipv6 != nil {
-		return &CIDR{cidrS, m.seqIdGen.Next(), ipv6LPMKey{uint32(prefix), [16]uint8(ipv6)}, assetNew}, nil
+		return &CIDR{cidrS, m.seqIdGen.Next(), ipv4LPMKey{uint32(prefix), [16]uint8(ipv6)}, assetNew}, nil
 	}
 
 	return nil, fmt.Errorf("can't converts CIDR to IPv4/IPv6 %s", cidrS)

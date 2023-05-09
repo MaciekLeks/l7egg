@@ -125,8 +125,8 @@ func (egg *egg) initCIDRs() {
 		switch ip := cidr.lpmKey.(type) {
 		case ipv4LPMKey:
 			err = updateACLValueNew(egg.ipv4ACL, ip, val)
-		case ipv6LPMKey:
-			err = updateACLValueNew(egg.ipv6ACL, ip, val)
+			//case ipv6LPMKey:
+			//	err = updateACLValueNew(egg.ipv6ACL, ip, val)
 		}
 		must(err, "Can't update ACL.")
 		cidr.status = assetSynced
@@ -197,13 +197,13 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 		}
 
 		keyBytes := i.Key()
-		key := unmarshalIp6ACLKey(keyBytes)
+		key := unmarshalACLKey(keyBytes)
 		val := getACLValue(egg.ipv6ACL, key)
 
 		//we control CIDR with ttl=0 only
 		if val.ttl == 0 {
 			for _, cidr := range egg.CIDRs {
-				ipv6Key, ok := cidr.lpmKey.(ipv6LPMKey)
+				ipv6Key, ok := cidr.lpmKey.(ipv4LPMKey)
 				if ok {
 					if key.prefixLen == ipv6Key.prefixLen && key.data == ipv6Key.data {
 						if cidr.status == assetStale {
@@ -403,7 +403,9 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 							ip := a.IP
 							ttlSec := a.TTL //!!! remove * 5
 
-							key := ipv4LPMKey{32, ip2Uint32(ip)}
+							ipB := make([]uint8, 16)
+							copy(ipB, ip.To4())
+							key := ipv4LPMKey{32, [16]uint8(ipB)}
 							//val := time.Now().Unix() + int64(ttl) //Now + ttl
 							ttlNs := uint64(ttlSec) * 1000000000
 							bootTtlNs := uint64(C.get_nsecs()) + ttlNs //boot time[ns] + ttl[ns]
@@ -430,7 +432,7 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 							ip := a.IP
 							ttlSec := a.TTL //!!! remove * 5
 
-							key := ipv6LPMKey{128, [16]uint8(ip[0:16])}
+							key := ipv4LPMKey{128, [16]uint8(ip[0:16])}
 							//val := time.Now().Unix() + int64(ttl) //Now + ttl
 							ttlNs := uint64(ttlSec) * 1000000000
 							bootTtlNs := uint64(C.get_nsecs()) + ttlNs //boot time[ns] + ttl[ns]
@@ -444,7 +446,7 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 									id:      cn.id,
 									status:  uint8(assetSynced),
 								}
-								err := updateACLValueNew(egg.ipv6ACL, key, val)
+								err := updateACLValueNew(egg.ipv4ACL, key, val)
 								must(err, "Can't update ACL.")
 								fmt.Printf("Updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", cn, ip, ttlSec, ttlNs, bootTtlNs)
 
@@ -489,10 +491,11 @@ func (egg *egg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup) {
 					}
 					keyBytes := i.Key()
 					prefixLen := binary.LittleEndian.Uint32(keyBytes[0:4])
-					ipBytes := keyBytes[4:8]
-					ip := bytes2ip(ipBytes)
+					ipB := make([]byte, 16)
+					copy(ipB, keyBytes[4:20])
+					key := ipv4LPMKey{prefixLen, [16]uint8(ipB)}
 
-					key := ipv4LPMKey{prefixLen, ip2Uint32(ip)}
+					//fmt.Printf("ip: %v/%d| ", ipB, prefixLen)
 					val := getACLValue(egg.ipv4ACL, key)
 					bootNs := uint64(C.get_nsecs())
 					//var expired string = fmt.Sprintf("%d-%d", bootNs, ttl)
@@ -515,7 +518,7 @@ func (egg *egg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup) {
 
 					//valBytes := ipv4ACL[ipv4LPMKey{1,1}]
 					//fmt.Printf(" [bootTtlNs:%d,bootNs:%d][%s]%s/%d[%d]", ttl, bootNs, expired, ip, prefixLen, val.counter)
-					fmt.Printf("id: %d cn:%s expired:%s ip: %s/%d counter:%d status:%d\n", val.id, cn, expired, ip, prefixLen, val.counter, val.status)
+					fmt.Printf("id: %d cn:%s expired:%s ip: %v/%d counter:%d status:%d\n", val.id, cn, expired, ipB, prefixLen, val.counter, val.status)
 
 				}
 			}
@@ -525,17 +528,10 @@ func (egg *egg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup) {
 
 func unmarshalACLKey(bytes []byte) ipv4LPMKey {
 	prefixLen := binary.LittleEndian.Uint32(bytes[0:4])
-	ipBytes := bytes[4:8]
-	ip := bytes2ip(ipBytes)
-
-	return ipv4LPMKey{prefixLen, ip2Uint32(ip)}
-}
-
-func unmarshalIp6ACLKey(bytes []byte) ipv6LPMKey {
-	prefixLen := binary.LittleEndian.Uint32(bytes[0:4])
 	ipBytes := bytes[4:20]
 
-	return ipv6LPMKey{prefixLen, [16]uint8(ipBytes)}
+	//return ipv4LPMKey{prefixLen, ip2Uint32(ip)}
+	return ipv4LPMKey{prefixLen, [16]uint8(ipBytes)}
 }
 
 func getACLValue(acl *bpf.BPFMap, ikey ILPMKey) ipv4LPMVal {

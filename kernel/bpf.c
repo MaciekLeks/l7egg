@@ -73,7 +73,7 @@ struct {
 
 struct ipv4_lpm_key {
     __u32 prefixlen;
-    __u32 data;
+    __u32 data[16];
 }  __attribute__((packed));
 
 struct ipv6_lpm_key {
