@@ -76,6 +76,11 @@ struct ipv4_lpm_key {
     __u32 data;
 }  __attribute__((packed));
 
+struct ipv6_lpm_key {
+    __u32 prefixlen;
+    __u8 data[16];
+}  __attribute__((packed));
+
 struct value_t {
     __u64 ttl;
     __u64 counter;
@@ -91,6 +96,16 @@ struct {
     __uint(max_entries, 255);
 } ipv4_lpm_map SEC(".maps");
 
+struct {
+    __uint(type, BPF_MAP_TYPE_LPM_TRIE);
+    __type(key, struct ipv6_lpm_key);
+    __type(value, struct value_t);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
+    __uint(max_entries, 255);
+} ipv6_lpm_map SEC(".maps");
+
+
+
 
 struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
@@ -101,7 +116,7 @@ struct {
 
 long ringbuffer_flags = 0;
 
-static __always_inline void* lookup(__u32 ipaddr) {
+static __always_inline void* ipv4_lookup(__u32 ipaddr) {
     struct ipv4_lpm_key key = {
             .prefixlen = 32,
             .data = ipaddr
@@ -110,7 +125,23 @@ static __always_inline void* lookup(__u32 ipaddr) {
     return bpf_map_lookup_elem(&ipv4_lpm_map, &key);
 }
 
-static __always_inline long update(__u32 ipaddr, struct value_t val) {
+static __always_inline void* ipv6_lookup(__u8 ipaddr[16]) {
+    long err;
+    struct ipv6_lpm_key key = {
+            .prefixlen = 128,
+    };
+
+    //TODO: do we need deep copy of the ipaddr for searching?
+    err = bpf_probe_read(key.data, 16, ipaddr);
+    if (err != 0) {
+        bpf_printk("Can't copy memory %d", err);
+        return NULL;
+    }
+
+    return bpf_map_lookup_elem(&ipv6_lpm_map, &key);
+}
+
+static __always_inline long ipv4_update(__u32 ipaddr, struct value_t val) {
     struct ipv4_lpm_key key = {
             .prefixlen = 32,
             .data = ipaddr
@@ -119,7 +150,23 @@ static __always_inline long update(__u32 ipaddr, struct value_t val) {
     return bpf_map_update_elem(&ipv4_lpm_map, &key, &val, BPF_EXIST);
 }
 
-static __always_inline void print_ip(char * str, __u32 ip)
+static __always_inline long ipv6_update(__u8 ipaddr[16], struct value_t val) {
+    long err;
+    struct ipv6_lpm_key key = {
+            .prefixlen = 128,
+         //   .data = ipaddr
+    };
+
+    err = bpf_probe_read(key.data, 16, ipaddr);
+    if (err != 0) {
+        bpf_printk("Can't copy memory %d", err);
+        return -1; //error
+    }
+
+    return bpf_map_update_elem(&ipv6_lpm_map, &key, &val, BPF_EXIST);
+}
+
+static __always_inline void ipv4_print_ip(char * str, __u32 ip)
 {
     unsigned char bytes[4];
     bytes[0] = ip & 0xFF;
@@ -129,39 +176,100 @@ static __always_inline void print_ip(char * str, __u32 ip)
     bpf_printk("%s:%d.%d.%d.%d\n", str, bytes[0], bytes[1], bytes[2], bytes[3]);
 }
 
-static __always_inline int ipv4_check_and_updat(struct iphdr * ip){
-    __u32 daddr = ip->daddr;
-    __u32 saddr = ip->saddr;
+static __always_inline void ipv6_print_ip(char * str, const __u8 *ipv6)
+{
+    unsigned char bytes[16];
+    bytes[0] = ipv6[0];
+    bytes[1] = ipv6[1];
+    bytes[2] = ipv6[2];
+    bytes[3] = ipv6[3];
+    bytes[4] = ipv6[4];
+    bytes[5] = ipv6[5];
+    bytes[6] = ipv6[6];
+    bytes[7] = ipv6[7];
+    bytes[8] = ipv6[8];
+    bytes[9] = ipv6[9];
+    bytes[10] = ipv6[10];
+    bytes[11] = ipv6[11];
+    bytes[12] = ipv6[12];
+    bytes[13] = ipv6[13];
+    bytes[14] = ipv6[14];
+    bpf_printk("%s: %d%d:%d%d", str, bytes[0], bytes[1], bytes[2], bytes[3]);
+    bpf_printk(":%d%d:%d%d",  bytes[4], bytes[5], bytes[6], bytes[7]);
+    bpf_printk(":%d%d:%d%d",  bytes[8], bytes[9], bytes[10], bytes[11]);
+    bpf_printk(":%d%d:%d%d\n", bytes[12], bytes[13], bytes[14], bytes[15]);
+}
+
+static __always_inline int ipv4_check_and_update(struct iphdr * ipv4){
+    __u32 daddr = ipv4->daddr;
+    __u32 saddr = ipv4->saddr;
     bpf_printk("[egress]: daddr:%u, saddr:%u", daddr, saddr);
-    void *pv = lookup(daddr);
+    void *pv = ipv4_lookup(daddr);
     if (!pv) {
         bpf_printk("[egress]: drop:%u", daddr);
-        print_ip("[egress] DROP", daddr);
+        ipv4_print_ip("[egress] DROP", daddr);
         return TC_ACT_SHOT;
     }
     //}egress gate
     struct value_t* pval = pv;
     // does not process STALE IPs
     if (pval->status == IP_STALE) {
-        print_ip("[egress] STALE, DROP", daddr);
+        ipv4_print_ip("[egress] STALE, DROP", daddr);
         return TC_ACT_SHOT;
     }
     __u64 boot_plus_ttl_ns = pval->ttl;
     __u64 boot_ns =  bpf_ktime_get_boot_ns();
     if (boot_plus_ttl_ns != 0 &&  boot_plus_ttl_ns < boot_ns) { //0 means no TTL
         bpf_printk("[egress]: TTL expired:%u, boot_plus_ttl_ns:%u boot_ns:%u", daddr, boot_plus_ttl_ns, boot_ns);
-        print_ip("[egress] DROP_TTL", daddr);
+        ipv4_print_ip("[egress] DROP_TTL", daddr);
         return TC_ACT_SHOT;
     }
     pval->counter=pval->counter+1; //it would not work /24 subnet and /32 ip addr
-    long ret  = update(daddr, *pval); //it creates /32 ip addr if you hit some subnet e.g. /24
+    long ret  = ipv4_update(daddr, *pval); //it creates /32 ip addr if you hit some subnet e.g. /24
     if (ret) {
         bpf_printk("[egress]: can't update counter, code:%d", ret);
     } else {
         bpf_printk("[egress]: Counter updated");
     }
     bpf_printk("[egress]: accept:%u, boot_plus_ttl_ns:%u boot_ns:%u", daddr, boot_plus_ttl_ns, boot_ns);
-    print_ip("[egress] ACCEPT", daddr);
+    ipv4_print_ip("[egress] ACCEPT", daddr);
+
+    return TC_MOVE_ONE; //process further inside bpf
+}
+
+static __always_inline int ipv6_check_and_update(struct ipv6hdr * ipv6){
+    struct in6_addr daddr = ipv6->daddr;
+    struct in6_addr saddr = ipv6->saddr;
+    bpf_printk("[egress]: daddr:%u, saddr:%u", daddr, saddr);
+    void *pv = ipv6_lookup(daddr.in6_u.u6_addr8);
+    if (!pv) {
+        bpf_printk("[egress]: drop:%u", daddr.in6_u.u6_addr8);
+        ipv6_print_ip("[egress] DROP", daddr.in6_u.u6_addr8);
+        return TC_ACT_SHOT;
+    }
+    //}egress gate
+    struct value_t* pval = pv;
+    // does not process STALE IPs
+    if (pval->status == IP_STALE) {
+        ipv6_print_ip("[egress] STALE, DROP", daddr.in6_u.u6_addr8);
+        return TC_ACT_SHOT;
+    }
+    __u64 boot_plus_ttl_ns = pval->ttl;
+    __u64 boot_ns =  bpf_ktime_get_boot_ns();
+    if (boot_plus_ttl_ns != 0 &&  boot_plus_ttl_ns < boot_ns) { //0 means no TTL
+        bpf_printk("[egress]: TTL expired:%u, boot_plus_ttl_ns:%u boot_ns:%u", daddr, boot_plus_ttl_ns, boot_ns);
+        ipv6_print_ip("[egress] DROP_TTL", daddr.in6_u.u6_addr8);
+        return TC_ACT_SHOT;
+    }
+    pval->counter=pval->counter+1; //it would not work /24 subnet and /32 ip addr
+    long ret  = ipv6_update(daddr.in6_u.u6_addr8, *pval); //it creates /32 ip addr if you hit some subnet e.g. /24
+    if (ret) {
+        bpf_printk("[egress]: can't update counter, code:%d", ret);
+    } else {
+        bpf_printk("[egress]: Counter updated");
+    }
+    bpf_printk("[egress]: accept:%u, boot_plus_ttl_ns:%u boot_ns:%u", daddr, boot_plus_ttl_ns, boot_ns);
+    ipv6_print_ip("[egress] ACCEPT", daddr.in6_u.u6_addr8);
 
     return TC_MOVE_ONE; //process further inside bpf
 }
@@ -228,13 +336,12 @@ static __always_inline int process(struct __sk_buff *skb, bool is_egress) {
     }
 
 //    //TODO done to this place
-    if (is_ipv6) {
-        return 0; //TODO REMOVE
-    }
-    void *ipx = (void *) (long)(data + off);
+//    if (is_ipv6) {
+//        return 0; //TODO REMOVE
+//    }
+
+    // ip header pointer to either iphdr or ipv6hdr
     struct iphdr* ip = (data + off);
-
-
 
     //L4
     __u16 sport = 0;
@@ -276,12 +383,13 @@ static __always_inline int process(struct __sk_buff *skb, bool is_egress) {
         if (is_egress) {
             int ret;
             if (!is_ipv6) {
-                ret = ipv4_check_and_updat((struct iphdr *) ip);
-                if (ret != TC_MOVE_ONE)
-                    return ret;
+                ret = ipv4_check_and_update((struct iphdr *) ip);
             } else {
-
+                ret = ipv6_check_and_update((struct ipv6hdr *) ip);
             }
+
+            if (ret != TC_MOVE_ONE)
+                return ret;
         }
         return 0;
 
