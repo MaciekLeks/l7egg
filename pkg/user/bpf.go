@@ -397,15 +397,23 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 					answers := dns.Answers
 					for _, a := range answers {
 						fmt.Printf("@@@@Type: %s, Answer: IP:%s Name:%s CName:%s\n", a.Type, a.IP, string(a.Name), string(a.CNAME))
-						if a.Type == layers.DNSTypeA {
+						if a.Type == layers.DNSTypeA || a.Type == layers.DNSTypeAAAA {
 
 							cn := string(a.Name)
 							ip := a.IP
 							ttlSec := a.TTL //!!! remove * 5
 
 							ipB := make([]uint8, 16)
-							copy(ipB, ip.To4())
-							key := ipv4LPMKey{32, [16]uint8(ipB)}
+							var prefixLen uint32
+							if a.Type == layers.DNSTypeA {
+								copy(ipB, ip.To4())
+								prefixLen = 32
+							} else {
+								copy(ipB, ip.To16())
+								prefixLen = 128
+							}
+
+							key := ipv4LPMKey{prefixLen, [16]uint8(ipB)}
 							//val := time.Now().Unix() + int64(ttl) //Now + ttl
 							ttlNs := uint64(ttlSec) * 1000000000
 							bootTtlNs := uint64(C.get_nsecs()) + ttlNs //boot time[ns] + ttl[ns]
@@ -426,45 +434,9 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 							} else {
 								fmt.Println("DROP")
 							}
-						} else if a.Type == layers.DNSTypeAAAA {
-							fmt.Println("!!!Answer.Type:", a.Type)
-							cn := string(a.Name)
-							ip := a.IP
-							ttlSec := a.TTL //!!! remove * 5
-
-							key := ipv4LPMKey{128, [16]uint8(ip[0:16])}
-							//val := time.Now().Unix() + int64(ttl) //Now + ttl
-							ttlNs := uint64(ttlSec) * 1000000000
-							bootTtlNs := uint64(C.get_nsecs()) + ttlNs //boot time[ns] + ttl[ns]
-							//fmt.Println("key size:", unsafe.Sizeof(key))
-							//fmt.Println("key data:", key.data)
-
-							if cn, found := containsCN(egg.CNs, cn); found {
-								val := ipv4LPMVal{
-									ttl:     bootTtlNs,
-									counter: 0, //zero existsing elements :/
-									id:      cn.id,
-									status:  uint8(assetSynced),
-								}
-								err := updateACLValueNew(egg.ipv4ACL, key, val)
-								must(err, "Can't update ACL.")
-								fmt.Printf("Updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", cn, ip, ttlSec, ttlNs, bootTtlNs)
-
-							} else {
-								fmt.Println("DROP")
-							}
-
 						}
-
 					}
 				}
-
-				//numberOfEventsReceived++
-				//
-				//fmt.Println("[10]")
-				//if numberOfEventsReceived > 3 {
-				//	break recvLoop
-				//}
 			}
 		}
 	}()
