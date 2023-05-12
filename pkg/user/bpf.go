@@ -11,7 +11,6 @@ package user
 */
 import "C"
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -156,7 +155,7 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 		}
 	}
 
-	// delete
+	// ipv4: set stale
 	i := egg.ipv4ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
 	for i.Next() {
 		fmt.Println("%%%>>>4.2")
@@ -187,8 +186,7 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 			}
 		}
 	}
-
-	// delete
+	// ipv6: set stale
 	i = egg.ipv6ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
 	for i.Next() {
 		fmt.Println("%%%>>>4.2")
@@ -721,28 +719,29 @@ func fatal(format string, args ...interface{}) {
 	panic(err)
 }
 
-func insertNth(s string, n int) string {
-	var buffer bytes.Buffer
-	var n_1 = n - 1
-	var l_1 = len(s) - 1
-	for i, rune := range s {
-		buffer.WriteRune(rune)
-		if i%n == n_1 && i != l_1 {
-			buffer.WriteRune(' ')
-		}
-	}
-	return buffer.String()
-}
-
-func containsStr(s []string, str string) bool {
-	for _, v := range s {
-		if strings.Contains(str, v) { //e.g. DNS returns str="abc.example.com" and v=".example.com"
-			return true
-		}
-	}
-
-	return false
-}
+//
+//func insertNth(s string, n int) string {
+//	var buffer bytes.Buffer
+//	var n_1 = n - 1
+//	var l_1 = len(s) - 1
+//	for i, rune := range s {
+//		buffer.WriteRune(rune)
+//		if i%n == n_1 && i != l_1 {
+//			buffer.WriteRune(' ')
+//		}
+//	}
+//	return buffer.String()
+//}
+//
+//func containsStr(s []string, str string) bool {
+//	for _, v := range s {
+//		if strings.Contains(str, v) { //e.g. DNS returns str="abc.example.com" and v=".example.com"
+//			return true
+//		}
+//	}
+//
+//	return false
+//}
 
 func containsCN(cns *tools.SafeSlice[CN], cnS string) (CN, bool) {
 	var current CN
