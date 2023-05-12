@@ -19,7 +19,6 @@ import (
 	bpf "github.com/aquasecurity/libbpfgo"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
-	"net"
 	"os"
 	"os/exec"
 	"strings"
@@ -779,21 +778,21 @@ func containsCN(cns *tools.SafeSlice[CN], cnS string) (CN, bool) {
 //	return ip
 //}
 
-func bytes2ipv6(bb []byte) net.IP {
-	ip := make(net.IP, 16)
-	copy(ip, bb[0:16])
-	//binary.LittleEndian.PutUint32(ip, binary.LittleEndian.Uint32(bb[0:16]))
-	return ip
-}
-
-func determineHostByteOrder() binary.ByteOrder {
-	var i int32 = 0x01020304
-	u := unsafe.Pointer(&i)
-	pb := (*byte)(u)
-	b := *pb
-	if b == 0x04 {
-		return binary.LittleEndian
-	}
-
-	return binary.BigEndian
-}
+//func bytes2ipv6(bb []byte) net.IP {
+//	ip := make(net.IP, 16)
+//	copy(ip, bb[0:16])
+//	//binary.LittleEndian.PutUint32(ip, binary.LittleEndian.Uint32(bb[0:16]))
+//	return ip
+//}
+//
+//func determineHostByteOrder() binary.ByteOrder {
+//	var i int32 = 0x01020304
+//	u := unsafe.Pointer(&i)
+//	pb := (*byte)(u)
+//	b := *pb
+//	if b == 0x04 {
+//		return binary.LittleEndian
+//	}
+//
+//	return binary.BigEndian
+//}
