@@ -98,7 +98,8 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup) error {
 		defer egg.bpfModule.Close()
 
 		var lwg sync.WaitGroup
-		egg.runMapLooper(ctx, &lwg)
+		runMapLooper(ctx, egg.ipv4ACL, egg.CNs, ipv4, &lwg)
+		runMapLooper(ctx, egg.ipv6ACL, egg.CNs, ipv6, &lwg)
 		egg.runPacketsLooper(ctx, &lwg, egg.packets)
 		lwg.Wait()
 
@@ -165,7 +166,7 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 		}
 
 		keyBytes := i.Key()
-		key := unmarshalACLKey(keyBytes)
+		key := unmarshalIpv4ACLKey(keyBytes)
 		val := getACLValue(egg.ipv4ACL, key)
 
 		//we control CIDR with ttl=0 only
@@ -197,7 +198,7 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 		}
 
 		keyBytes := i.Key()
-		key := unmarshalIp6ACLKey(keyBytes)
+		key := unmarshalIpv6ACLKey(keyBytes)
 		val := getACLValue(egg.ipv6ACL, key)
 
 		//we control CIDR with ttl=0 only
@@ -276,7 +277,7 @@ func (egg *egg) updateCNs(cns []CN) error {
 		}
 
 		keyBytes := i.Key()
-		key := unmarshalACLKey(keyBytes)
+		key := unmarshalIpv4ACLKey(keyBytes)
 		val := getACLValue(egg.ipv4ACL, key)
 
 		//we control CNs with ttl!=0 only
@@ -403,7 +404,7 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 							ip := a.IP
 							ttlSec := a.TTL //!!! remove * 5
 
-							key := ipv4LPMKey{32, ip2Uint32(ip)}
+							key := ipv4LPMKey{32, [4]uint8(ip[0:4])}
 							//val := time.Now().Unix() + int64(ttl) //Now + ttl
 							ttlNs := uint64(ttlSec) * 1000000000
 							bootTtlNs := uint64(C.get_nsecs()) + ttlNs //boot time[ns] + ttl[ns]
@@ -413,7 +414,7 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 							if cn, found := containsCN(egg.CNs, cn); found {
 								val := ipv4LPMVal{
 									ttl:     bootTtlNs,
-									counter: 0, //zero existsing elements :/
+									counter: 0, //zero existsing elements :/ //TODO why 0?
 									id:      cn.id,
 									status:  uint8(assetSynced),
 								}
@@ -468,7 +469,7 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 	}()
 }
 
-func (egg *egg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup) {
+func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns *tools.SafeSlice[CN], ipv ipProtocolVersion, lwg *sync.WaitGroup) {
 	lwg.Add(1)
 	go func() {
 		defer lwg.Done()
@@ -482,18 +483,27 @@ func (egg *egg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup) {
 			default:
 				time.Sleep(5 * time.Second)
 				fmt.Printf("\n\n----\n")
-				i := egg.ipv4ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
+				i := bpfM.Iterator() //determineHost Endian search by Itertaot in libbfpgo
 				for i.Next() {
 					if i.Err() != nil {
 						fatal("Iterator error", i.Err())
 					}
 					keyBytes := i.Key()
 					prefixLen := binary.LittleEndian.Uint32(keyBytes[0:4])
-					ipBytes := keyBytes[4:8]
-					ip := bytes2ip(ipBytes)
 
-					key := ipv4LPMKey{prefixLen, ip2Uint32(ip)}
-					val := getACLValue(egg.ipv4ACL, key)
+					var key ILPMKey
+					var ipB []byte
+					if ipv == ipv4 {
+						ipB = keyBytes[4:8]
+						//ip := bytes2ip(ipBytes)
+						key = ipv4LPMKey{prefixLen, [4]uint8((ipB))}
+					} else {
+						ipB = keyBytes[4:20]
+						//ip := bytes2ip(ipBytes)
+						key = ipv6LPMKey{prefixLen, [16]uint8((ipB))}
+					}
+
+					val := getACLValue(bpfM, key)
 					bootNs := uint64(C.get_nsecs())
 					//var expired string = fmt.Sprintf("%d-%d", bootNs, ttl)
 					var expired string
@@ -505,8 +515,8 @@ func (egg *egg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup) {
 					//test only
 					var cn string
 					if val.ttl != 0 {
-						for i := 0; i < egg.CNs.Len(); i++ {
-							current := egg.CNs.Get(i)
+						for i := 0; i < cns.Len(); i++ {
+							current := cns.Get(i)
 							if current.id == val.id {
 								cn = current.cn
 							}
@@ -515,7 +525,7 @@ func (egg *egg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup) {
 
 					//valBytes := ipv4ACL[ipv4LPMKey{1,1}]
 					//fmt.Printf(" [bootTtlNs:%d,bootNs:%d][%s]%s/%d[%d]", ttl, bootNs, expired, ip, prefixLen, val.counter)
-					fmt.Printf("id: %d cn:%s expired:%s ip: %s/%d counter:%d status:%d\n", val.id, cn, expired, ip, prefixLen, val.counter, val.status)
+					fmt.Printf("id: %d cn:%s expired:%s ip: %v/%d counter:%d status:%d\n", val.id, cn, expired, ipB, prefixLen, val.counter, val.status)
 
 				}
 			}
@@ -523,15 +533,14 @@ func (egg *egg) runMapLooper(ctx context.Context, lwg *sync.WaitGroup) {
 	}()
 }
 
-func unmarshalACLKey(bytes []byte) ipv4LPMKey {
+func unmarshalIpv4ACLKey(bytes []byte) ipv4LPMKey {
 	prefixLen := binary.LittleEndian.Uint32(bytes[0:4])
-	ipBytes := bytes[4:8]
-	ip := bytes2ip(ipBytes)
+	ipB := bytes[4:8]
 
-	return ipv4LPMKey{prefixLen, ip2Uint32(ip)}
+	return ipv4LPMKey{prefixLen, [4]uint8(ipB)}
 }
 
-func unmarshalIp6ACLKey(bytes []byte) ipv6LPMKey {
+func unmarshalIpv6ACLKey(bytes []byte) ipv6LPMKey {
 	prefixLen := binary.LittleEndian.Uint32(bytes[0:4])
 	ipBytes := bytes[4:20]
 
@@ -750,25 +759,25 @@ func containsCN(cns *tools.SafeSlice[CN], cnS string) (CN, bool) {
 	return current, false
 }
 
-func ip2Uint32(ip net.IP) uint32 {
-	//fmt.Println("ip len=", len(ip))
-	if len(ip) == 16 {
-		fatal("no sane way to convert ipv6 into uint32")
-	}
-	return binary.LittleEndian.Uint32(ip) //skb buff work on host endian, not network endian
-}
+//func ip2Uint32(ip net.IP) uint32 {
+//	//fmt.Println("ip len=", len(ip))
+//	if len(ip) == 16 {
+//		fatal("no sane way to convert ipv6 into uint32")
+//	}
+//	return binary.LittleEndian.Uint32(ip) //skb buff work on host endian, not network endian
+//}
 
-func encodeUint32(val uint32) []byte {
-	b := make([]byte, 4)
-	binary.LittleEndian.PutUint32(b, val)
-	return b
-}
+//func encodeUint32(val uint32) []byte {
+//	b := make([]byte, 4)
+//	binary.LittleEndian.PutUint32(b, val)
+//	return b
+//}
 
-func bytes2ip(bb []byte) net.IP {
-	ip := make(net.IP, 4)
-	binary.LittleEndian.PutUint32(ip, binary.LittleEndian.Uint32(bb[0:4]))
-	return ip
-}
+//func bytes2ip(bb []byte) net.IP {
+//	ip := make(net.IP, 4)
+//	binary.LittleEndian.PutUint32(ip, binary.LittleEndian.Uint32(bb[0:4]))
+//	return ip
+//}
 
 func bytes2ipv6(bb []byte) net.IP {
 	ip := make(net.IP, 16)
