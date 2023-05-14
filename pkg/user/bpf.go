@@ -113,7 +113,7 @@ func (egg *egg) initCIDRs() {
 	//{cidrs
 	fmt.Println("[ACL]: Init")
 	for _, cidr := range egg.CIDRs {
-		val := ipv4LPMVal{
+		val := ipLPMVal{
 			ttl:     0,
 			counter: 0,
 			id:      cidr.id,
@@ -221,7 +221,7 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 	//add
 	for _, cidr := range cidrs {
 		if cidr.status == assetNew {
-			val := ipv4LPMVal{
+			val := ipLPMVal{
 				ttl:     0,
 				counter: 0,
 				status:  uint8(assetSynced),
@@ -414,7 +414,7 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 							//fmt.Println("key data:", key.data)
 
 							if cn, found := containsCN(egg.CNs, cn); found {
-								val := ipv4LPMVal{
+								val := ipLPMVal{
 									ttl:     bootTtlNs,
 									counter: 0, //zero existsing elements :/ //TODO why 0?
 									id:      cn.id,
@@ -447,7 +447,7 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 						//	//fmt.Println("key data:", key.data)
 						//
 						//	if cn, found := containsCN(egg.CNs, cn); found {
-						//		val := ipv4LPMVal{
+						//		val := ipLPMVal{
 						//			ttl:     bootTtlNs,
 						//			counter: 0, //zero existsing elements :/
 						//			id:      cn.id,
@@ -555,15 +555,15 @@ func unmarshalIpv6ACLKey(bytes []byte) ipv6LPMKey {
 	return ipv6LPMKey{prefixLen, [16]uint8(ipBytes)}
 }
 
-func getACLValue(acl *bpf.BPFMap, ikey ILPMKey) ipv4LPMVal {
+func getACLValue(acl *bpf.BPFMap, ikey ILPMKey) ipLPMVal {
 	upKey := ikey.GetPointer()
 	valBytes, err := acl.GetValue(upKey)
 	must(err, "Can't get value.")
 	return unmarshalValue(valBytes)
 }
 
-func unmarshalValue(bytes []byte) ipv4LPMVal {
-	return ipv4LPMVal{
+func unmarshalValue(bytes []byte) ipLPMVal {
+	return ipLPMVal{
 		ttl:     binary.LittleEndian.Uint64(bytes[0:8]),
 		counter: binary.LittleEndian.Uint64(bytes[8:16]),
 		id:      binary.LittleEndian.Uint16(bytes[16:18]),
@@ -571,7 +571,7 @@ func unmarshalValue(bytes []byte) ipv4LPMVal {
 	}
 }
 
-//func updateACLValue(acl *bpf.BPFMap, key ipv4LPMKey, val ipv4LPMVal) error {
+//func updateACLValue(acl *bpf.BPFMap, key ipv4LPMKey, val ipLPMVal) error {
 //	//alyternative way
 //	//aclKeyEnc := bytes.NewBuffer(encodeUint32(32))
 //	//aclKeyEnc.Write(encodeUint32(ip2Uint32(ip)))
@@ -583,7 +583,7 @@ func unmarshalValue(bytes []byte) ipv4LPMVal {
 //	upKey := unsafe.Pointer(&key)
 //	//check if not exists first
 //	oldValBytes, err := acl.GetValue(upKey)
-//	var oldVal ipv4LPMVal
+//	var oldVal ipLPMVal
 //	if err == nil { //update in any cases
 //		fmt.Println("Key/Value exists.", key, oldValBytes)
 //		oldVal = unmarshalValue(oldValBytes)
@@ -606,7 +606,7 @@ func unmarshalValue(bytes []byte) ipv4LPMVal {
 //	return nil
 //}
 
-//func updateACLValue2(acl *bpf.BPFMap, key ipv6LPMKey, val ipv4LPMVal) error {
+//func updateACLValue2(acl *bpf.BPFMap, key ipv6LPMKey, val ipLPMVal) error {
 //	//alyternative way
 //	//aclKeyEnc := bytes.NewBuffer(encodeUint32(32))
 //	//aclKeyEnc.Write(encodeUint32(ip2Uint32(ip)))
@@ -618,7 +618,7 @@ func unmarshalValue(bytes []byte) ipv4LPMVal {
 //	upKey := unsafe.Pointer(&key)
 //	//check if not exists first
 //	oldValBytes, err := acl.GetValue(upKey)
-//	var oldVal ipv4LPMVal
+//	var oldVal ipLPMVal
 //	if err == nil { //update in any cases
 //		fmt.Println("Key/Value exists.", key, oldValBytes)
 //		oldVal = unmarshalValue(oldValBytes)
@@ -641,7 +641,7 @@ func unmarshalValue(bytes []byte) ipv4LPMVal {
 //	return nil
 //}
 
-func updateACLValueNew(acl *bpf.BPFMap, ikey ILPMKey, val ipv4LPMVal) error {
+func updateACLValueNew(acl *bpf.BPFMap, ikey ILPMKey, val ipLPMVal) error {
 	//alyternative way
 	//aclKeyEnc := bytes.NewBuffer(encodeUint32(32))
 	//aclKeyEnc.Write(encodeUint32(ip2Uint32(ip)))
@@ -653,7 +653,7 @@ func updateACLValueNew(acl *bpf.BPFMap, ikey ILPMKey, val ipv4LPMVal) error {
 	//check if not exists first
 	upKey := ikey.GetPointer()
 	oldValBytes, err := acl.GetValue(upKey)
-	var oldVal ipv4LPMVal
+	var oldVal ipLPMVal
 	if err == nil { //update in any cases
 		//fmt.Println("Key/Value exists.", ikey, oldValBytes)
 		oldVal = unmarshalValue(oldValBytes)

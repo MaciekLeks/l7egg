@@ -24,7 +24,7 @@ func (k ipv6LPMKey) GetPointer() unsafe.Pointer {
 	return unsafe.Pointer(&k)
 }
 
-type ipv4LPMVal struct {
+type ipLPMVal struct {
 	ttl     uint64
 	counter uint64
 	id      uint16
