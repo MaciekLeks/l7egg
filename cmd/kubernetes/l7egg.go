@@ -6,6 +6,7 @@ import (
 	ceggclientset "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned"
 	"github.com/MaciekLeks/l7egg/pkg/tools"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -79,10 +80,16 @@ func main() {
 
 	logger.V(2).Info("Length of clustereggs: %d\n", len(ceggs.Items))
 
-	informerFactory := cegginformerfactory.NewSharedInformerFactory(ceggClientset, 10*time.Minute)
-	c := ceggcontroller.NewController(ctx, kubeClientset, ceggClientset, informerFactory.Maciekleks().V1alpha1().ClusterEggs())
+	ceggInformerFactory := cegginformerfactory.NewSharedInformerFactory(ceggClientset, 30*time.Second)
+	kubeInformerFactory := informers.NewSharedInformerFactory(kubeClientset, 30*time.Second)
+	c := ceggcontroller.NewController(ctx,
+		kubeClientset,
+		ceggClientset,
+		ceggInformerFactory.Maciekleks().V1alpha1().ClusterEggs(),
+		kubeInformerFactory.Core().V1().Pods())
 
-	informerFactory.Start(ctx.Done())
+	ceggInformerFactory.Start(ctx.Done())
+	kubeInformerFactory.Start(ctx.Done())
 
 	if err = c.Run(ctx, 1); err != nil {
 		logger.Error(err, "Error running controller.")

@@ -5,9 +5,11 @@ import (
 	"fmt"
 	ceggscheme "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned/scheme"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	coreinformers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/record"
 
 	corev1 "k8s.io/api/core/v1"
@@ -42,19 +44,30 @@ const (
 )
 
 type Controller struct {
-	ceggClientset   ceggclientset.Interface
+	// kubeclientset is a standard kubernetes clientset
+	kubeClientset kubernetes.Interface
+	// ceggClientset is a clientset for our API group
+	ceggClientset ceggclientset.Interface
+
 	ceggCacheSynced cache.InformerSynced
 	ceggLister      cegglister.ClusterEggLister
-	workqueue       workqueue.RateLimitingInterface
 
-	recorder record.EventRecorder
+	podLister      corelisters.PodLister
+	podCacheSynced cache.InformerSynced
+
+	workqueue workqueue.RateLimitingInterface
+	recorder  record.EventRecorder
 }
 
 const (
 	queueName string = "clusterEgg"
 )
 
-func NewController(ctx context.Context, kubeClientset kubernetes.Interface, ceggClientset ceggclientset.Interface, ceggInformer cegginformer.ClusterEggInformer) *Controller {
+func NewController(ctx context.Context,
+	kubeClientset kubernetes.Interface,
+	ceggClientset ceggclientset.Interface,
+	ceggInformer cegginformer.ClusterEggInformer,
+	podInformer coreinformers.PodInformer) *Controller {
 	logger := klog.FromContext(ctx)
 	// Create event broadcaster
 	// Add clientegg types to the default Kubernetes Scheme so Events can be
@@ -68,12 +81,17 @@ func NewController(ctx context.Context, kubeClientset kubernetes.Interface, cegg
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: controllerAgentName})
 
 	c := &Controller{
+		kubeClientset:   kubeClientset,
 		ceggClientset:   ceggClientset,
 		ceggLister:      ceggInformer.Lister(),
 		ceggCacheSynced: ceggInformer.Informer().HasSynced,
+		podLister:       podInformer.Lister(),
+		podCacheSynced:  podInformer.Informer().HasSynced,
 		workqueue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), queueName),
 		recorder:        recorder,
 	}
+
+	logger.Info("Setting up event handlers")
 
 	ceggInformer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
@@ -82,6 +100,21 @@ func NewController(ctx context.Context, kubeClientset kubernetes.Interface, cegg
 			DeleteFunc: c.handleDelete,
 		},
 	)
+
+	podInformer.Informer().AddEventHandler(
+		cache.ResourceEventHandlerFuncs{
+			AddFunc: func(o interface{}) {
+				klog.Info("New POD")
+			},
+			UpdateFunc: func(old, new interface{}) {
+				klog.Info("Update POD")
+			},
+			DeleteFunc: func(o interface{}) {
+				klog.Info("Delete POD")
+			},
+		},
+	)
+
 	return c
 }
 
