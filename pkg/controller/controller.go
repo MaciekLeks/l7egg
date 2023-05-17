@@ -316,11 +316,18 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 	}
 
 	boxKey := cegg.Name
+	manager.Store(boxKey, clientegg)
 
-	logger.Info("Staring box with clientegg.")
-	err = manager.Start(ctx, boxKey, clientegg)
-	if err != nil {
-		return fmt.Errorf("starting clusteregg '%s': %s box failed", cegg.Name, err.Error())
+	// Start cluster socpe egg only if podLabels is empty
+	if len(podLabels) == 0 {
+		// cluster scope cegg
+		logger.Info("Staring box with cegg.", "box", boxKey)
+		err = manager.Start(ctx, boxKey)
+		if err != nil {
+			return fmt.Errorf("starting clusteregg '%s': %s", cegg.Name, err.Error())
+		}
+	} else {
+		logger.Info("Pod scope cegg box not started, waiting for pods.", "box", boxKey)
 	}
 
 	return nil

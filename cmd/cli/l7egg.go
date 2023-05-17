@@ -10,6 +10,10 @@ import (
 
 type argList []string
 
+const (
+	defaultBoxKey = "default"
+)
+
 func (i *argList) String() string {
 	return fmt.Sprint(*i)
 }
@@ -36,13 +40,15 @@ func main() {
 	manager := user.BpfManagerInstance()
 	clientegg, err := manager.NewClientEgg(*iface, *eface, cnList, cidrList, nil)
 
+	manager.Store(defaultBoxKey, clientegg)
+
 	if err != nil {
 		fmt.Errorf("Creating client egg.", err)
 		os.Exit(1)
 	}
 	ctx := tools.SetupSignalHandler()
 
-	manager.Start(ctx, "default", clientegg)
+	manager.Start(ctx, defaultBoxKey)
 	manager.Wait()
 
 }

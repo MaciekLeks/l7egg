@@ -36,8 +36,8 @@ func (c *Controller) handleObject(obj interface{}) {
 
 }
 
-//func (c *Controller) checkAndAddToPodList(pod *v1.Pod) (bool, error) {
-//	m := manager.
+//func (c *Controller) checkAndAddToPodList(pod *corev1.Pod) (bool, error) {
+//	m := user.BpfManagerInstance()
 //	if policy.Namespace != info.Namespace {
 //		return false, nil
 //	}

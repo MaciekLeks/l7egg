@@ -31,6 +31,7 @@ type clientEggBox struct {
 	stopFunc  context.CancelFunc
 	waitGroup *sync.WaitGroup //TODO: only ene goroutine (in run(...)) - changing to channel?
 	egg       *egg
+	used      bool
 }
 
 type clientEggManager struct {
@@ -167,25 +168,38 @@ func (m *clientEggManager) NewClientEgg(iiface string, eiface string, cnsS []str
 	return clientegg, nil
 }
 
-func (m *clientEggManager) Start(ctx context.Context, key string, clientegg *ClientEgg) error {
+// Save box but not run it
+func (m *clientEggManager) Store(boxKey string, clientegg *ClientEgg) {
+	egg := newEgg(clientegg)
+	var box clientEggBox
+	box.egg = egg
+	m.boxes.Store(boxKey, &box)
+}
+
+// Run box
+func (m *clientEggManager) Start(ctx context.Context, boxKey string) error {
+	box, found := m.getBox(boxKey)
+	if !found {
+		return fmt.Errorf("box '%s' not found\n", boxKey)
+	}
+
 	subCtx, stopFunc := context.WithCancel(ctx)
 	var subWaitGroup sync.WaitGroup
 
-	egg := newEgg(clientegg)
-	m.boxes.Store(key, &clientEggBox{
-		stopFunc:  stopFunc,
-		waitGroup: &subWaitGroup,
-		egg:       egg,
-	})
+	box.stopFunc = stopFunc
+	box.waitGroup = &subWaitGroup
+	box.used = true
 
-	return egg.run(subCtx, &subWaitGroup) //TODO add some error handling
+	m.boxes.Store(boxKey, box)
+
+	return box.egg.run(subCtx, &subWaitGroup)
 }
 
 // Stop Stops one box
 func (m *clientEggManager) Stop(key string) error {
 	box, found := m.getBox(key)
 	if !found {
-		return fmt.Errorf("box key '%s' not found\n", key)
+		return fmt.Errorf("box '%s' not found\n", key)
 	}
 	fmt.Println("$$$>>>deleteEgg: stopping")
 	box.stopFunc()

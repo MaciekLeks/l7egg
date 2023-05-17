@@ -15,7 +15,7 @@ spec:
   - 172.172.34.3/32
   - 10.0.0.0/24
   - 2a04:4e42:200::81/128
-  podSelector:
-    matchLabels:
-      app: tester
-
+#  podSelector:
+#    matchLabels:
+#      app: tester
+#
