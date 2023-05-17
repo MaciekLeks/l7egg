@@ -34,7 +34,7 @@ func main() {
 	}
 
 	manager := user.BpfManagerInstance()
-	clientegg, err := manager.NewClientEgg(*iface, *eface, cnList, cidrList)
+	clientegg, err := manager.NewClientEgg(*iface, *eface, cnList, cidrList, nil)
 
 	if err != nil {
 		fmt.Errorf("Creating client egg.", err)

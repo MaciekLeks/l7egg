@@ -95,23 +95,24 @@ func NewController(ctx context.Context,
 
 	ceggInformer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
-			AddFunc:    c.handleAdd,
-			UpdateFunc: c.handleUpdate,
-			DeleteFunc: c.handleDelete,
+			AddFunc:    c.handleClusterEggAdd,
+			UpdateFunc: c.handleClusterEggUpdate,
+			DeleteFunc: c.handleClusterEggDelete,
 		},
 	)
 
 	podInformer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
-			AddFunc: func(o interface{}) {
-				klog.Info("New POD")
-			},
+			AddFunc: c.handleObject,
 			UpdateFunc: func(old, new interface{}) {
-				klog.Info("Update POD")
+				newPod := new.(*corev1.Pod)
+				oldPod := old.(*corev1.Pod)
+				if newPod.ResourceVersion == oldPod.ResourceVersion {
+					return
+				}
+				c.handleObject(new)
 			},
-			DeleteFunc: func(o interface{}) {
-				klog.Info("Delete POD")
-			},
+			DeleteFunc: c.handleObject,
 		},
 	)
 
@@ -300,7 +301,16 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 		return nil
 	}
 
-	clientegg, err := manager.NewClientEgg(cegg.Spec.IngressInterface, cegg.Spec.EgressInterface, cegg.Spec.CommonNames, cegg.Spec.CIDRs)
+	var podLabels map[string]string
+	var err error
+	if cegg.Spec.PodSelector.Size() != 0 {
+		podLabels, err = metav1.LabelSelectorAsMap(cegg.Spec.PodSelector)
+		if err != nil {
+			return fmt.Errorf("bad label selector for cegg [%s]: %w", cegg.Name, err)
+		}
+	}
+
+	clientegg, err := manager.NewClientEgg(cegg.Spec.IngressInterface, cegg.Spec.EgressInterface, cegg.Spec.CommonNames, cegg.Spec.CIDRs, podLabels)
 	if err != nil {
 		return fmt.Errorf("creating clusteregg '%s': %s failed", cegg.Name, err.Error())
 	}
@@ -321,15 +331,15 @@ func (c *Controller) deleteEgg(ctx context.Context, name string) error {
 	return manager.Stop(name)
 }
 
-func (c *Controller) handleAdd(obj interface{}) {
+func (c *Controller) handleClusterEggAdd(obj interface{}) {
 	c.enqueueClusterEgg(obj)
 }
 
-func (c *Controller) handleDelete(obj interface{}) {
+func (c *Controller) handleClusterEggDelete(obj interface{}) {
 	c.enqueueClusterEgg(obj)
 }
 
-func (c *Controller) handleUpdate(prev interface{}, obj interface{}) {
+func (c *Controller) handleClusterEggUpdate(prev interface{}, obj interface{}) {
 	ceggPrev := prev.(*v1alpha1.ClusterEgg)
 	cegg := obj.(*v1alpha1.ClusterEgg)
 	if ceggPrev.GetResourceVersion() != cegg.GetResourceVersion() {

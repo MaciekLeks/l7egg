@@ -22,6 +22,7 @@ type ClientEgg struct {
 	IngressInterface string
 	EgressInterface  string
 	BPFObjectPath    string
+	podLabels        map[string]string
 }
 
 // clientEggManager holds ClientEgg and steering variables (stopFunc to stop it from the controller witout stopping the controller iself).
@@ -140,7 +141,7 @@ func (m *clientEggManager) Exists(key string) bool {
 	return false
 }
 
-func (m *clientEggManager) NewClientEgg(iiface string, eiface string, cnsS []string, cidrsS []string) (*ClientEgg, error) {
+func (m *clientEggManager) NewClientEgg(iiface string, eiface string, cnsS []string, cidrsS []string, podLabels map[string]string) (*ClientEgg, error) {
 	cidrs, err := m.parseCIDRs(cidrsS)
 	if err != nil {
 		fmt.Errorf("Parsing input data %#v", err)
@@ -161,6 +162,7 @@ func (m *clientEggManager) NewClientEgg(iiface string, eiface string, cnsS []str
 		CNs:              &safeCNs,
 		CIDRs:            cidrs,
 		BPFObjectPath:    "./l7egg.bpf.o",
+		podLabels:        podLabels,
 	}
 	return clientegg, nil
 }
