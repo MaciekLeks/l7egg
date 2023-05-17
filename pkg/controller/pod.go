@@ -3,7 +3,9 @@ package controller
 import (
 	"context"
 	"fmt"
+	"github.com/MaciekLeks/l7egg/pkg/user"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog/v2"
 )
@@ -33,24 +35,42 @@ func (c *Controller) handleObject(obj interface{}) {
 	}
 
 	//Check if egg should be applied
+	fmt.Println("+++++ before checking ")
+	ok, keyBox := c.checkAny(pod)
+	fmt.Println("+++++ after checking ", ok, keyBox)
 
 }
 
-//func (c *Controller) checkAndAddToPodList(pod *corev1.Pod) (bool, error) {
-//	m := user.BpfManagerInstance()
-//	if policy.Namespace != info.Namespace {
-//		return false, nil
-//	}
-//	if policy.Spec.PodSelector.Size() != 0 {
-//		policyMap, err := metav1.LabelSelectorAsMap(&policy.Spec.PodSelector)
-//		if err != nil {
-//			return false, fmt.Errorf("bad label selector for policy [%s]: %w",
-//				types.NamespacedName{Namespace: policy.Namespace, Name: policy.Name}.String(), err)
-//		}
-//		policyPodSelector := labels.Set(policyMap).AsSelectorPreValidated()
-//		if !policyPodSelector.Matches(labels.Set(info.Labels)) {
-//			return false, nil
-//		}
-//	}
-//	return true, nil
-//}
+// CheckAny searches for first matching between cegg PodSelector and the pod. Returns keyBox name
+func (c *Controller) checkAny(pod *corev1.Pod) (bool, string) {
+	var found bool
+	var keyBox string
+
+	manager := user.BpfManagerInstance()
+	podLabels := labels.Set(pod.Labels)
+
+	manager.BoxAny(func(key string, box user.IClientEggBox) bool {
+		eggPodLabels := box.GetEgg().ClientEgg.PodLabels
+		fmt.Println("+++++ eggPodLabels:", eggPodLabels)
+		if len(eggPodLabels) > 0 {
+			selector := labels.Set(eggPodLabels).AsSelectorPreValidated()
+			fmt.Printf("\n\nSelector: %s; podLabels:%s\n\n", selector, podLabels)
+
+			if selector.Matches(podLabels) {
+				found = true
+				keyBox = key
+				return true
+			}
+		}
+		return false
+	})
+
+	if !found {
+		fmt.Println("+++++ found no matching pod to egg ")
+	} else {
+
+		fmt.Println("+++++ found matching pod to policy ")
+	}
+
+	return found, keyBox
+}

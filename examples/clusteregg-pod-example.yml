@@ -1,12 +1,10 @@
 apiVersion: maciekleks.dev/v1alpha1
 kind: ClusterEgg
 metadata:
-  name: clusteregg-example
+  name: clusteregg-pod-example
 spec:
-  #ingressInterface: cali0e74e1427db
-  ingressInterface: enp0s3
-  #egressInterface: cali0e74e1427db
-  egressInterface: enp0s3
+  ingressInterface: any
+  egressInterface: any
   commonNames:
   - www.onet.pl
   - .ubuntu.com
@@ -15,4 +13,7 @@ spec:
   - 172.172.34.3/32
   - 10.0.0.0/24
   - 2a04:4e42:200::81/128
+  podSelector:
+    matchLabels:
+      app: tester
 

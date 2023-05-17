@@ -40,7 +40,7 @@ func main() {
 	manager := user.BpfManagerInstance()
 	clientegg, err := manager.NewClientEgg(*iface, *eface, cnList, cidrList, nil)
 
-	manager.Store(defaultBoxKey, clientegg)
+	manager.BoxStore(defaultBoxKey, clientegg)
 
 	if err != nil {
 		fmt.Errorf("Creating client egg.", err)
@@ -48,7 +48,7 @@ func main() {
 	}
 	ctx := tools.SetupSignalHandler()
 
-	manager.Start(ctx, defaultBoxKey)
+	manager.BoxStart(ctx, defaultBoxKey)
 	manager.Wait()
 
 }

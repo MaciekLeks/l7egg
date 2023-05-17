@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/tools"
+	"k8s.io/apimachinery/pkg/util/runtime"
 	"net"
 	"sync"
 )
@@ -22,7 +23,7 @@ type ClientEgg struct {
 	IngressInterface string
 	EgressInterface  string
 	BPFObjectPath    string
-	podLabels        map[string]string
+	PodLabels        map[string]string
 }
 
 // clientEggManager holds ClientEgg and steering variables (stopFunc to stop it from the controller witout stopping the controller iself).
@@ -32,6 +33,10 @@ type clientEggBox struct {
 	waitGroup *sync.WaitGroup //TODO: only ene goroutine (in run(...)) - changing to channel?
 	egg       *egg
 	used      bool
+}
+
+type IClientEggBox interface {
+	GetEgg() *egg
 }
 
 type clientEggManager struct {
@@ -66,6 +71,10 @@ var (
 	instance *clientEggManager
 	once     sync.Once
 )
+
+func (box *clientEggBox) GetEgg() *egg {
+	return box.egg
+}
 
 // parseCIDR TODO: only ipv4
 func (m *clientEggManager) parseCIDR(cidrS string) (*CIDR, error) {
@@ -135,11 +144,70 @@ func parseClientEgg(clientegg *ClientEgg) {
 
 }
 
-func (m *clientEggManager) Exists(key string) bool {
+func (m *clientEggManager) BoxExists(key string) bool {
 	if _, found := m.getBox(key); found {
 		return true
 	}
 	return false
+}
+
+//
+//func (m *clientEggManager) BoxByLabels(inMap map[string]string) (*clientEggBox, bool) {
+//	var foundBox *clientEggBox
+//	var found bool
+//	mapS := fmt.Sprint(inMap)
+//	//TODO if during this iteration m.boxes changes we will not know it, see sync map Range doc
+//	m.boxes.Range(func(key, value any) bool {
+//		box, ok := value.(*clientEggBox)
+//		if !ok {
+//			runtime.HandleError(fmt.Errorf("can't convert map value to clientEggBox"))
+//			return true
+//		}
+//
+//		fmt.Printf("++++++++++++++++++++++++++= Found Box??? pre")
+//		if len(box.egg.PodLabels) > 0 {
+//			fmt.Printf("++++++++++++++++++++++++++= Found Box???")
+//			//We are not using any of k8s specific package here so simple map equality check must be enough
+//			if fmt.Sprint(box.egg.PodLabels) == mapS {
+//				fmt.Printf("++++++++++++++++++++++++++= Found Box")
+//				found = true
+//				foundBox = box
+//				return false
+//			}
+//
+//		}
+//
+//		return true
+//	})
+//	return foundBox, found
+//}
+
+// BoxAny returns box that satisfies the f function
+func (m *clientEggManager) BoxAny(f func(keyBox string, ibox IClientEggBox) bool) (*clientEggBox, bool) {
+	var foundBox *clientEggBox
+	var found bool
+	//TODO if during this iteration m.boxes changes we will not know it, see sync map Range doc
+	m.boxes.Range(func(key, value any) bool {
+		box, ok := value.(*clientEggBox)
+		if !ok {
+			runtime.HandleError(fmt.Errorf("can't convert map value to clientEggBox"))
+			return true
+		}
+
+		keyBox, ok := key.(string)
+		if !ok {
+			runtime.HandleError(fmt.Errorf("can't convert map key to string"))
+			return true
+		}
+
+		if ok := f(keyBox, box); ok {
+			return false
+		}
+
+		return true
+	})
+
+	return foundBox, found
 }
 
 func (m *clientEggManager) NewClientEgg(iiface string, eiface string, cnsS []string, cidrsS []string, podLabels map[string]string) (*ClientEgg, error) {
@@ -163,21 +231,21 @@ func (m *clientEggManager) NewClientEgg(iiface string, eiface string, cnsS []str
 		CNs:              &safeCNs,
 		CIDRs:            cidrs,
 		BPFObjectPath:    "./l7egg.bpf.o",
-		podLabels:        podLabels,
+		PodLabels:        podLabels,
 	}
 	return clientegg, nil
 }
 
-// Save box but not run it
-func (m *clientEggManager) Store(boxKey string, clientegg *ClientEgg) {
-	egg := newEgg(clientegg)
+// BoxStore box but not run it
+func (m *clientEggManager) BoxStore(boxKey string, clientegg *ClientEgg) {
+	egg := newEmptyEgg(clientegg)
 	var box clientEggBox
 	box.egg = egg
 	m.boxes.Store(boxKey, &box)
 }
 
-// Run box
-func (m *clientEggManager) Start(ctx context.Context, boxKey string) error {
+// BoxStart box
+func (m *clientEggManager) BoxStart(ctx context.Context, boxKey string) error {
 	box, found := m.getBox(boxKey)
 	if !found {
 		return fmt.Errorf("box '%s' not found\n", boxKey)
@@ -234,7 +302,9 @@ func (m *clientEggManager) Wait() {
 				fmt.Printf("Cant' do type assertion - %s\n", key)
 				return
 			}
-			box.waitGroup.Wait()
+			if box.waitGroup != nil {
+				box.waitGroup.Wait()
+			}
 		}()
 		return true
 	})
@@ -299,16 +369,19 @@ func (m *clientEggManager) UpdateCNs(boxKey string, newCNsS []string) error {
 }
 
 func (m *clientEggManager) UpdateClientEgg(boxKey string, newCIDRsS []string, newCNsS []string) error {
+	fmt.Printf("+++++++++++++++ 1")
 	err := m.UpdateCIDRs(boxKey, newCIDRsS)
 	if err != nil {
 		return err
 	}
 
+	fmt.Printf("+++++++++++++++ 2")
 	err = m.UpdateCNs(boxKey, newCNsS)
 	if err != nil {
 		return err
 	}
 
+	fmt.Printf("+++++++++++++++ 3")
 	return nil
 }
 

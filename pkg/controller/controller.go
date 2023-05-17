@@ -293,7 +293,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "resourceName", cegg.Name)
 
 	manager := user.BpfManagerInstance()
-	if manager.Exists(cegg.Name) {
+	if manager.BoxExists(cegg.Name) {
 		err := manager.UpdateClientEgg(cegg.Name, cegg.Spec.CIDRs, cegg.Spec.CommonNames)
 		if err != nil {
 			return fmt.Errorf("updating clusteregg '%s': %s failed", cegg.Name, err.Error())
@@ -316,13 +316,13 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 	}
 
 	boxKey := cegg.Name
-	manager.Store(boxKey, clientegg)
+	manager.BoxStore(boxKey, clientegg)
 
-	// Start cluster socpe egg only if podLabels is empty
+	// BoxStart cluster socpe egg only if podLabels is empty
 	if len(podLabels) == 0 {
 		// cluster scope cegg
 		logger.Info("Staring box with cegg.", "box", boxKey)
-		err = manager.Start(ctx, boxKey)
+		err = manager.BoxStart(ctx, boxKey)
 		if err != nil {
 			return fmt.Errorf("starting clusteregg '%s': %s", cegg.Name, err.Error())
 		}

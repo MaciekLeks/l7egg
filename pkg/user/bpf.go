@@ -37,6 +37,7 @@ type egg struct {
 	//aclLoock  sync.RWMutex
 }
 
+// depreciated
 func newEgg(clientegg *ClientEgg) *egg {
 	var egg egg
 	var err error
@@ -59,12 +60,41 @@ func newEgg(clientegg *ClientEgg) *egg {
 	err = attachProg(egg.bpfModule, clientegg.EgressInterface, bpf.BPFTcEgress, "tc_egress")
 	must(err, "Can't attach TC hook.")
 
-	egg.packets = make(chan []byte)
+	egg.packets = make(chan []byte) //TODO need Close() on this channel
+
+	return &egg
+}
+
+func newEmptyEgg(clientegg *ClientEgg) *egg {
+	var egg egg
+
+	egg.ClientEgg = *clientegg
 
 	return &egg
 }
 
 func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup) error {
+	var err error
+
+	egg.bpfModule, err = bpf.NewModuleFromFile(egg.ClientEgg.BPFObjectPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(-1)
+	}
+
+	err = egg.bpfModule.BPFLoadObject()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(-1)
+	}
+
+	err = attachProg(egg.bpfModule, egg.ClientEgg.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
+	must(err, "Can't attach TC hook.")
+	err = attachProg(egg.bpfModule, egg.ClientEgg.EgressInterface, bpf.BPFTcEgress, "tc_egress")
+	must(err, "Can't attach TC hook.")
+
+	egg.packets = make(chan []byte) //TODO need Close() on this channel
+
 	rb, err := egg.bpfModule.InitRingBuf("packets", egg.packets)
 	must(err, "Can't initialize ring buffer map.")
 
