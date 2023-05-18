@@ -91,7 +91,7 @@ func main() {
 	ceggInformerFactory.Start(ctx.Done())
 	kubeInformerFactory.Start(ctx.Done())
 
-	if err = c.Run(ctx, 1); err != nil {
+	if err = c.Run(ctx, 1, 1); err != nil {
 		logger.Error(err, "Error running controller.")
 		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 	}
