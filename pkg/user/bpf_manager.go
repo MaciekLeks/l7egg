@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	"github.com/MaciekLeks/l7egg/pkg/tools"
-	"k8s.io/apimachinery/pkg/util/runtime"
 	"net"
 	"sync"
 )
@@ -42,7 +41,7 @@ type IClientEggBox interface {
 
 type clientEggManager struct {
 	//boxes    map[string]clientEggBox
-	boxes    sync.Map
+	boxes    syncx.SafeMap[string, *clientEggBox]
 	seqIdGen tools.ISeqId[uint16]
 }
 
@@ -134,7 +133,7 @@ func (m *clientEggManager) parseCNs(cnsS []string) ([]CN, error) {
 func BpfManagerInstance() *clientEggManager {
 	once.Do(func() {
 		instance = &clientEggManager{
-			boxes:    sync.Map{},
+			boxes:    syncx.SafeMap[string, *clientEggBox]{},
 			seqIdGen: tools.New[uint16](),
 		}
 	})
@@ -188,19 +187,7 @@ func (m *clientEggManager) BoxAny(f func(keyBox string, ibox IClientEggBox) bool
 	var foundBox *clientEggBox
 	var found bool
 	//TODO if during this iteration m.boxes changes we will not know it, see sync map Range doc
-	m.boxes.Range(func(key, value any) bool {
-		box, ok := value.(*clientEggBox)
-		if !ok {
-			runtime.HandleError(fmt.Errorf("can't convert map value to clientEggBox"))
-			return true
-		}
-
-		keyBox, ok := key.(string)
-		if !ok {
-			runtime.HandleError(fmt.Errorf("can't convert map key to string"))
-			return true
-		}
-
+	m.boxes.Range(func(keyBox string, box *clientEggBox) bool {
 		if ok := f(keyBox, box); ok {
 			return false
 		}
@@ -292,17 +279,11 @@ func (m *clientEggManager) Wait() {
 	//		box.waitGroup.Wait()
 	//	}()
 	//}
-	m.boxes.Range(func(key interface{}, value interface{}) bool {
+	m.boxes.Range(func(key string, box *clientEggBox) bool {
 		stopWaitGroup.Add(1)
 		go func() {
 			defer stopWaitGroup.Done()
 			fmt.Printf("Waiting - %s\n", key)
-			box, ok := value.(*clientEggBox)
-			if !ok {
-				//do as runtimeutill error
-				fmt.Printf("Cant' do type assertion - %s\n", key)
-				return
-			}
 			if box.waitGroup != nil {
 				box.waitGroup.Wait()
 			}
@@ -313,19 +294,8 @@ func (m *clientEggManager) Wait() {
 	stopWaitGroup.Wait()
 }
 
-func (m *clientEggManager) getBox(key string) (*clientEggBox, bool) {
-	var box *clientEggBox
-
-	value, found := m.boxes.Load(key)
-	if !found {
-		return nil, false
-	}
-	box, ok := value.(*clientEggBox)
-	if !ok {
-		return nil, false
-	}
-
-	return box, true
+func (m *clientEggManager) getBox(boxKey string) (*clientEggBox, bool) {
+	return m.boxes.Load(boxKey)
 }
 
 func (m *clientEggManager) UpdateCIDRs(boxKey string, newCIDRsS []string) error {
