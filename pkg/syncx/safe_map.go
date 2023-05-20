@@ -2,7 +2,7 @@ package syncx
 
 import "sync"
 
-// SafeMap is a thread-safe generic wrapper around sync.Map
+// SafeMap is a generic wrapper around sync.Map
 type SafeMap[K comparable, V any] struct {
 	m sync.Map
 }
