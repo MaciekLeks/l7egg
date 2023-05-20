@@ -4,15 +4,16 @@ import (
 	"context"
 	"fmt"
 	ceggscheme "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned/scheme"
+	"github.com/MaciekLeks/l7egg/pkg/tools"
 	"github.com/MaciekLeks/l7egg/pkg/user"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/record"
-
-	corev1 "k8s.io/api/core/v1"
 
 	ceggclientset "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned"
 	cegginformer "github.com/MaciekLeks/l7egg/pkg/client/informers/externalversions/maciekleks.dev/v1alpha1"
@@ -55,7 +56,10 @@ type Controller struct {
 
 	ceggQueue workqueue.RateLimitingInterface
 	podQueue  workqueue.RateLimitingInterface
-	recorder  record.EventRecorder
+
+	recorder record.EventRecorder
+
+	podInfoMap tools.SafeMap[types.NamespacedName, PodInfo]
 }
 
 const (
@@ -81,16 +85,22 @@ func NewController(ctx context.Context,
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: controllerAgentName})
 
 	c := &Controller{
-		kubeClientset:   kubeClientset,
-		ceggClientset:   ceggClientset,
+		kubeClientset: kubeClientset,
+		ceggClientset: ceggClientset,
+
 		ceggLister:      ceggInformer.Lister(),
 		ceggCacheSynced: ceggInformer.Informer().HasSynced,
-		podLister:       podInformer.Lister(),
-		podCacheSynced:  podInformer.Informer().HasSynced,
-		ceggQueue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), ceggQueueName),
-		podQueue:        workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), podQueueName),
+
+		podLister:      podInformer.Lister(),
+		podCacheSynced: podInformer.Informer().HasSynced,
+
+		ceggQueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), ceggQueueName),
+		podQueue:  workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), podQueueName),
 
 		recorder: recorder,
+
+		//podInfoMap: PodInfoMap{},
+		podInfoMap: tools.SafeMap[types.NamespacedName, PodInfo]{},
 	}
 
 	logger.Info("Setting up event handlers")

@@ -7,12 +7,14 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
+	"sync"
 )
 
-// PodStub to hold POD crucial info.
+// PodInfo holds POD crucial metadata.
 type PodInfo struct {
 	//UID       string
 	name        string
@@ -21,6 +23,9 @@ type PodInfo struct {
 	nodeName    string
 	containerID string
 }
+
+// PodInfoMap maps Pod namespace name to PodInfo
+type PodInfoMap sync.Map
 
 func (c *Controller) handlePodAdd(obj interface{}) {
 	c.enqueuePod(obj)
@@ -93,6 +98,14 @@ func (c *Controller) syncPodHandler(ctx context.Context, key string) error {
 func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "namespace", pod.Namespace, "name", pod.Name)
 	logger.Info("Update pod info.")
+
+	if _, ok := c.podInfoMap.Load(types.NamespacedName{pod.Namespace, pod.Name}); ok {
+		fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!Update not add")
+	} else {
+
+		fmt.Println("!!!!!!!!!!!!!!Add")
+	}
+
 	return nil
 }
 
@@ -158,3 +171,13 @@ func (c *Controller) checkAny(pod *corev1.Pod) (bool, string) {
 
 	return found, keyBox
 }
+
+//func (pim *PodInfoMap) Load(pod *corev1.Pod) (PodInfo, bool) {
+//	var pi PodInfo
+//	sm := (*sync.Map)(pim)
+//	smv, ok := sm.Load(types.NamespacedName{pod.Namespace, pod.Name})
+//	if !ok {
+//		return pi, false
+//	}
+//	return smv.(PodInfo), true
+//}
