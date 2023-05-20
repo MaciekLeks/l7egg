@@ -26,8 +26,8 @@ func (m *SafeMap[K, V]) LoadAndDelete(key K) (value V, loaded bool) {
 	return v.(V), loaded
 }
 func (m *SafeMap[K, V]) LoadOrStore(key K, value V) (actual V, loaded bool) {
-	a, loaded := m.m.LoadOrStore(key, value)
-	return a.(V), loaded
+	v, loaded := m.m.LoadOrStore(key, value)
+	return v.(V), loaded
 }
 func (m *SafeMap[K, V]) Range(f func(key K, value V) bool) {
 	m.m.Range(func(key, value any) bool {
