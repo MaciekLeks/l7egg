@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	"github.com/MaciekLeks/l7egg/pkg/tools"
 	bpf "github.com/aquasecurity/libbpfgo"
 	"github.com/google/gopacket"
@@ -507,7 +508,7 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 	}()
 }
 
-func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns *tools.SafeSlice[CN], ipv ipProtocolVersion, lwg *sync.WaitGroup) {
+func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns *syncx.SafeSlice[CN], ipv ipProtocolVersion, lwg *sync.WaitGroup) {
 	lwg.Add(1)
 	go func() {
 		defer lwg.Done()
@@ -784,7 +785,7 @@ func fatal(format string, args ...interface{}) {
 //	return false
 //}
 
-func containsCN(cns *tools.SafeSlice[CN], cnS string) (CN, bool) {
+func containsCN(cns *syncx.SafeSlice[CN], cnS string) (CN, bool) {
 	var current CN
 	for i := 0; i < cns.Len(); i++ {
 		current = cns.Get(i)

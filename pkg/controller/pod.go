@@ -17,11 +17,11 @@ import (
 // PodInfo holds POD crucial metadata.
 type PodInfo struct {
 	//UID       string
-	name        string
-	labels      map[string]string
-	namespace   string
-	nodeName    string
-	containerID string
+	name         string
+	namespace    string
+	labels       map[string]string
+	nodeName     string
+	containerIDs []string
 }
 
 // PodInfoMap maps Pod namespace name to PodInfo
@@ -95,13 +95,29 @@ func (c *Controller) syncPodHandler(ctx context.Context, key string) error {
 	return nil
 }
 
+func getContainerIDs(css []corev1.ContainerStatus) []string {
+	cid := make([]string, len(css))
+	for i := range css {
+		cid[i] = css[i].ContainerID
+	}
+	return cid
+}
+
 func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "namespace", pod.Namespace, "name", pod.Name)
 	logger.Info("Update pod info.")
 
-	if _, ok := c.podInfoMap.Load(types.NamespacedName{pod.Namespace, pod.Name}); ok {
+	key := types.NamespacedName{pod.Namespace, pod.Name}
+	if _, ok := c.podInfoMap.Load(key); ok {
 		fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!Update not add")
 	} else {
+		c.podInfoMap.Store(key, PodInfo{
+			name:         pod.Name,
+			namespace:    pod.Namespace,
+			labels:       pod.Labels,
+			nodeName:     pod.Spec.NodeName,
+			containerIDs: getContainerIDs(pod.Status.ContainerStatuses),
+		})
 
 		fmt.Println("!!!!!!!!!!!!!!Add")
 	}

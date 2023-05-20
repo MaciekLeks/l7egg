@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	ceggscheme "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned/scheme"
-	"github.com/MaciekLeks/l7egg/pkg/tools"
+	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	"github.com/MaciekLeks/l7egg/pkg/user"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -59,7 +59,7 @@ type Controller struct {
 
 	recorder record.EventRecorder
 
-	podInfoMap tools.SafeMap[types.NamespacedName, PodInfo]
+	podInfoMap syncx.SafeMap[types.NamespacedName, PodInfo]
 }
 
 const (
@@ -100,7 +100,7 @@ func NewController(ctx context.Context,
 		recorder: recorder,
 
 		//podInfoMap: PodInfoMap{},
-		podInfoMap: tools.SafeMap[types.NamespacedName, PodInfo]{},
+		podInfoMap: syncx.SafeMap[types.NamespacedName, PodInfo]{},
 	}
 
 	logger.Info("Setting up event handlers")

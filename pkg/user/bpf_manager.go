@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"fmt"
+	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	"github.com/MaciekLeks/l7egg/pkg/tools"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"net"
@@ -18,7 +19,7 @@ type IClientEggManager interface {
 }
 
 type ClientEgg struct {
-	CNs              *tools.SafeSlice[CN]
+	CNs              *syncx.SafeSlice[CN]
 	CIDRs            []*CIDR
 	IngressInterface string
 	EgressInterface  string
@@ -222,7 +223,7 @@ func (m *clientEggManager) NewClientEgg(iiface string, eiface string, cnsS []str
 		fmt.Errorf("Parsing input data %#v", err)
 		return nil, err
 	}
-	safeCNs := tools.SafeSlice[CN]{}
+	safeCNs := syncx.SafeSlice[CN]{}
 	safeCNs.Append(cns...)
 
 	clientegg := &ClientEgg{ //TODO make a function to wrap this up (parsing, building the object)
