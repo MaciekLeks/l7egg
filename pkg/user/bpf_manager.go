@@ -32,7 +32,8 @@ type clientEggBox struct {
 	stopFunc  context.CancelFunc
 	waitGroup *sync.WaitGroup //TODO: only ene goroutine (in run(...)) - changing to channel?
 	egg       *egg
-	used      bool
+	// active if box with bpf is running
+	active bool
 }
 
 type IClientEggBox interface {
@@ -244,7 +245,7 @@ func (m *clientEggManager) BoxStart(ctx context.Context, boxKey string) error {
 
 	box.stopFunc = stopFunc
 	box.waitGroup = &subWaitGroup
-	box.used = true
+	box.active = true
 
 	m.boxes.Store(boxKey, box)
 

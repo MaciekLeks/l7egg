@@ -125,10 +125,10 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	if pi, ok := c.podInfoMap.Load(key); ok {
 		fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!Update not add")
 
-		keyBox, _ := c.checkEggMach(pod)
-		if pi.matchedKeyBox != keyBox {
+		boxKey, _ := c.checkEggMach(pod)
+		if pi.matchedKeyBox != boxKey {
 			if pi.matchedKeyBox != "" {
-				if keyBox == "" {
+				if boxKey == "" {
 					fmt.Println("-----Update Egg to remove to from the egg")
 				} else {
 					fmt.Println("-----Update Egg to be changed or only policy has changed")
@@ -152,14 +152,14 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 			labels:        pod.Labels,
 			nodeName:      pod.Spec.NodeName,
 			containerIDs:  containerdIDs,
-			matchedKeyBox: keyBox,
+			matchedKeyBox: boxKey,
 		})
 
 		tbd, _ := c.podInfoMap.Load(key) //test only
 		fmt.Printf("!!!!!!!!!!!!!!Update Done: %+v\n", tbd)
 
 	} else { //ADD
-		keyBox, matched := c.checkEggMach(pod)
+		boxKey, matched := c.checkEggMach(pod)
 		if matched {
 			fmt.Println("!!!!!!!!!Found key box matching new pod")
 		}
@@ -175,7 +175,7 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 			labels:        pod.Labels,
 			nodeName:      pod.Spec.NodeName,
 			containerIDs:  containerdIDs,
-			matchedKeyBox: keyBox,
+			matchedKeyBox: boxKey,
 		})
 
 		tbd, _ := c.podInfoMap.Load(key) //test only
@@ -183,7 +183,7 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 
 		if matched {
 			fmt.Println("!!!!!!!!!!!!!!{")
-			tbd.runEgg(ctx)
+			tbd.runEgg(ctx, boxKey)
 			fmt.Println("!!!!!!!!!!!!!!}")
 		}
 	}
@@ -254,7 +254,7 @@ func (c *Controller) checkEggMach(pod *corev1.Pod) (string, bool) {
 	return keyBox, found
 }
 
-func (pi *PodInfo) runEgg(ctx context.Context) {
+func (pi *PodInfo) runEgg(ctx context.Context, boxKey string) {
 	client, err := containerd.New("/var/snap/microk8s/common/run/containerd.sock", containerd.WithDefaultNamespace("k8s.io"))
 	if err != nil {
 		fmt.Printf("Blad podczas tworzenia klienta containerd: %v", err)
@@ -297,6 +297,12 @@ func (pi *PodInfo) runEgg(ctx context.Context) {
 	err = ns.Do(func(_ns cnins.NetNS) error {
 		ifaces, _ := net.Interfaces()
 		fmt.Printf("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ Interfaces: %v\n", ifaces)
+
+		fmt.Printf("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ {{{{{{{{")
+		manager := user.BpfManagerInstance()
+		err = manager.BoxStart(ctx, boxKey)
+		fmt.Printf("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ }}}}}}}}")
+
 		return nil
 	})
 
