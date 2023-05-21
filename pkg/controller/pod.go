@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/user"
+	"github.com/containerd/containerd"
+	"github.com/containerd/containerd/pkg/netns"
+	cnins "github.com/containernetworking/plugins/pkg/ns"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -11,6 +14,8 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
+	"net"
+	"os"
 	"strings"
 	"sync"
 )
@@ -154,8 +159,8 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 		fmt.Printf("!!!!!!!!!!!!!!Update Done: %+v\n", tbd)
 
 	} else { //ADD
-		keyBox, found := c.checkEggMach(pod)
-		if found {
+		keyBox, matched := c.checkEggMach(pod)
+		if matched {
 			fmt.Println("!!!!!!!!!Found key box matching new pod")
 		}
 
@@ -175,6 +180,12 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 
 		tbd, _ := c.podInfoMap.Load(key) //test only
 		fmt.Printf("!!!!!!!!!!!!!!Add Done: %+v\n", tbd)
+
+		if matched {
+			fmt.Println("!!!!!!!!!!!!!!{")
+			tbd.runEgg(ctx)
+			fmt.Println("!!!!!!!!!!!!!!}")
+		}
 	}
 
 	return nil
@@ -241,6 +252,59 @@ func (c *Controller) checkEggMach(pod *corev1.Pod) (string, bool) {
 	}
 
 	return keyBox, found
+}
+
+func (pi *PodInfo) runEgg(ctx context.Context) {
+	client, err := containerd.New("/var/snap/microk8s/common/run/containerd.sock", containerd.WithDefaultNamespace("k8s.io"))
+	if err != nil {
+		fmt.Printf("Blad podczas tworzenia klienta containerd: %v", err)
+		return
+	}
+	defer client.Close()
+
+	// Ustaw nazwę przestrzeni nazw kontenera.
+	//namespace := namespaces.Default
+
+	// Pobierz kontener.
+	container, err := client.LoadContainer(ctx, pi.containerIDs[0]) //TODO not only 0 ;)
+	if err != nil {
+		fmt.Printf("Błąd podczas ładowania kontenera: %v", err)
+		return
+	}
+
+	// Pobierz informacje o procesie init kontenera.
+	task, err := container.Task(ctx, nil)
+	if err != nil {
+		fmt.Printf("Błąd podczas pobierania informacji o zadaniu kontenera: %v", err)
+		return
+	}
+
+	// Pobierz PID procesu init kontenera.
+	pid := task.Pid()
+	if err != nil {
+		fmt.Printf("Błąd podczas pobierania PID procesu init: %v", err)
+		return
+	}
+
+	// Wyświetl PID procesu init kontenera.
+	fmt.Printf("PID kontenera: %d", pid)
+
+	path2 := fmt.Sprintf("/proc/%d/ns/net", pid)
+	ns := netns.LoadNetNS(path2)
+	defer ns.Remove()
+
+	// Listuj interfejsy sieciowe w tej przestrzeni sieciowej
+	err = ns.Do(func(_ns cnins.NetNS) error {
+		ifaces, _ := net.Interfaces()
+		fmt.Printf("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ Interfaces: %v\n", ifaces)
+		return nil
+	})
+
+	if err != nil {
+		fmt.Println("Error listing interfaces:", err)
+		os.Exit(1)
+	}
+
 }
 
 //func (pim *PodInfoMap) Load(pod *corev1.Pod) (PodInfo, bool) {

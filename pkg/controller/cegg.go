@@ -118,7 +118,14 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 		}
 	}
 
-	clientegg, err := manager.NewClientEgg(cegg.Spec.IngressInterface, cegg.Spec.EgressInterface, cegg.Spec.CommonNames, cegg.Spec.CIDRs, podLabels)
+	//TODO tbc
+	iiface := cegg.Spec.IngressInterface
+	eiface := cegg.Spec.EgressInterface
+	if len(podLabels) != 0 {
+		iiface = "eth0" //TODO #
+		eiface = "eth0" //TODO #
+	}
+	clientegg, err := manager.NewClientEgg(iiface, eiface, cegg.Spec.CommonNames, cegg.Spec.CIDRs, podLabels)
 	if err != nil {
 		return fmt.Errorf("creating clusteregg '%s': %s failed", cegg.Name, err.Error())
 	}
