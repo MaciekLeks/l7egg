@@ -17,11 +17,12 @@ import (
 // PodInfo holds POD crucial metadata.
 type PodInfo struct {
 	//UID       string
-	name         string
-	namespace    string
-	labels       map[string]string
-	nodeName     string
-	containerIDs []string
+	name          string
+	namespace     string
+	labels        map[string]string
+	nodeName      string
+	containerIDs  []string
+	matchedKeyBox string
 }
 
 // PodInfoMap maps Pod namespace name to PodInfo
@@ -108,18 +109,56 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	logger.Info("Update pod info.")
 
 	key := types.NamespacedName{pod.Namespace, pod.Name}
-	if _, ok := c.podInfoMap.Load(key); ok {
+	if pi, ok := c.podInfoMap.Load(key); ok {
 		fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!Update not add")
-	} else {
+
+		keyBox, _ := c.checkEggMach(pod)
+		if pi.matchedKeyBox != keyBox {
+			if pi.matchedKeyBox != "" {
+				if keyBox == "" {
+					fmt.Println("-----Update Egg to remove to from the egg")
+				} else {
+					fmt.Println("-----Update Egg to be changed or only policy has changed")
+				}
+			} else {
+				fmt.Println("-----Update: A new egg to be applied on the pod")
+			}
+
+		} else {
+			fmt.Println("-----Update: Do nothing keyBox and pi.matchedKeyBox equals (-,-) or (x,x)")
+		}
+
 		c.podInfoMap.Store(key, PodInfo{
-			name:         pod.Name,
-			namespace:    pod.Namespace,
-			labels:       pod.Labels,
-			nodeName:     pod.Spec.NodeName,
-			containerIDs: getContainerIDs(pod.Status.ContainerStatuses),
+			name:          pod.Name,
+			namespace:     pod.Namespace,
+			labels:        pod.Labels,
+			nodeName:      pod.Spec.NodeName,
+			containerIDs:  getContainerIDs(pod.Status.ContainerStatuses),
+			matchedKeyBox: keyBox,
 		})
 
-		fmt.Println("!!!!!!!!!!!!!!Add")
+		updatedPodInfo, _ := c.podInfoMap.Load(key) //test only
+
+		fmt.Printf("!!!!!!!!!!!!!!Update Done: %+v\n", updatedPodInfo)
+
+	} else {
+		keyBox, found := c.checkEggMach(pod)
+		if found {
+			fmt.Println("!!!!!!!!!Found key box matching new pod")
+		}
+
+		c.podInfoMap.Store(key, PodInfo{
+			name:          pod.Name,
+			namespace:     pod.Namespace,
+			labels:        pod.Labels,
+			nodeName:      pod.Spec.NodeName,
+			containerIDs:  getContainerIDs(pod.Status.ContainerStatuses),
+			matchedKeyBox: keyBox,
+		})
+
+		newPodInfo, _ := c.podInfoMap.Load(key) //test only
+
+		fmt.Printf("!!!!!!!!!!!!!!Add Done: %+v\n", newPodInfo)
 	}
 
 	return nil
@@ -149,13 +188,13 @@ func (c *Controller) handleObject(obj interface{}) {
 
 	//Check if egg should be applied
 	fmt.Println("+++++ before checking ")
-	ok, keyBox := c.checkAny(pod)
+	keyBox, ok := c.checkEggMach(pod)
 	fmt.Println("+++++ after checking ", ok, keyBox)
 
 }
 
 // CheckAny searches for first matching between cegg PodSelector and the pod. Returns keyBox name
-func (c *Controller) checkAny(pod *corev1.Pod) (bool, string) {
+func (c *Controller) checkEggMach(pod *corev1.Pod) (string, bool) {
 	var found bool
 	var keyBox string
 
@@ -185,7 +224,7 @@ func (c *Controller) checkAny(pod *corev1.Pod) (bool, string) {
 		fmt.Println("+++++ found matching pod to policy ")
 	}
 
-	return found, keyBox
+	return keyBox, found
 }
 
 //func (pim *PodInfoMap) Load(pod *corev1.Pod) (PodInfo, bool) {
