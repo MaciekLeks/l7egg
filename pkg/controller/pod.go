@@ -11,6 +11,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
+	"strings"
 	"sync"
 )
 
@@ -96,12 +97,19 @@ func (c *Controller) syncPodHandler(ctx context.Context, key string) error {
 	return nil
 }
 
-func getContainerIDs(css []corev1.ContainerStatus) []string {
-	cid := make([]string, len(css))
+func getContainerdIDs(css []corev1.ContainerStatus) ([]string, error) {
+	cids := make([]string, len(css))
+	var err error
+	const crn = "containerd://"
 	for i := range css {
-		cid[i] = css[i].ContainerID
+		//TODO check status of the container, e.g. status, is init container, ...
+		if !strings.Contains(css[i].ContainerID, crn) {
+			return cids, fmt.Errorf("only containerd supported")
+		}
+		cid := strings.TrimPrefix(css[i].ContainerID, crn)
+		cids[i] = cid
 	}
-	return cid
+	return cids, err
 }
 
 func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
@@ -128,23 +136,9 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 			fmt.Println("-----Update: Do nothing keyBox and pi.matchedKeyBox equals (-,-) or (x,x)")
 		}
 
-		c.podInfoMap.Store(key, PodInfo{
-			name:          pod.Name,
-			namespace:     pod.Namespace,
-			labels:        pod.Labels,
-			nodeName:      pod.Spec.NodeName,
-			containerIDs:  getContainerIDs(pod.Status.ContainerStatuses),
-			matchedKeyBox: keyBox,
-		})
-
-		updatedPodInfo, _ := c.podInfoMap.Load(key) //test only
-
-		fmt.Printf("!!!!!!!!!!!!!!Update Done: %+v\n", updatedPodInfo)
-
-	} else {
-		keyBox, found := c.checkEggMach(pod)
-		if found {
-			fmt.Println("!!!!!!!!!Found key box matching new pod")
+		containerdIDs, err := getContainerdIDs(pod.Status.ContainerStatuses)
+		if err != nil {
+			return err
 		}
 
 		c.podInfoMap.Store(key, PodInfo{
@@ -152,13 +146,35 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 			namespace:     pod.Namespace,
 			labels:        pod.Labels,
 			nodeName:      pod.Spec.NodeName,
-			containerIDs:  getContainerIDs(pod.Status.ContainerStatuses),
+			containerIDs:  containerdIDs,
 			matchedKeyBox: keyBox,
 		})
 
-		newPodInfo, _ := c.podInfoMap.Load(key) //test only
+		tbd, _ := c.podInfoMap.Load(key) //test only
+		fmt.Printf("!!!!!!!!!!!!!!Update Done: %+v\n", tbd)
 
-		fmt.Printf("!!!!!!!!!!!!!!Add Done: %+v\n", newPodInfo)
+	} else { //ADD
+		keyBox, found := c.checkEggMach(pod)
+		if found {
+			fmt.Println("!!!!!!!!!Found key box matching new pod")
+		}
+
+		containerdIDs, err := getContainerdIDs(pod.Status.ContainerStatuses)
+		if err != nil {
+			return err
+		}
+
+		c.podInfoMap.Store(key, PodInfo{
+			name:          pod.Name,
+			namespace:     pod.Namespace,
+			labels:        pod.Labels,
+			nodeName:      pod.Spec.NodeName,
+			containerIDs:  containerdIDs,
+			matchedKeyBox: keyBox,
+		})
+
+		tbd, _ := c.podInfoMap.Load(key) //test only
+		fmt.Printf("!!!!!!!!!!!!!!Add Done: %+v\n", tbd)
 	}
 
 	return nil
