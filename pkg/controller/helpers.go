@@ -50,6 +50,10 @@ func (c *Controller) queueGet(ctx context.Context) (string, bool, error) {
 		return key, quit, fmt.Errorf("expected context value but got %#v", cav)
 	}
 
+	if quit {
+		return key, quit, nil
+	}
+
 	if key, ok = obj.(string); !ok {
 		// As the item in the ceggQueue is actually invalid, we call
 		// Forget here else we'd go into a loop of attempting to
