@@ -74,7 +74,7 @@ func newEmptyEgg(clientegg *ClientEgg) *egg {
 	return &egg
 }
 
-func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup) error {
+func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, netNSPath string) error {
 	var err error
 
 	egg.bpfModule, err = bpf.NewModuleFromFile(egg.ClientEgg.BPFObjectPath)
@@ -123,7 +123,7 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup) error {
 	go func() {
 		//LIFO
 		defer wg.Done()
-		defer tools.CleanInterfaces(0, egg.IngressInterface, egg.EgressInterface) //only egress needed
+		defer tools.CleanInterfaces(netNSPath, egg.IngressInterface, egg.EgressInterface) //only egress needed
 		defer egg.bpfModule.Close()
 
 		var lwg sync.WaitGroup

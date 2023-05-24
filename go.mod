@@ -5,8 +5,10 @@ go 1.20
 require (
 	github.com/aquasecurity/libbpfgo v0.4.5-libbpf-1.0.1
 	github.com/containerd/containerd v1.7.1
+	github.com/containernetworking/plugins v1.2.0
 	github.com/florianl/go-tc v0.4.2
 	github.com/google/gopacket v1.1.19
+	github.com/vishvananda/netns v0.0.0-20210104183010-2eb08e3e575f
 	k8s.io/api v0.26.3
 	k8s.io/apimachinery v0.26.3
 	k8s.io/client-go v0.26.3
@@ -23,7 +25,6 @@ require (
 	github.com/containerd/fifo v1.1.0 // indirect
 	github.com/containerd/ttrpc v1.2.2 // indirect
 	github.com/containerd/typeurl/v2 v2.1.1 // indirect
-	github.com/containernetworking/plugins v1.2.0 // indirect
 	github.com/cyphar/filepath-securejoin v0.2.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c // indirect
@@ -53,7 +54,6 @@ require (
 	github.com/moby/sys/mountinfo v0.6.2 // indirect
 	github.com/moby/sys/sequential v0.5.0 // indirect
 	github.com/moby/sys/signal v0.7.0 // indirect
-	github.com/moby/sys/symlink v0.2.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect

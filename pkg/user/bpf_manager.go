@@ -32,6 +32,7 @@ type clientEggBox struct {
 	stopFunc  context.CancelFunc
 	waitGroup *sync.WaitGroup //TODO: only ene goroutine (in run(...)) - changing to channel?
 	egg       *egg
+	netNsPath string
 	// active if box with bpf is running
 	active bool
 }
@@ -234,7 +235,7 @@ func (m *clientEggManager) BoxStore(boxKey string, clientegg *ClientEgg) {
 }
 
 // BoxStart box
-func (m *clientEggManager) BoxStart(ctx context.Context, boxKey string) error {
+func (m *clientEggManager) BoxStart(ctx context.Context, boxKey string, netNsPath string) error {
 	box, found := m.getBox(boxKey)
 	if !found {
 		return fmt.Errorf("box '%s' not found\n", boxKey)
@@ -245,11 +246,12 @@ func (m *clientEggManager) BoxStart(ctx context.Context, boxKey string) error {
 
 	box.stopFunc = stopFunc
 	box.waitGroup = &subWaitGroup
+	box.netNsPath = netNsPath
 	box.active = true
 
 	m.boxes.Store(boxKey, box)
 
-	return box.egg.run(subCtx, &subWaitGroup)
+	return box.egg.run(subCtx, &subWaitGroup, netNsPath)
 }
 
 // Stop Stops one box

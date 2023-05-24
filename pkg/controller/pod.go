@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/user"
 	"github.com/containerd/containerd"
-	"github.com/containerd/containerd/pkg/netns"
 	cnins "github.com/containernetworking/plugins/pkg/ns"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -287,24 +286,60 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey string) {
 	}
 
 	// Wyświetl PID procesu init kontenera.
-	fmt.Printf("PID kontenera: %d", pid)
+	fmt.Println("@@@@@@@@@@@ Container PID: %d", pid)
 
-	path2 := fmt.Sprintf("/proc/%d/ns/net", pid)
-	ns := netns.LoadNetNS(path2)
-	defer ns.Remove()
+	path := fmt.Sprintf("/proc/%d/ns/net", pid)
+	netns, err := cnins.GetNS(path)
+	defer netns.Close()
+
+	//{1
+	//ns, err := nns.GetFromPath(path)
+	//defer ns.Close()
+	//fmt.Printf("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ {{{{{{{{ currrns: %v", ns)
+	//1}
+	//nsid, err := tools.GetNsIDFromFD(netns.Fd())
+
+	fmt.Printf("@@@@@@@@@@@ netns ID: %d", netns.Fd())
+
+	netns.Do(func(_ns cnins.NetNS) error {
+		ifaces, _ := net.Interfaces()
+
+		fmt.Printf("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ Interfaces: %v\n", ifaces)
+
+		fmt.Println("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ {{{{{{{{ ns:", _ns.Path(), int(_ns.Fd()))
+
+		//ns, err = nns.GetFromPath(_ns.Path())
+		//defer ns.Close()
+		//fmt.Printf("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ {{{{{{{{ currrns2: %v", ns)
+
+		manager := user.BpfManagerInstance()
+		//err = manager.BoxStart(ctx, boxKey, int(netns.Fd()))
+		err = manager.BoxStart(ctx, boxKey, netns.Path())
+		fmt.Println("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ }}}}}}}}")
+
+		return nil
+	})
+
+	/*{containerd/pkg/ns
+	ns := netns.LoadNetNS(path)
+	defer ns.Remove() //TOOD Remove?
+
 
 	// Listuj interfejsy sieciowe w tej przestrzeni sieciowej
 	err = ns.Do(func(_ns cnins.NetNS) error {
 		ifaces, _ := net.Interfaces()
+
 		fmt.Printf("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ Interfaces: %v\n", ifaces)
 
-		fmt.Printf("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ {{{{{{{{")
+		fmt.Println("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ {{{{{{{{ ns:", ns.GetPath())
 		manager := user.BpfManagerInstance()
-		err = manager.BoxStart(ctx, boxKey)
-		fmt.Printf("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ }}}}}}}}")
+		err = manager.BoxStart(ctx, boxKey, int(netns.Fd())
+		fmt.Println("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ }}}}}}}}")
 
 		return nil
 	})
+	}
+	*/
 
 	if err != nil {
 		fmt.Println("Error listing interfaces:", err)
