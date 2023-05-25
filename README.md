@@ -88,5 +88,7 @@ I'll definitely right down here _when_... Not now ;)
 
 # "Big" TODOs
 - [x] ipv6 support
-- [ ] applying Egg policy into selected PODs
+- [ ] applying Egg policy into selected PODs (in progress)
 - [ ] traffic shaping
+- [ ] tests needed :)
+- [ ] CRD refactoring
