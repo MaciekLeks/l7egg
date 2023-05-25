@@ -92,3 +92,4 @@ I'll definitely right down here _when_... Not now ;)
 - [ ] traffic shaping
 - [ ] tests needed :)
 - [ ] CRD refactoring
+- [ ] ingress policies
