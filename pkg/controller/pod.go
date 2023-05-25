@@ -169,6 +169,14 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 			return err
 		}
 
+		nodeHostname, err := tools.GetHostname()
+		if err != nil {
+			return err
+		}
+		podNodeHostname, err := tools.CleanHostame(pod.Spec.NodeName)
+		if err != nil {
+			return err
+		}
 		c.podInfoMap.Store(key, PodInfo{
 			name:          pod.Name,
 			namespace:     pod.Namespace,
@@ -182,12 +190,9 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 		fmt.Printf("!!!!!!!!!!!!!!Add Done: %+v\n", tbd)
 
 		if matched {
-			hostname, err := tools.GetHostname()
-			if err != nil {
-				return err
-			}
-			fmt.Printf("\n!!!!!!!!!!!!!!{ hostname:%s, pod node:%s\n\n", hostname, pod.Spec.NodeName)
-			if hostname == pod.Spec.NodeName {
+
+			fmt.Printf("\n!!!!!!!!!!!!!!{ hostname:%s, pod node:%s\n\n", nodeHostname, podNodeHostname)
+			if nodeHostname == podNodeHostname {
 				tbd.runEgg(ctx, boxKey)
 			} else {
 
