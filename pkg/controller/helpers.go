@@ -46,7 +46,6 @@ func (c *Controller) queueGet(ctx context.Context) (string, bool, error) {
 	case ctxPodValue:
 		obj, quit = c.podQueue.Get()
 	default:
-		fmt.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cav:", cav)
 		return key, quit, fmt.Errorf("expected context value but got %#v", cav)
 	}
 

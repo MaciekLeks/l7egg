@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"github.com/MaciekLeks/l7egg/pkg/tools"
 	"github.com/MaciekLeks/l7egg/pkg/user"
 	"github.com/containerd/containerd"
 	cnins "github.com/containernetworking/plugins/pkg/ns"
@@ -181,9 +182,19 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 		fmt.Printf("!!!!!!!!!!!!!!Add Done: %+v\n", tbd)
 
 		if matched {
-			fmt.Println("!!!!!!!!!!!!!!{")
-			tbd.runEgg(ctx, boxKey)
+			hostname, err := tools.GetHostname()
+			if err != nil {
+				return err
+			}
+			fmt.Printf("\n!!!!!!!!!!!!!!{ hostname:%s, pod node:%s\n\n", hostname, pod.Spec.NodeName)
+			if hostname == pod.Spec.NodeName {
+				tbd.runEgg(ctx, boxKey)
+			} else {
+
+				fmt.Printf("\n!!!!!!!!!!!!!!{ not running in this node\n")
+			}
 			fmt.Println("!!!!!!!!!!!!!!}")
+
 		}
 	}
 
