@@ -130,7 +130,7 @@ static __always_inline void *ipv6_lookup(__u8 ipaddr[16]) {
     };
 
     //TODO: do we need deep copy of the ipaddr for searching?
-    err = bpf_probe_read(key.data, 16, ipaddr);
+    err = bpf_probe_read_kernel(key.data, 16, ipaddr); //bpf_probe_read->bpf_probe_read_kernel
     if (err != 0) {
         bpf_printk("Can't copy memory %d", err);
         return NULL;
@@ -155,7 +155,7 @@ static __always_inline long ipv6_update(__u8 ipaddr[16], struct value_t val) {
             //   .data = ipaddr
     };
 
-    err = bpf_probe_read(key.data, 16, ipaddr);
+    err = bpf_probe_read_kernel(key.data, 16, ipaddr); //bpf_probe_read->bpf_probe_read_kernel
     if (err != 0) {
         bpf_printk("Can't copy memory %d", err);
         return -1; //error
@@ -604,7 +604,7 @@ static __always_inline int cgroup_process(struct __sk_buff *skb, bool is_egress)
                 ret = ipv4_check_and_update((struct iphdr *) pip);
             } else {
                 bpf_printk("[process] /6c");
-                //ret = ipv6_check_and_update((struct ipv6hdr *) pip);
+                ret = ipv6_check_and_update((struct ipv6hdr *) pip);
             }
 
 
