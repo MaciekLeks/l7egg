@@ -7,12 +7,12 @@ spec:
   egressInterface: any
   commonNames:
   - www.onet.pl
-  - .ubuntu.com
-  - bbc.com
+  - cluster.local
   cidrs:
-  - 172.172.34.3/32
-  - 10.0.0.0/24
-  - 2a04:4e42:200::81/128
+  - 10.152.183.0/24
+  - 169.254.1.1/32
+  #- 10.0.2.0/24
+  #- 10.1.231.0/24
   podSelector:
     matchLabels:
       app: tester

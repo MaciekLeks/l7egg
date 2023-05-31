@@ -74,7 +74,8 @@ func newEmptyEgg(clientegg *ClientEgg) *egg {
 	return &egg
 }
 
-func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, netNSPath string) error {
+// run runs the egg, and if neither nsNetPath nor cgroupPath is set, it will run the egg in the current network netspace (tc over cgroup
+func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, netNSPath string, cgroupPath string) error {
 	var err error
 
 	egg.bpfModule, err = bpf.NewModuleFromFile(egg.ClientEgg.BPFObjectPath)
@@ -88,11 +89,21 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, netNSPath string) e
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(-1)
 	}
-
-	err = attachProg(egg.bpfModule, egg.ClientEgg.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
-	must(err, "Can't attach TC hook.")
-	err = attachProg(egg.bpfModule, egg.ClientEgg.EgressInterface, bpf.BPFTcEgress, "tc_egress")
-	must(err, "Can't attach TC hook.")
+	if len(cgroupPath) == 0 {
+		fmt.Println("---------------Attaching TC programs to interfaces.")
+		err = attachProg(egg.bpfModule, egg.ClientEgg.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
+		must(err, "Can't attach TC hook.")
+		err = attachProg(egg.bpfModule, egg.ClientEgg.EgressInterface, bpf.BPFTcEgress, "tc_egress")
+		must(err, "Can't attach TC hook.")
+	} else {
+		fmt.Println("---------------Attaching cgroup programs.")
+		err = attachCgroupProg(egg.bpfModule, "cgroup__skb_egress", bpf.BPFAttachTypeCgroupInetEgress, cgroupPath)
+		must(err, "can't attach cgroup hook")
+		err = attachCgroupProg(egg.bpfModule, "cgroup__skb_ingress", bpf.BPFAttachTypeCgroupInetIngress, cgroupPath)
+		must(err, "can't attach cgroup hook")
+		//err = attachCgroupProg(egg.bpfModule, "cgroup__sock", bpf.BPFAttachTypeCgroupSockOps)
+		//must(err, "can't attach cgroup hook")
+	}
 
 	egg.packets = make(chan []byte) //TODO need Close() on this channel
 
@@ -123,13 +134,18 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, netNSPath string) e
 	go func() {
 		//LIFO
 		defer wg.Done()
-		defer tools.CleanInterfaces(netNSPath, egg.IngressInterface, egg.EgressInterface) //only egress needed
+		defer func() {
+			if len(cgroupPath) == 0 {
+				tools.CleanInterfaces(netNSPath, egg.IngressInterface, egg.EgressInterface)
+			}
+		}()
+		//only egress needed
 		defer egg.bpfModule.Close()
 
 		var lwg sync.WaitGroup
-		runMapLooper(ctx, egg.ipv4ACL, egg.CNs, ipv4, &lwg)
-		runMapLooper(ctx, egg.ipv6ACL, egg.CNs, ipv6, &lwg)
-		egg.runPacketsLooper(ctx, &lwg, egg.packets)
+		runMapLooper(ctx, egg.ipv4ACL, egg.CNs, ipv4, &lwg, netNSPath, cgroupPath)
+		runMapLooper(ctx, egg.ipv6ACL, egg.CNs, ipv6, &lwg, netNSPath, cgroupPath)
+		egg.runPacketsLooper(ctx, &lwg, egg.packets, netNSPath, cgroupPath)
 		lwg.Wait()
 
 		fmt.Println("///Stopping recvLoop.")
@@ -363,11 +379,12 @@ func (egg *egg) updateCNs(cns []CN) error {
 	return nil
 }
 
-func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packets chan []byte) {
+func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packets chan []byte, netNsPath string, cgroupPath string) {
 	lwg.Add(1)
 	go func() {
 		defer lwg.Done()
 		defer fmt.Println("runPacketsLooper terminated")
+		fmt.Println("??????[1]")
 	recvLoop:
 
 		for {
@@ -376,6 +393,7 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 				fmt.Println("[recvLoop]: stopCh closed.")
 				break recvLoop
 			case b, ok := <-packets:
+				fmt.Println("??????[2]")
 				if ok == false {
 					fmt.Println("[recvLoop]: Channel not OK!")
 					break recvLoop
@@ -409,6 +427,8 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 					fmt.Printf("From src port %d to dst port %d\n", udp.SrcPort, udp.DstPort)
 
 					payload = udp.Payload
+				} else {
+					fmt.Println("This is not a TCP or UDP packet!")
 				}
 
 				dnsPacket := gopacket.NewPacket(payload, layers.LayerTypeDNS, gopacket.Default)
@@ -458,7 +478,7 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 									err = updateACLValueNew(egg.ipv6ACL, key, val)
 								}
 								must(err, "Can't update ACL.")
-								fmt.Printf("Updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", cn, ip, ttlSec, ttlNs, bootTtlNs)
+								fmt.Printf("netNsPath: %s cgroupPath: %s - updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", netNsPath, cgroupPath, cn, ip, ttlSec, ttlNs, bootTtlNs)
 
 							} else {
 								fmt.Println("DROP")
@@ -508,7 +528,7 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 	}()
 }
 
-func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns *syncx.SafeSlice[CN], ipv ipProtocolVersion, lwg *sync.WaitGroup) {
+func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns *syncx.SafeSlice[CN], ipv ipProtocolVersion, lwg *sync.WaitGroup, netNsPath string, cgroupPath string) {
 	lwg.Add(1)
 	go func() {
 		defer lwg.Done()
@@ -564,7 +584,7 @@ func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns *syncx.SafeSlice[CN
 
 					//valBytes := ipv4ACL[ipv4LPMKey{1,1}]
 					//fmt.Printf(" [bootTtlNs:%d,bootNs:%d][%s]%s/%d[%d]", ttl, bootNs, expired, ip, prefixLen, val.counter)
-					fmt.Printf("id: %d cn:%s expired:%s ip: %v/%d counter:%d status:%d\n", val.id, cn, expired, ipB, prefixLen, val.counter, val.status)
+					fmt.Printf("netNsPath:%s cgroupPath:%s id: %d cn:%s expired:%s ip: %v/%d counter:%d status:%d\n", netNsPath, cgroupPath, val.id, cn, expired, ipB, prefixLen, val.counter, val.status)
 
 				}
 			}

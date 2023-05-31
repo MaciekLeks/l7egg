@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/tools"
 	"github.com/MaciekLeks/l7egg/pkg/user"
+	cgroupsv2 "github.com/containerd/cgroups/v2"
 	"github.com/containerd/containerd"
 	cnins "github.com/containernetworking/plugins/pkg/ns"
 	corev1 "k8s.io/api/core/v1"
@@ -117,6 +118,10 @@ func getContainerdIDs(css []corev1.ContainerStatus) ([]string, error) {
 	return cids, err
 }
 
+func getContainerdCgroupPath(pid uint32) (string, error) {
+	return cgroupsv2.PidGroupPath(int(pid))
+}
+
 func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "namespace", pod.Namespace, "name", pod.Name)
 	logger.Info("Update pod info.")
@@ -178,11 +183,12 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 			return err
 		}
 		c.podInfoMap.Store(key, PodInfo{
-			name:          pod.Name,
-			namespace:     pod.Namespace,
-			labels:        pod.Labels,
-			nodeName:      pod.Spec.NodeName,
-			containerIDs:  containerdIDs,
+			name:         pod.Name,
+			namespace:    pod.Namespace,
+			labels:       pod.Labels,
+			nodeName:     pod.Spec.NodeName,
+			containerIDs: containerdIDs,
+			//containerCgroupPaths:
 			matchedKeyBox: boxKey,
 		})
 
@@ -304,6 +310,15 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey string) {
 	// Wyświetl PID procesu init kontenera.
 	fmt.Println("@@@@@@@@@@@ Container PID: %d", pid)
 
+	cgroupPath, err := getContainerdCgroupPath(pid) //cgroup over tc programs
+	//cgroupPath, err := "", nil //tc only
+	if err != nil {
+		fmt.Printf("cgroup path error: %v", err)
+		return
+	}
+
+	fmt.Println("############# cgroupPath: ", cgroupPath)
+
 	path := fmt.Sprintf("/proc/%d/ns/net", pid)
 	netns, err := cnins.GetNS(path)
 	defer netns.Close()
@@ -330,7 +345,7 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey string) {
 
 		manager := user.BpfManagerInstance()
 		//err = manager.BoxStart(ctx, boxKey, int(netns.Fd()))
-		err = manager.BoxStart(ctx, boxKey, netns.Path())
+		err = manager.BoxStart(ctx, boxKey, netns.Path(), cgroupPath)
 		fmt.Println("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ }}}}}}}}")
 
 		return nil

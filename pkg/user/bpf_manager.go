@@ -235,7 +235,7 @@ func (m *clientEggManager) BoxStore(boxKey string, clientegg *ClientEgg) {
 }
 
 // BoxStart box
-func (m *clientEggManager) BoxStart(ctx context.Context, boxKey string, netNsPath string) error {
+func (m *clientEggManager) BoxStart(ctx context.Context, boxKey string, netNsPath string, cgroupPath string) error {
 	box, found := m.getBox(boxKey)
 	if !found {
 		return fmt.Errorf("box '%s' not found\n", boxKey)
@@ -251,7 +251,7 @@ func (m *clientEggManager) BoxStart(ctx context.Context, boxKey string, netNsPat
 
 	m.boxes.Store(boxKey, box)
 
-	return box.egg.run(subCtx, &subWaitGroup, netNsPath)
+	return box.egg.run(subCtx, &subWaitGroup, netNsPath, cgroupPath)
 }
 
 // Stop Stops one box

@@ -48,7 +48,7 @@ func main() {
 	}
 	ctx := tools.SetupSignalHandler()
 
-	manager.BoxStart(ctx, defaultBoxKey, "")
+	manager.BoxStart(ctx, defaultBoxKey, "", "")
 	manager.Wait()
 
 }

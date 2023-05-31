@@ -137,7 +137,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 	if len(podLabels) == 0 {
 		// cluster scope cegg
 		logger.Info("Staring box with cegg.", "box", boxKey)
-		err = manager.BoxStart(ctx, boxKey, "")
+		err = manager.BoxStart(ctx, boxKey, "", "")
 		if err != nil {
 			return fmt.Errorf("starting clusteregg '%s': %s", cegg.Name, err.Error())
 		}
