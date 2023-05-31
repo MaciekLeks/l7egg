@@ -652,7 +652,6 @@ static __always_inline int cgroup_process(struct __sk_buff *skb, bool is_egress)
             return 1;
 
 
-
         bpf_printk("[DNS] a.header.flags|1 = rd:%u tc:%u opcode:%u qr:%u", dns.rd, dns.tc, dns.opcode, dns.qr);
         bpf_printk("[DNS] a.header.flag|2 = rcode:%u cd:%u ad:%u z:%u", dns.rcode, dns.cd, dns.ad, dns.z);
         bpf_printk("[DNS] a.header.flag|3 = ra:%u", dns.ra);
@@ -660,31 +659,38 @@ static __always_inline int cgroup_process(struct __sk_buff *skb, bool is_egress)
                    bpf_htons(dns.add_count));
         //}dns
 
-        long ok;
+        long err;
         struct packet *valp;
         valp = bpf_ringbuf_reserve(&packets, sizeof(struct packet), ringbuffer_flags);
         if (!valp) {
             return 1;
         }
-        void *pto = valp->data;
+        //__u32 dns_packet_len = skb->len - ETH_HLEN - l3_hlen - l4_hlen + DNS_HLEN;
+        __u32 dns_packet_len = skb->len + ETH_HLEN; //cgroup_skb program skb->len does not contain ETH_HLEN
 
-        //const __u32 dns_packet_len = skb->len - ETH_HLEN - l3_hlen - l4_hlen + DNS_HLEN;
-        const __u32 dns_packet_len = skb->len;
-        if (dns_packet_len > 0 && dns_packet_len < ETH_FRAME_LEN) {
-//
-      //      ok = bpf_skb_load_bytes(skb, offset, pto, dns_packet_len); //ok
-     //       ok = bpf_skb_load_bytes(skb, 0, pto, dns_packet_len); //ok
-            valp->len = dns_packet_len;
+        if (dns_packet_len > ETH_FRAME_LEN) {
+            dns_packet_len = ETH_FRAME_LEN;
+        }
+        if (dns_packet_len < 1) {
+            //bpf_ringbuf_discard(valp, ringbuffer_flags);
+            //return 1;
+            dns_packet_len = 1; //see: https://stackoverflow.com/questions/76371104/bpf-skb-load-bytes-array-loading-when-len-could-be-0-invalid-access-to-memor
+        }
+        //err = bpf_skb_load_bytes(skb, 0, valp->data, dns_packet_len ); //ok
+        //       ok = bpf_skb_load_bytes(skb, 0, pto, dns_packet_len); //ok
+
+        err = bpf_skb_load_bytes_relative(skb, 0, valp->data, dns_packet_len, BPF_HDR_START_MAC);
+        valp->len = dns_packet_len;
 ////        // err = bpf_skb_load_bytes_relative(skb, 0, valp->data, len, BPF_HDR_START_MAC);
-        /*    if (!ok) {
-                bpf_printk("[DNS] packet discarded-1 from packets ringbuffer, len:%d offset:%d p:%p ok:%d",
-                           dns_packet_len, offset, valp->data, ok);
-                bpf_ringbuf_discard(valp, ringbuffer_flags); //memory not consumed
-                return 1;
-            }
-            */
+        if (err) {
+            bpf_printk("[DNS] packet discarded-1 from packets ringbuffer, len:%d offset:%d p:%p ok:%d",
+                       dns_packet_len, offset, valp->data, err);
+            bpf_ringbuf_discard(valp, ringbuffer_flags); //memory not consumed
+            return 1;
+        }
 
-            // load whole package in ebpf group program into struct packet
+
+        // load whole package in ebpf group program into struct packet
 /*
         err = bpf_probe_read_kernel(valp->data, len,  (void *) (long) skb->data); //ok
         err = bpf_skb_load_bytes(skb, 0, &valp->data[0], len); //ok
@@ -693,21 +699,19 @@ static __always_inline int cgroup_process(struct __sk_buff *skb, bool is_egress)
             return 0;
         }
 */
-
-            bpf_printk("[DNS] packet added into packets ringbuffer, len:%d offset:%d ", dns_packet_len, offset);
-
-            //bpf_printk("[!!!] len:%d, data:%x, valp.data:%x ", valp->len, *(__u8 *) (long) data, valp->data[0]);
-
-            bpf_ringbuf_submit(valp, ringbuffer_flags);
-
-            offset += sizeof(struct dnshdr);
-        } else {
-            bpf_printk("[DNS] packet discarded-2 from packets ringbuffer, len:%d offset:%d ", dns_packet_len, offset);
+        //bpf_printk("[!!!] len:%d, data:%x, valp.data:%x ", valp->len, *(__u8 *) (long) data, valp->data[0]);
+        void *data = (void *) (long) skb->data;
+        void *data_end = (void *) (long) skb->data_end;
+        if (data + ETH_HLEN  > data_end) {
             bpf_ringbuf_discard(valp, ringbuffer_flags); //memory not consumed
+            return 1;
         }
-        return 1;
-    }
 
+        bpf_printk("[DNS] packet in ringbuffer, len:%d; data:%x%x%x%x" , dns_packet_len, *(__u8*)data, *(__u8*)(data+1), *(__u8*)(data+2), *(__u8*)(data+3));
+        bpf_ringbuf_submit(valp, ringbuffer_flags);
+
+        offset += sizeof(struct dnshdr);
+    }
     return 1;
 }
 

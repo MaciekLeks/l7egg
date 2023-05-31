@@ -13,6 +13,7 @@ import "C"
 import (
 	"context"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	"github.com/MaciekLeks/l7egg/pkg/tools"
@@ -408,9 +409,11 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 				packet := gopacket.NewPacket(data, layers.LayerTypeEthernet, gopacket.Default)
 				// BpfManagerInstance the TCP layer from this packet
 
-				//for _, l := range packet.Layers() {
-				//	fmt.Println("Layer:", l.LayerType())
-				//}
+				for _, l := range packet.Layers() {
+					fmt.Println("Layer:", l.LayerType())
+				}
+
+				fmt.Printf("packet:%s\n", hex.EncodeToString(packet.Data()))
 
 				var payload []byte
 				if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
@@ -515,6 +518,8 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 						//}
 
 					}
+				} else {
+					fmt.Println("This is not a DNS packet!:/")
 				}
 
 				//numberOfEventsReceived++
