@@ -31,7 +31,7 @@ import (
 
 type egg struct {
 	// Depreciated: should all part of egg struct
-	ClientEgg //TOOD remove from here
+	CEggInfo  //TOOD remove from here
 	bpfModule *bpf.Module
 	ipv4ACL   *bpf.BPFMap
 	ipv6ACL   *bpf.BPFMap
@@ -40,11 +40,11 @@ type egg struct {
 }
 
 // depreciated
-func newEgg(clientegg *ClientEgg) *egg {
+func newEgg(clientegg *CEggInfo) *egg {
 	var egg egg
 	var err error
 
-	egg.ClientEgg = *clientegg //TOOD no needed
+	egg.CEggInfo = *clientegg //TOOD no needed
 	egg.bpfModule, err = bpf.NewModuleFromFile(clientegg.BPFObjectPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -67,10 +67,10 @@ func newEgg(clientegg *ClientEgg) *egg {
 	return &egg
 }
 
-func newEmptyEgg(clientegg *ClientEgg) *egg {
+func newEmptyEgg(clientegg *CEggInfo) *egg {
 	var egg egg
 
-	egg.ClientEgg = *clientegg
+	egg.CEggInfo = *clientegg
 
 	return &egg
 }
@@ -79,7 +79,7 @@ func newEmptyEgg(clientegg *ClientEgg) *egg {
 func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, netNSPath string, cgroupPath string) error {
 	var err error
 
-	egg.bpfModule, err = bpf.NewModuleFromFile(egg.ClientEgg.BPFObjectPath)
+	egg.bpfModule, err = bpf.NewModuleFromFile(egg.CEggInfo.BPFObjectPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(-1)
@@ -92,9 +92,9 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, netNSPath string, c
 	}
 	if len(cgroupPath) == 0 {
 		fmt.Println("---------------Attaching TC programs to interfaces.")
-		err = attachProg(egg.bpfModule, egg.ClientEgg.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
+		err = attachProg(egg.bpfModule, egg.CEggInfo.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
 		must(err, "Can't attach TC hook.")
-		err = attachProg(egg.bpfModule, egg.ClientEgg.EgressInterface, bpf.BPFTcEgress, "tc_egress")
+		err = attachProg(egg.bpfModule, egg.CEggInfo.EgressInterface, bpf.BPFTcEgress, "tc_egress")
 		must(err, "Can't attach TC hook.")
 	} else {
 		fmt.Println("---------------Attaching cgroup programs.")

@@ -10,14 +10,14 @@ import (
 )
 
 type IClientEggManager interface {
-	Start(context.Context, string, *ClientEgg)
+	Start(context.Context, string, *CEggInfo)
 	Stop(string)
 	Wait()
 	UpdateCIDRs([]string)
 	Exists(string)
 }
 
-type ClientEgg struct {
+type CEggInfo struct {
 	CNs              *syncx.SafeSlice[CN]
 	CIDRs            []*CIDR
 	IngressInterface string
@@ -26,7 +26,7 @@ type ClientEgg struct {
 	PodLabels        map[string]string
 }
 
-// clientEggManager holds ClientEgg and steering variables (stopFunc to stop it from the controller witout stopping the controller iself).
+// clientEggManager holds CEggInfo and steering variables (stopFunc to stop it from the controller witout stopping the controller iself).
 // waitGroup synchronize bpf main groutine starting from user.run function
 type clientEggBox struct {
 	stopFunc  context.CancelFunc
@@ -142,7 +142,7 @@ func BpfManagerInstance() *clientEggManager {
 	return instance
 }
 
-func parseClientEgg(clientegg *ClientEgg) {
+func parseClientEgg(clientegg *CEggInfo) {
 
 }
 
@@ -200,7 +200,7 @@ func (m *clientEggManager) BoxAny(f func(keyBox string, ibox IClientEggBox) bool
 	return foundBox, found
 }
 
-func (m *clientEggManager) NewClientEgg(iiface string, eiface string, cnsS []string, cidrsS []string, podLabels map[string]string) (*ClientEgg, error) {
+func (m *clientEggManager) NewClientEgg(iiface string, eiface string, cnsS []string, cidrsS []string, podLabels map[string]string) (*CEggInfo, error) {
 	cidrs, err := m.parseCIDRs(cidrsS)
 	if err != nil {
 		fmt.Errorf("Parsing input data %#v", err)
@@ -215,7 +215,7 @@ func (m *clientEggManager) NewClientEgg(iiface string, eiface string, cnsS []str
 	safeCNs := syncx.SafeSlice[CN]{}
 	safeCNs.Append(cns...)
 
-	clientegg := &ClientEgg{ //TODO make a function to wrap this up (parsing, building the object)
+	clientegg := &CEggInfo{ //TODO make a function to wrap this up (parsing, building the object)
 		IngressInterface: iiface,
 		EgressInterface:  eiface,
 		CNs:              &safeCNs,
@@ -226,11 +226,12 @@ func (m *clientEggManager) NewClientEgg(iiface string, eiface string, cnsS []str
 	return clientegg, nil
 }
 
-// BoxStore box but not run it
-func (m *clientEggManager) BoxStore(boxKey string, clientegg *ClientEgg) {
+// BoxStore stores a box but not run it
+func (m *clientEggManager) BoxStore(boxKey string, clientegg *CEggInfo) {
 	egg := newEmptyEgg(clientegg)
 	var box clientEggBox
 	box.egg = egg
+	fmt.Println("*************** storing box:", boxKey)
 	m.boxes.Store(boxKey, &box)
 }
 

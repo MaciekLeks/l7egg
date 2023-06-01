@@ -141,6 +141,7 @@ func NewController(ctx context.Context,
 func (c *Controller) Run(ctx context.Context, ceggWorkers int, podWorkers int) error {
 	defer utilruntime.HandleCrash()
 	defer c.ceggQueue.ShutDown()
+	defer c.podQueue.ShutDown()
 	logger := klog.FromContext(ctx)
 
 	logger.Info("Starting l7egg controller.")
@@ -187,7 +188,7 @@ func (c *Controller) runWorker(ctx context.Context) {
 	}
 }
 
-// processNextWorkItem will read a single work item off the ceggQueue and
+// processNextWorkItem will read a single work item off a queue and
 // attempt to process it, by calling the syncHandler.
 func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 

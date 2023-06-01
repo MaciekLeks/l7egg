@@ -18,7 +18,6 @@ import (
 	"net"
 	"os"
 	"strings"
-	"sync"
 )
 
 // PodInfo holds POD crucial metadata.
@@ -33,20 +32,24 @@ type PodInfo struct {
 }
 
 // PodInfoMap maps Pod namespace name to PodInfo
-type PodInfoMap sync.Map
+//type PodInfoMap sync.Map
 
 func (c *Controller) handlePodAdd(obj interface{}) {
+	//fmt.Println("******************* handlePodAdd, listerSynced:", c.podCacheSynced())
 	c.enqueuePod(obj)
 }
 
 func (c *Controller) handlePodDelete(obj interface{}) {
+	//fmt.Println("******************* handlePodDelete, listerSynced:", c.podCacheSynced())
 	c.enqueuePod(obj)
 }
 
 func (c *Controller) handlePodUpdate(prev interface{}, obj interface{}) {
+	//fmt.Println("******************* handlePodUpdate-cache , listerSynced:", c.podCacheSynced())
 	podPrev := prev.(*corev1.Pod)
 	pod := obj.(*corev1.Pod)
 	if podPrev.GetResourceVersion() != pod.GetResourceVersion() {
+		fmt.Println("******************* handlePodUpdate-change, listerSynced:", c.podCacheSynced())
 		//handle only update not sync event
 		c.enqueuePod(obj)
 	}
@@ -128,22 +131,22 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 
 	key := types.NamespacedName{pod.Namespace, pod.Name}
 	if pi, ok := c.podInfoMap.Load(key); ok {
-		fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!Update not add")
+		fmt.Println("***************************Update not add")
 
 		boxKey, _ := c.checkEggMach(pod)
 		if pi.matchedKeyBox != boxKey {
 			if pi.matchedKeyBox != "" {
 				if boxKey == "" {
-					fmt.Println("-----Update Egg to remove to from the egg")
+					fmt.Println("****************** Update Egg to remove to from the egg")
 				} else {
-					fmt.Println("-----Update Egg to be changed or only policy has changed")
+					fmt.Println("*****************Update Egg to be changed or only policy has changed")
 				}
 			} else {
-				fmt.Println("-----Update: A new egg to be applied on the pod")
+				fmt.Println("*******************Update: A new egg to be applied on the pod")
 			}
 
 		} else {
-			fmt.Println("-----Update: Do nothing keyBox and pi.matchedKeyBox equals (-,-) or (x,x)")
+			fmt.Println("***********************Update: Do nothing keyBox and pi.matchedKeyBox equals (-,-) or (x,x)")
 		}
 
 		containerdIDs, err := getContainerdIDs(pod.Status.ContainerStatuses)
@@ -161,12 +164,12 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 		})
 
 		tbd, _ := c.podInfoMap.Load(key) //test only
-		fmt.Printf("!!!!!!!!!!!!!!Update Done: %+v\n", tbd)
+		fmt.Printf("************************Update Done: %+v\n", tbd)
 
 	} else { //ADD
 		boxKey, matched := c.checkEggMach(pod)
 		if matched {
-			fmt.Println("!!!!!!!!!Found key box matching new pod")
+			fmt.Println("************************Found key box matching new pod")
 		}
 
 		containerdIDs, err := getContainerdIDs(pod.Status.ContainerStatuses)
@@ -193,18 +196,18 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 		})
 
 		tbd, _ := c.podInfoMap.Load(key) //test only
-		fmt.Printf("!!!!!!!!!!!!!!Add Done: %+v\n", tbd)
+		fmt.Printf("********************Add Done: %+v\n", tbd)
 
 		if matched {
 
-			fmt.Printf("\n!!!!!!!!!!!!!!{ hostname:%s, pod node:%s\n\n", nodeHostname, podNodeHostname)
+			fmt.Printf("\n*******************{  Startin egg - hostname:%s, pod node:%s\n\n", nodeHostname, podNodeHostname)
 			if nodeHostname == podNodeHostname {
 				tbd.runEgg(ctx, boxKey)
 			} else {
 
-				fmt.Printf("\n!!!!!!!!!!!!!!{ not running in this node\n")
+				fmt.Printf("\n****************{ not running in this node\n")
 			}
-			fmt.Println("!!!!!!!!!!!!!!}")
+			fmt.Println("**********************}")
 
 		}
 	}
@@ -249,8 +252,10 @@ func (c *Controller) checkEggMach(pod *corev1.Pod) (string, bool) {
 	manager := user.BpfManagerInstance()
 	podLabels := labels.Set(pod.Labels)
 
+	fmt.Println("****************** +++++ checkEggMach podCacheSynced:%t ceggCacheSynced:%t", c.podCacheSynced(), c.podCacheSynced())
+
 	manager.BoxAny(func(key string, box user.IClientEggBox) bool {
-		eggPodLabels := box.GetEgg().ClientEgg.PodLabels
+		eggPodLabels := box.GetEgg().CEggInfo.PodLabels
 		fmt.Println("+++++ eggPodLabels:", eggPodLabels)
 		if len(eggPodLabels) > 0 {
 			selector := labels.Set(eggPodLabels).AsSelectorPreValidated()
@@ -311,8 +316,8 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey string) {
 	fmt.Println("@@@@@@@@@@@ Container PID: %d", pid)
 
 	// cgroup or tc - comment cgroup (set to "") to make tc over cgroup?
-	//cgroupPath, err := getContainerdCgroupPath(pid) //cgroup over tc programs
-	cgroupPath, err := "", nil //tc only
+	cgroupPath, err := getContainerdCgroupPath(pid) //cgroup over tc programs
+	//cgroupPath, err := "", nil //tc only
 	if err != nil {
 		fmt.Printf("cgroup path error: %v", err)
 		return
