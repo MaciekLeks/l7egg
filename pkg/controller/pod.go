@@ -310,8 +310,9 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey string) {
 	// Wyświetl PID procesu init kontenera.
 	fmt.Println("@@@@@@@@@@@ Container PID: %d", pid)
 
-	cgroupPath, err := getContainerdCgroupPath(pid) //cgroup over tc programs
-	//cgroupPath, err := "", nil //tc only
+	// cgroup or tc - comment cgroup (set to "") to make tc over cgroup?
+	//cgroupPath, err := getContainerdCgroupPath(pid) //cgroup over tc programs
+	cgroupPath, err := "", nil //tc only
 	if err != nil {
 		fmt.Printf("cgroup path error: %v", err)
 		return

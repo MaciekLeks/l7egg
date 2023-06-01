@@ -270,6 +270,7 @@ static __always_inline int ipv6_check_and_update(struct ipv6hdr *ipv6) {
     return TC_MOVE_ONE; //process further inside bpf
 }
 
+// depreciated - use process_relative instead
 static __always_inline int process(struct __sk_buff *skb, bool is_egress) {
     void *data = (void *) (long) skb->data;
     void *data_end = (void *) (long) skb->data_end;
@@ -479,20 +480,255 @@ static __always_inline int process(struct __sk_buff *skb, bool is_egress) {
     return 0;
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// packet processing for either tc o cgroup programs; cgroup skb->data points to L3 header while in tc to L2
+static __always_inline int
+process_relative(struct __sk_buff *skb, enum bpf_hdr_start_off hdr_start_off, bool is_egress) {
+    void *data = (void *) (long) skb->data;
+    void *data_end = (void *) (long) skb->data_end;
+    int off = 0;
+    bool is_ipv6 = false;
+    __u8 protocol;
+
+    //L2
+    bpf_printk("[process] /1");
+
+    // common for all hdr_start_off(s)
+    if (skb->protocol == bpf_htons(ETH_P_IPv6)) {
+        bpf_printk("[IPv6] --- ipv6");
+        is_ipv6 = true;
+    } else if (skb->protocol == bpf_htons(ETH_P_IPv4)) {
+        bpf_printk("[IPv4] --- ipv4");
+    } else {
+        bpf_printk("[???] --- L3 protocol not known");
+        return 1;
+    }
+
+    if (hdr_start_off == BPF_HDR_START_MAC) {
+        if (data + ETH_HLEN > data_end)
+            return 0;
+        off = ETH_HLEN; //off for tc must be moved ETH_HLEN octets forward
+    }
+
+    //L3
+    bpf_printk("[process] /2");
+
+
+    //struct iphdr *ip = (data + off);
+    __u8 version = *(__u8 * )(
+    long)(data + off) & 0xF0 >> 2;
+    if (data + off + sizeof(__u8) > data_end) {
+        return 0;
+    }
+    if (is_ipv6 && version != 6) {
+        bpf_printk("[IPv6] --- version:%d", version);
+        return 0;
+    } else if (version != 4) {
+        bpf_printk("[IPv4] --- version:%d!=%d", version, 4);
+        return 0;
+    }
+
+
+    bpf_printk("[process] /3");
+
+    __u16 ihl;
+    if (!is_ipv6) {
+        struct iphdr *ipv4 = (data + off);
+        if (data + off + sizeof(struct iphdr) > data_end)
+            return 0;
+        ihl = (ipv4->ihl & 0xF) << 2;
+        if (data + off + ihl > data_end)
+            return 0;
+        protocol = ipv4->protocol;
+        bpf_printk("[IPv4] --- protocol:%d", protocol);
+    } else {
+        struct ipv6hdr *ipv6 = data + off;
+        ihl = sizeof(struct ipv6hdr);
+        if (data + off + ihl > data_end) {
+            return 0;
+        }
+        protocol = ipv6->nexthdr;
+        bpf_printk("[IPv6] --- protocol:%d", protocol);
+    }
+
+    bpf_printk("[process] /4");
+//    //TODO done to this place
+//    if (is_ipv6) {
+//        return 0; //TODO REMOVE
+//    }
+
+    // ip header pointer to either iphdr or ipv6hdr
+    struct iphdr *ip = (data + off);
+
+    bpf_printk("[process] /5");
+    //L4
+    __u16 sport = 0;
+    __u16 dport = 0;
+    off += ihl;
+    /* We handle only UDP traffic */
+    if (protocol == IPPROTO_UDP) {
+        if (data + off + sizeof(struct udphdr) > data_end)
+            return 0;
+
+        struct udphdr *udp = (data + off);
+        off += sizeof(struct udphdr);
+
+        // bpf_printk("ip.protocol:%d, ihl:%d, off:%d", ip->protocol, ihl, ETH_HLEN + ihl);
+        sport = bpf_ntohs(udp->source);
+        dport = bpf_ntohs(udp->dest);
+        bpf_printk("[UDP] sport:%d, dport:%d", sport, dport);
+    } else if (protocol == IPPROTO_TCP) {
+        if (data + off + sizeof(struct tcphdr) > data_end)
+            return 0;
+
+        struct tcphdr *tcp = (data + off);
+        off += sizeof(struct tcphdr);
+
+
+        //bpf_printk("ip.protocol:%d, ihl:%d, off:%d", ip->protocol, ihl, ETH_HLEN + ihl);
+
+        sport = bpf_ntohs(tcp->source);
+        dport = bpf_ntohs(tcp->dest);
+
+        bpf_printk("[TCP] sport:%d, dport:%d", sport, dport);
+    } else
+        return 0;
+
+    bpf_printk("[process] /6");
+
+    //TODO: what about different ports? see: https://stackoverflow.com/questions/7565300/identifying-dns-packets
+    if (sport != 53 && dport != 53) {
+
+        if (is_egress) {
+            int ret;
+            if (!is_ipv6) {
+                ret = ipv4_check_and_update((struct iphdr *) ip);
+            } else {
+                ret = ipv6_check_and_update((struct ipv6hdr *) ip);
+            }
+
+            if (ret != TC_MOVE_ONE)
+                return ret;
+        }
+        return 0;
+
+    }
+
+    bpf_printk("[process] /7");
+//    // Reserve space on the ringbuffer for the sample
+//    __u32 len = skb->len;
+////    if (len > ETH_FRAME_LEN)
+////        return 0;
+//    __u32  len_size =sizeof(skb->len);
+
+//    check only for dnq query
+    if (is_egress && dport == 53) { //only answers matters
+        const __u32 len = skb->len;
+        if (len > ETH_FRAME_LEN)
+            return 0;
+
+        //{dns deep dive
+        if (data + off + sizeof(struct dnshdr) > data_end)
+            return 0;
+
+        struct dnshdr *dnshp = (data + off);
+        off += sizeof(struct dnshdr);
+        bpf_printk("[DNS] q.header.flags|1 = rd:%u tc:%u opcode:%u qr:%u", dnshp->rd, dnshp->tc, dnshp->opcode,
+                   dnshp->qr);
+        bpf_printk("[DNS] q.header.flag|2 = rcode:%u cd:%u ad:%u z:%u", dnshp->rcode, dnshp->cd, dnshp->ad, dnshp->z);
+        bpf_printk("[DNS] q.header.flag|3 = ra:%u", dnshp->ra);
+        bpf_printk("[DNS] q. qdcount:%u nscount: %u, arcount:%u", bpf_htons(dnshp->q_count),
+                   bpf_htons(dnshp->ans_count), bpf_htons(dnshp->add_count));
+        //}dns
+    }
+
+    bpf_printk("[process] /8");
+
+    if (!is_egress && sport == 53) { //only answers matters
+        __u32 len = skb->len;
+
+
+        //{dns deep dive
+        if (data + off + sizeof(struct dnshdr) > data_end)
+            return 0;
+
+        struct dnshdr *dnshp = (data + off);
+        off += sizeof(struct dnshdr);
+        bpf_printk("[DNS] a.header.flags|1 = rd:%u tc:%u opcode:%u qr:%u", dnshp->rd, dnshp->tc, dnshp->opcode,
+                   dnshp->qr);
+        bpf_printk("[DNS] a.header.flag|2 = rcode:%u cd:%u ad:%u z:%u", dnshp->rcode, dnshp->cd, dnshp->ad, dnshp->z);
+        bpf_printk("[DNS] a.header.flag|3 = ra:%u", dnshp->ra);
+        bpf_printk("[DNS] a. qdcount:%u nscount: %u, arcount:%u", bpf_htons(dnshp->q_count),
+                   bpf_htons(dnshp->ans_count), bpf_htons(dnshp->add_count));
+        //}dns
+
+
+        struct packet *valp;
+        valp = bpf_ringbuf_reserve(&packets, sizeof(struct packet), ringbuffer_flags);
+        if (!valp) {
+            return 0;
+        }
+
+        //bpf_printk("[###] data[0]:%x,%x, len: %d", eth->h_dest[0], eth->h_dest[1], data_end - data);
+
+        long err;
+        if (hdr_start_off == BPF_HDR_START_MAC) {
+            bpf_printk("[DNS]  len=%d", len);
+            if (len > ETH_FRAME_LEN) {
+                len = ETH_FRAME_LEN;
+            }
+            err = bpf_probe_read_kernel(valp->data, len, data); //ok
+        } else {
+            bpf_printk("[DNS] before len=%d", len);
+            len += ETH_HLEN; //cgroup_skb program skb->len does not contain ETH_HLEN
+            bpf_printk("[DNS] after len=%d",len);
+            if (len > ETH_FRAME_LEN) {
+                len = ETH_FRAME_LEN;
+            }
+            if (len < 1) {
+                len = 1; //see: https://stackoverflow.com/questions/76371104/bpf-skb-load-bytes-array-loading-when-len-could-be-0-invalid-access-to-memor
+            }
+            err = bpf_skb_load_bytes_relative(skb, 0, valp->data, len, BPF_HDR_START_MAC);
+        }
+        if (err) { //!err -> err
+            bpf_ringbuf_discard(valp, ringbuffer_flags); //memory not consumed
+            return 0;
+        }
+
+
+        bpf_printk("[DNS] packet added into packets ringbuffer len=%d", len);
+
+        //bpf_printk("[!!!] len:%d, data:%x, valp.data:%x ", valp->len, *(__u8 *) (long) data, valp->data[0]);
+
+        valp->len = len;
+        bpf_ringbuf_submit(valp, ringbuffer_flags);
+    }
+
+    return 0;
+}
+
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 
 SEC("tc")
 int tc_ingress(struct __sk_buff *skb) {
-    return process(skb, false);
+    //return process(skb, false);
+    return process_relative(skb, BPF_HDR_START_MAC, false);
 }
 
 SEC("tc")
 int tc_egress(struct __sk_buff *skb) {
     //return firewall(skb);
-    return process(skb, true);
-
+    //return process(skb, true);
+    return process_relative(skb, BPF_HDR_START_MAC, true);
 }
 
-
+// depreciated - use process_relative instead
 static __always_inline int cgroup_process(struct __sk_buff *skb, bool is_egress) {
     bool is_ipv6 = false;
     __u8 l4_protocol;
@@ -702,12 +938,13 @@ static __always_inline int cgroup_process(struct __sk_buff *skb, bool is_egress)
         //bpf_printk("[!!!] len:%d, data:%x, valp.data:%x ", valp->len, *(__u8 *) (long) data, valp->data[0]);
         void *data = (void *) (long) skb->data;
         void *data_end = (void *) (long) skb->data_end;
-        if (data + ETH_HLEN  > data_end) {
+        if (data + ETH_HLEN > data_end) {
             bpf_ringbuf_discard(valp, ringbuffer_flags); //memory not consumed
             return 1;
         }
 
-        bpf_printk("[DNS] packet in ringbuffer, len:%d; data:%x%x%x%x" , dns_packet_len, *(__u8*)data, *(__u8*)(data+1), *(__u8*)(data+2), *(__u8*)(data+3));
+        bpf_printk("[DNS] packet in ringbuffer, len:%d; data:%x%x%x%x", dns_packet_len, *(__u8 *) data,
+                   *(__u8 * )(data + 1), *(__u8 * )(data + 2), *(__u8 * )(data + 3));
         bpf_ringbuf_submit(valp, ringbuffer_flags);
 
         offset += sizeof(struct dnshdr);
@@ -719,7 +956,10 @@ static __always_inline int cgroup_process(struct __sk_buff *skb, bool is_egress)
 SEC("cgroup_skb/ingress")
 int cgroup__skb_ingress(struct __sk_buff *skb) {
 
-    return cgroup_process(skb, false);
+    //return cgroup_process(skb, false);
+    int ret;
+    ret = process_relative(skb, BPF_HDR_START_NET, false);
+    return (ret == 0) ? 1 : 0;
 
 //    bpf_printk("[cgroup] ingress");
 //
@@ -752,7 +992,10 @@ int cgroup__skb_ingress(struct __sk_buff *skb) {
 SEC("cgroup_skb/egress")
 int cgroup__skb_egress(struct __sk_buff *skb) {
 
-    return cgroup_process(skb, true);
+    //return cgroup_process(skb, true);
+    int ret;
+    ret = process_relative(skb, BPF_HDR_START_NET, true);
+    return (ret == 0) ? 1 : 0;
 
 //    bpf_printk("[cgroup] egress");
 //
