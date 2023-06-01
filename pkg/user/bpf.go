@@ -40,12 +40,12 @@ type egg struct {
 }
 
 // depreciated
-func newEgg(clientegg *CEggInfo) *egg {
+func newEgg(ceggi *CEggInfo) *egg {
 	var egg egg
 	var err error
 
-	egg.CEggInfo = *clientegg //TOOD no needed
-	egg.bpfModule, err = bpf.NewModuleFromFile(clientegg.BPFObjectPath)
+	egg.CEggInfo = *ceggi //TOOD no needed
+	egg.bpfModule, err = bpf.NewModuleFromFile(ceggi.BPFObjectPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(-1)
@@ -57,9 +57,9 @@ func newEgg(clientegg *CEggInfo) *egg {
 		os.Exit(-1)
 	}
 
-	err = attachProg(egg.bpfModule, clientegg.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
+	err = attachProg(egg.bpfModule, ceggi.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
 	must(err, "Can't attach TC hook.")
-	err = attachProg(egg.bpfModule, clientegg.EgressInterface, bpf.BPFTcEgress, "tc_egress")
+	err = attachProg(egg.bpfModule, ceggi.EgressInterface, bpf.BPFTcEgress, "tc_egress")
 	must(err, "Can't attach TC hook.")
 
 	egg.packets = make(chan []byte) //TODO need Close() on this channel
@@ -67,10 +67,10 @@ func newEgg(clientegg *CEggInfo) *egg {
 	return &egg
 }
 
-func newEmptyEgg(clientegg *CEggInfo) *egg {
+func newEmptyEgg(ceggi *CEggInfo) *egg {
 	var egg egg
 
-	egg.CEggInfo = *clientegg
+	egg.CEggInfo = *ceggi
 
 	return &egg
 }
