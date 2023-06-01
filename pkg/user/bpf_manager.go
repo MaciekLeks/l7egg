@@ -200,7 +200,7 @@ func (m *clientEggManager) BoxAny(f func(keyBox string, ibox IClientEggBox) bool
 	return foundBox, found
 }
 
-func (m *clientEggManager) NewClientEgg(iiface string, eiface string, cnsS []string, cidrsS []string, podLabels map[string]string) (*CEggInfo, error) {
+func (m *clientEggManager) NewCEggInfo(iiface string, eiface string, cnsS []string, cidrsS []string, podLabels map[string]string) (*CEggInfo, error) {
 	cidrs, err := m.parseCIDRs(cidrsS)
 	if err != nil {
 		fmt.Errorf("Parsing input data %#v", err)

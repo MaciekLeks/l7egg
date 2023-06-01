@@ -125,13 +125,13 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 		iiface = "eth0" //TODO #
 		eiface = "eth0" //TODO #
 	}
-	clientegg, err := manager.NewClientEgg(iiface, eiface, cegg.Spec.CommonNames, cegg.Spec.CIDRs, podLabels)
+	ceggi, err := manager.NewCEggInfo(iiface, eiface, cegg.Spec.CommonNames, cegg.Spec.CIDRs, podLabels)
 	if err != nil {
 		return fmt.Errorf("creating clusteregg '%s': %s failed", cegg.Name, err.Error())
 	}
 
 	boxKey := cegg.Name
-	manager.BoxStore(boxKey, clientegg)
+	manager.BoxStore(boxKey, ceggi)
 
 	// BoxStart cluster socpe egg only if podLabels is empty
 	if len(podLabels) == 0 {

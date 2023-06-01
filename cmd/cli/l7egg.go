@@ -38,7 +38,7 @@ func main() {
 	}
 
 	manager := user.BpfManagerInstance()
-	clientegg, err := manager.NewClientEgg(*iface, *eface, cnList, cidrList, nil)
+	clientegg, err := manager.NewCEggInfo(*iface, *eface, cnList, cidrList, nil)
 
 	manager.BoxStore(defaultBoxKey, clientegg)
 
