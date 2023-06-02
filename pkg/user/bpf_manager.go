@@ -9,14 +9,6 @@ import (
 	"sync"
 )
 
-type IClientEggManager interface {
-	Start(context.Context, string, *CEggInfo)
-	Stop(string)
-	Wait()
-	UpdateCIDRs([]string)
-	Exists(string)
-}
-
 type CEggInfo struct {
 	CNs              *syncx.SafeSlice[CN]
 	CIDRs            []*CIDR
@@ -24,6 +16,14 @@ type CEggInfo struct {
 	EgressInterface  string
 	BPFObjectPath    string
 	PodLabels        map[string]string
+}
+
+type IClientEggManager interface {
+	Start(context.Context, string, *CEggInfo)
+	Stop(string)
+	Wait()
+	UpdateCIDRs([]string)
+	Exists(string)
 }
 
 // clientEggManager holds CEggInfo and steering variables (stopFunc to stop it from the controller witout stopping the controller iself).
@@ -142,7 +142,7 @@ func BpfManagerInstance() *clientEggManager {
 	return instance
 }
 
-func parseClientEgg(clientegg *CEggInfo) {
+func parseClientEgg(ceggi *CEggInfo) {
 
 }
 
@@ -227,8 +227,8 @@ func (m *clientEggManager) NewCEggInfo(iiface string, eiface string, cnsS []stri
 }
 
 // BoxStore stores a box but not run it
-func (m *clientEggManager) BoxStore(boxKey string, clientegg *CEggInfo) {
-	egg := newEmptyEgg(clientegg)
+func (m *clientEggManager) BoxStore(boxKey string, ceggi *CEggInfo) {
+	egg := newEmptyEgg(ceggi)
 	var box clientEggBox
 	box.egg = egg
 	fmt.Println("*************** storing box:", boxKey)

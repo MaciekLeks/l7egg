@@ -29,6 +29,9 @@ func (m *SafeMap[K, V]) LoadOrStore(key K, value V) (actual V, loaded bool) {
 	v, loaded := m.m.LoadOrStore(key, value)
 	return v.(V), loaded
 }
+
+// Range calls f sequentially for each key and value present in the map.
+// If f returns false, range stops the iteration.
 func (m *SafeMap[K, V]) Range(f func(key K, value V) bool) {
 	m.m.Range(func(key, value any) bool {
 		return f(key.(K), value.(V))

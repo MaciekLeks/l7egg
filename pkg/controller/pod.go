@@ -20,6 +20,9 @@ import (
 	"strings"
 )
 
+// PodInfoMap maps Pod namespace name to PodInfo
+//type PodInfoMap sync.Map
+
 // PodInfo holds POD crucial metadata.
 type PodInfo struct {
 	//UID       string
@@ -30,9 +33,6 @@ type PodInfo struct {
 	containerIDs  []string
 	matchedKeyBox string
 }
-
-// PodInfoMap maps Pod namespace name to PodInfo
-//type PodInfoMap sync.Map
 
 func (c *Controller) handlePodAdd(obj interface{}) {
 	//fmt.Println("******************* handlePodAdd, listerSynced:", c.podCacheSynced())
@@ -133,7 +133,7 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	if pi, ok := c.podInfoMap.Load(key); ok {
 		fmt.Println("***************************Update not add")
 
-		boxKey, _ := c.checkEggMach(pod)
+		boxKey, _ := c.checkEggMatch(pod)
 		if pi.matchedKeyBox != boxKey {
 			if pi.matchedKeyBox != "" {
 				if boxKey == "" {
@@ -167,7 +167,7 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 		fmt.Printf("************************Update Done: %+v\n", tbd)
 
 	} else { //ADD
-		boxKey, matched := c.checkEggMach(pod)
+		boxKey, matched := c.checkEggMatch(pod)
 		if matched {
 			fmt.Println("************************Found key box matching new pod")
 		}
@@ -239,20 +239,20 @@ func (c *Controller) handleObject(obj interface{}) {
 
 	//Check if egg should be applied
 	fmt.Println("+++++ before checking ")
-	keyBox, ok := c.checkEggMach(pod)
+	keyBox, ok := c.checkEggMatch(pod)
 	fmt.Println("+++++ after checking ", ok, keyBox)
 
 }
 
 // CheckAny searches for first matching between cegg PodSelector and the pod. Returns keyBox name
-func (c *Controller) checkEggMach(pod *corev1.Pod) (string, bool) {
+func (c *Controller) checkEggMatch(pod *corev1.Pod) (string, bool) {
 	var found bool
 	var keyBox string
 
 	manager := user.BpfManagerInstance()
 	podLabels := labels.Set(pod.Labels)
 
-	fmt.Println("****************** +++++ checkEggMach podCacheSynced:%t ceggCacheSynced:%t", c.podCacheSynced(), c.podCacheSynced())
+	fmt.Println("****************** +++++ checkEggMatch podCacheSynced:%t ceggCacheSynced:%t", c.podCacheSynced(), c.podCacheSynced())
 
 	manager.BoxAny(func(key string, box user.IClientEggBox) bool {
 		eggPodLabels := box.GetEgg().CEggInfo.PodLabels
@@ -264,17 +264,17 @@ func (c *Controller) checkEggMach(pod *corev1.Pod) (string, bool) {
 			if selector.Matches(podLabels) {
 				found = true
 				keyBox = key
-				return true
+				return false //true
 			}
 		}
-		return false
+		return true //false
 	})
 
 	if !found {
-		fmt.Println("+++++ found no matching pod to egg ")
+		fmt.Println("+++++ checkEggMatch found no matching pod to egg ")
 	} else {
 
-		fmt.Println("+++++ found matching pod to policy ")
+		fmt.Println("+++++ checkEggMatch found matching pod to policy ")
 	}
 
 	return keyBox, found

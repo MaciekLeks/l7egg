@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
+	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	"github.com/MaciekLeks/l7egg/pkg/user"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
@@ -142,7 +145,18 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 			return fmt.Errorf("starting clusteregg '%s': %s", cegg.Name, err.Error())
 		}
 	} else {
-		logger.Info("Pod scope cegg box not started, waiting for pods.", "box", boxKey)
+		logger.Info("-----!!!!!!!!!!!!!!!!!!!!!!--------------Pod scope cegg box not started, waiting for pods.", "box", boxKey)
+		if podKeys := c.checkPodMatch(cegg); podKeys.Len() > 0 {
+			for i := 0; i < podKeys.Len(); i++ {
+				pi, ok := c.podInfoMap.Load(podKeys.Get(i))
+				if ok {
+					//TODO handle error
+					logger.Info("-----!!!!!!!!!!!!!!!!!!!!!!--------------starting egg egg->pod.", "box", boxKey)
+					pi.runEgg(ctx, boxKey)
+					logger.Info("-----!!!!!!!!!!!!!!!!!!!!!!--------------started egg egg->pod.", "box", boxKey)
+				}
+			}
+		}
 	}
 
 	return nil
@@ -151,4 +165,39 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 func (c *Controller) deleteEgg(ctx context.Context, name string) error {
 	manager := user.BpfManagerInstance()
 	return manager.Stop(name)
+}
+
+// checkPodMatch searches for all matchings between cegg PodSelector and pods. Returns TODO ???
+func (c *Controller) checkPodMatch(cegg v1alpha1.ClusterEgg) *syncx.SafeSlice[types.NamespacedName] {
+	var matchLabels labels.Set
+	var err error
+	podKeys := syncx.SafeSlice[types.NamespacedName]{}
+
+	if cegg.Spec.PodSelector.Size() != 0 {
+		matchLabels, err = metav1.LabelSelectorAsMap(cegg.Spec.PodSelector)
+		if err != nil {
+			utilruntime.HandleError(err)
+			return nil
+		}
+	}
+
+	fmt.Println("****************** +++++ checkPodMach podCacheSynced:%t ceggCacheSynced:%t", c.podCacheSynced(), c.podCacheSynced())
+
+	c.podInfoMap.Range(func(key types.NamespacedName, pi PodInfo) bool {
+		selector := matchLabels.AsSelectorPreValidated()
+		if selector.Matches(labels.Set(pi.labels)) {
+			podKeys.Append(key)
+			return true
+		}
+		return true
+	})
+
+	if podKeys.Len() > 0 {
+		fmt.Println("+++++ checkPodMatch found no matching pod to egg ")
+	} else {
+
+		fmt.Println("+++++ checkPodMatch found matching pod to policy ")
+	}
+
+	return &podKeys
 }
