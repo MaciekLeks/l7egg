@@ -254,8 +254,8 @@ func (c *Controller) checkEggMatch(pod *corev1.Pod) (string, bool) {
 
 	fmt.Println("****************** +++++ checkEggMatch podCacheSynced:%t ceggCacheSynced:%t", c.podCacheSynced(), c.podCacheSynced())
 
-	manager.BoxAny(func(key string, box user.IClientEggBox) bool {
-		eggPodLabels := box.GetEgg().CEggInfo.PodLabels
+	manager.BoxAny(func(key string, box user.IEggBox) bool {
+		eggPodLabels := box.GetEgg().EggInfo.PodLabels
 		fmt.Println("+++++ eggPodLabels:", eggPodLabels)
 		if len(eggPodLabels) > 0 {
 			selector := labels.Set(eggPodLabels).AsSelectorPreValidated()
@@ -352,7 +352,7 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey string) {
 		manager := user.BpfManagerInstance()
 		//err = manager.BoxStart(ctx, boxKey, int(netns.Fd()))
 		err = manager.BoxStart(ctx, boxKey, netns.Path(), cgroupPath)
-		fmt.Println("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ }}}}}}}}")
+		fmt.Println("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ }}}}}}}}, podInfo:%s, boxKey:%", pi.name, boxKey)
 
 		return nil
 	})

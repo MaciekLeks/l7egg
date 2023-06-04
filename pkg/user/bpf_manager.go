@@ -9,7 +9,7 @@ import (
 	"sync"
 )
 
-type CEggInfo struct {
+type EggInfo struct {
 	CNs              *syncx.SafeSlice[CN]
 	CIDRs            []*CIDR
 	IngressInterface string
@@ -18,17 +18,17 @@ type CEggInfo struct {
 	PodLabels        map[string]string
 }
 
-type IClientEggManager interface {
-	Start(context.Context, string, *CEggInfo)
+type IEggManager interface {
+	Start(context.Context, string, *EggInfo)
 	Stop(string)
 	Wait()
 	UpdateCIDRs([]string)
 	Exists(string)
 }
 
-// clientEggManager holds CEggInfo and steering variables (stopFunc to stop it from the controller witout stopping the controller iself).
+// eggManager holds EggInfo and steering variables (stopFunc to stop it from the controller witout stopping the controller iself).
 // waitGroup synchronize bpf main groutine starting from user.run function
-type clientEggBox struct {
+type eggBox struct {
 	stopFunc  context.CancelFunc
 	waitGroup *sync.WaitGroup //TODO: only ene goroutine (in run(...)) - changing to channel?
 	egg       *egg
@@ -37,13 +37,19 @@ type clientEggBox struct {
 	active bool
 }
 
-type IClientEggBox interface {
+type IEggBox interface {
 	GetEgg() *egg
 }
 
-type clientEggManager struct {
-	//boxes    map[string]clientEggBox
-	boxes    syncx.SafeMap[string, *clientEggBox]
+type boxKey struct {
+	eggName      string
+	podNamespace string
+	podName      string
+}
+
+type eggManager struct {
+	//boxes    map[string]eggBox
+	boxes    syncx.SafeMap[string, *eggBox]
 	seqIdGen tools.ISeqId[uint16]
 }
 
@@ -70,16 +76,16 @@ type CN struct {
 }
 
 var (
-	instance *clientEggManager
+	instance *eggManager
 	once     sync.Once
 )
 
-func (box *clientEggBox) GetEgg() *egg {
+func (box *eggBox) GetEgg() *egg {
 	return box.egg
 }
 
 // parseCIDR TODO: only ipv4
-func (m *clientEggManager) parseCIDR(cidrS string) (*CIDR, error) {
+func (m *eggManager) parseCIDR(cidrS string) (*CIDR, error) {
 	ip, ipNet, err := net.ParseCIDR(cidrS)
 	must(err, "Can't parse ipv4 Net.")
 	if err != nil {
@@ -99,7 +105,7 @@ func (m *clientEggManager) parseCIDR(cidrS string) (*CIDR, error) {
 }
 
 // ParseCIDRs TODO: only ipv4
-func (m *clientEggManager) parseCIDRs(cidrsS []string) ([]*CIDR, error) {
+func (m *eggManager) parseCIDRs(cidrsS []string) ([]*CIDR, error) {
 	var cidrs []*CIDR
 	for _, cidrS := range cidrsS {
 		cidr, err := m.parseCIDR(cidrS)
@@ -113,13 +119,13 @@ func (m *clientEggManager) parseCIDRs(cidrsS []string) ([]*CIDR, error) {
 }
 
 // ParseCN returns CN object from string
-func (m *clientEggManager) parseCN(cnS string) (CN, error) {
+func (m *eggManager) parseCN(cnS string) (CN, error) {
 	//TODO add some validation before returning CN
 	//we are sync - due to we do not have to update kernel side
 	return CN{cnS, m.seqIdGen.Next(), assetNew}, nil
 }
 
-func (m *clientEggManager) parseCNs(cnsS []string) ([]CN, error) {
+func (m *eggManager) parseCNs(cnsS []string) ([]CN, error) {
 	var cns []CN
 	for _, cnS := range cnsS {
 		cn, err := m.parseCN(cnS)
@@ -132,21 +138,21 @@ func (m *clientEggManager) parseCNs(cnsS []string) ([]CN, error) {
 	return cns, nil
 }
 
-func BpfManagerInstance() *clientEggManager {
+func BpfManagerInstance() *eggManager {
 	once.Do(func() {
-		instance = &clientEggManager{
-			boxes:    syncx.SafeMap[string, *clientEggBox]{},
+		instance = &eggManager{
+			boxes:    syncx.SafeMap[string, *eggBox]{},
 			seqIdGen: tools.New[uint16](),
 		}
 	})
 	return instance
 }
 
-func parseClientEgg(ceggi *CEggInfo) {
+func parseClientEgg(ceggi *EggInfo) {
 
 }
 
-func (m *clientEggManager) BoxExists(key string) bool {
+func (m *eggManager) BoxExists(key string) bool {
 	if _, found := m.getBox(key); found {
 		return true
 	}
@@ -154,15 +160,15 @@ func (m *clientEggManager) BoxExists(key string) bool {
 }
 
 //
-//func (m *clientEggManager) BoxByLabels(inMap map[string]string) (*clientEggBox, bool) {
-//	var foundBox *clientEggBox
+//func (m *eggManager) BoxByLabels(inMap map[string]string) (*eggBox, bool) {
+//	var foundBox *eggBox
 //	var found bool
 //	mapS := fmt.Sprint(inMap)
 //	//TODO if during this iteration m.boxes changes we will not know it, see sync map Range doc
 //	m.boxes.Range(func(key, value any) bool {
-//		box, ok := value.(*clientEggBox)
+//		box, ok := value.(*eggBox)
 //		if !ok {
-//			runtime.HandleError(fmt.Errorf("can't convert map value to clientEggBox"))
+//			runtime.HandleError(fmt.Errorf("can't convert map value to eggBox"))
 //			return true
 //		}
 //
@@ -185,11 +191,11 @@ func (m *clientEggManager) BoxExists(key string) bool {
 //}
 
 // BoxAny returns box that satisfies the f function
-func (m *clientEggManager) BoxAny(f func(keyBox string, ibox IClientEggBox) bool) (*clientEggBox, bool) {
-	var foundBox *clientEggBox
+func (m *eggManager) BoxAny(f func(keyBox string, ibox IEggBox) bool) (*eggBox, bool) {
+	var foundBox *eggBox
 	var found bool
 	//TODO if during this iteration m.boxes changes we will not know it, see sync map Range doc
-	m.boxes.Range(func(keyBox string, box *clientEggBox) bool {
+	m.boxes.Range(func(keyBox string, box *eggBox) bool {
 		if ok := f(keyBox, box); ok {
 			return false
 		}
@@ -200,7 +206,7 @@ func (m *clientEggManager) BoxAny(f func(keyBox string, ibox IClientEggBox) bool
 	return foundBox, found
 }
 
-func (m *clientEggManager) NewCEggInfo(iiface string, eiface string, cnsS []string, cidrsS []string, podLabels map[string]string) (*CEggInfo, error) {
+func (m *eggManager) NewCEggInfo(iiface string, eiface string, cnsS []string, cidrsS []string, podLabels map[string]string) (*EggInfo, error) {
 	cidrs, err := m.parseCIDRs(cidrsS)
 	if err != nil {
 		fmt.Errorf("Parsing input data %#v", err)
@@ -215,7 +221,7 @@ func (m *clientEggManager) NewCEggInfo(iiface string, eiface string, cnsS []stri
 	safeCNs := syncx.SafeSlice[CN]{}
 	safeCNs.Append(cns...)
 
-	clientegg := &CEggInfo{ //TODO make a function to wrap this up (parsing, building the object)
+	clientegg := &EggInfo{ //TODO make a function to wrap this up (parsing, building the object)
 		IngressInterface: iiface,
 		EgressInterface:  eiface,
 		CNs:              &safeCNs,
@@ -227,16 +233,16 @@ func (m *clientEggManager) NewCEggInfo(iiface string, eiface string, cnsS []stri
 }
 
 // BoxStore stores a box but not run it
-func (m *clientEggManager) BoxStore(boxKey string, ceggi *CEggInfo) {
+func (m *eggManager) BoxStore(boxKey string, ceggi *EggInfo) {
 	egg := newEmptyEgg(ceggi)
-	var box clientEggBox
+	var box eggBox
 	box.egg = egg
 	fmt.Println("*************** storing box:", boxKey)
 	m.boxes.Store(boxKey, &box)
 }
 
 // BoxStart box
-func (m *clientEggManager) BoxStart(ctx context.Context, boxKey string, netNsPath string, cgroupPath string) error {
+func (m *eggManager) BoxStart(ctx context.Context, boxKey string, netNsPath string, cgroupPath string) error {
 	box, found := m.getBox(boxKey)
 	if !found {
 		return fmt.Errorf("box '%s' not found\n", boxKey)
@@ -256,7 +262,7 @@ func (m *clientEggManager) BoxStart(ctx context.Context, boxKey string, netNsPat
 }
 
 // Stop Stops one box
-func (m *clientEggManager) Stop(key string) error {
+func (m *eggManager) Stop(key string) error {
 	box, found := m.getBox(key)
 	if !found {
 		return fmt.Errorf("box '%s' not found\n", key)
@@ -273,7 +279,7 @@ func (m *clientEggManager) Stop(key string) error {
 
 // Wait Waits for root context cancel (e.g. SIGTERM),
 // that's why we do not use m.stopFunc because cancelling comes from the root context
-func (m *clientEggManager) Wait() {
+func (m *eggManager) Wait() {
 	var stopWaitGroup sync.WaitGroup
 	//for key, box := range m.boxes. {
 	//	stopWaitGroup.Add(1)
@@ -283,7 +289,7 @@ func (m *clientEggManager) Wait() {
 	//		box.waitGroup.Wait()
 	//	}()
 	//}
-	m.boxes.Range(func(key string, box *clientEggBox) bool {
+	m.boxes.Range(func(key string, box *eggBox) bool {
 		stopWaitGroup.Add(1)
 		go func() {
 			defer stopWaitGroup.Done()
@@ -298,11 +304,11 @@ func (m *clientEggManager) Wait() {
 	stopWaitGroup.Wait()
 }
 
-func (m *clientEggManager) getBox(boxKey string) (*clientEggBox, bool) {
+func (m *eggManager) getBox(boxKey string) (*eggBox, bool) {
 	return m.boxes.Load(boxKey)
 }
 
-func (m *clientEggManager) UpdateCIDRs(boxKey string, newCIDRsS []string) error {
+func (m *eggManager) UpdateCIDRs(boxKey string, newCIDRsS []string) error {
 
 	cidrs, err := m.parseCIDRs(newCIDRsS)
 	if err != nil {
@@ -322,7 +328,7 @@ func (m *clientEggManager) UpdateCIDRs(boxKey string, newCIDRsS []string) error 
 	return nil
 }
 
-func (m *clientEggManager) UpdateCNs(boxKey string, newCNsS []string) error {
+func (m *eggManager) UpdateCNs(boxKey string, newCNsS []string) error {
 
 	//TODO: parsing needed!!!
 	cns, err := m.parseCNs(newCNsS)
@@ -343,7 +349,7 @@ func (m *clientEggManager) UpdateCNs(boxKey string, newCNsS []string) error {
 	return nil
 }
 
-func (m *clientEggManager) UpdateClientEgg(boxKey string, newCIDRsS []string, newCNsS []string) error {
+func (m *eggManager) UpdateClientEgg(boxKey string, newCIDRsS []string, newCNsS []string) error {
 	fmt.Printf("+++++++++++++++ 1")
 	err := m.UpdateCIDRs(boxKey, newCIDRsS)
 	if err != nil {

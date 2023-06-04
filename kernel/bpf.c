@@ -105,12 +105,12 @@ struct {
 } ipv6_lpm_map SEC(".maps");
 
 
-struct {
-    __uint(type, BPF_MAP_TYPE_RINGBUF);
-    //__type(value, struct packet);
-    __uint(max_entries, 1 << 24);
-} events_dns SEC(".maps");
-
+//struct {
+//    __uint(type, BPF_MAP_TYPE_RINGBUF);
+//    //__type(value, struct packet);
+//    __uint(max_entries, 1 << 24);
+//} events_dns SEC(".maps");
+//
 
 long ringbuffer_flags = 0;
 
@@ -395,9 +395,12 @@ static __always_inline int process(struct __sk_buff *skb, bool is_egress) {
                 ret = ipv6_check_and_update((struct ipv6hdr *) ip);
             }
 
+            bpf_printk("[process] /6.1 ret:%d", ret);
+
             if (ret != TC_MOVE_ONE)
                 return ret;
         }
+        bpf_printk("[process] /6.2 before 0");
         return 0;
 
     }

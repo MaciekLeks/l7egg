@@ -7,6 +7,7 @@ spec:
   egressInterface: any
   commonNames:
   - www.onet.pl
+  - www.interia.pl
   - cluster.local
   cidrs:
   - 10.152.183.0/24

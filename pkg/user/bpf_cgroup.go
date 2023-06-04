@@ -4,7 +4,6 @@ import (
 	"fmt"
 	bpf "github.com/aquasecurity/libbpfgo"
 	"os"
-	"path/filepath"
 	"regexp"
 )
 
@@ -12,8 +11,8 @@ var reCgroup2Mount = regexp.MustCompile(`(?m)^cgroup2\s(/\S+)\scgroup2\s`)
 
 func attachCgroupProg(bpfModule *bpf.Module, progName string, attachType bpf.BPFAttachType, cgroupPath string) error {
 	cgroupRootDir := getCgroupV2RootDir()
-	cgroupDir := cgroupRootDir + filepath.Dir(cgroupPath)
-	//cgroupDir := cgroupRootDir + cgroupPath
+	//cgroupDir := cgroupRootDir + filepath.Dir(cgroupPath)
+	cgroupDir := cgroupRootDir + cgroupPath
 
 	fmt.Println("\n\n\n-------getCgroupV2Dir:", cgroupDir)
 

@@ -68,7 +68,8 @@ $(TARGET_BPF): $(BPF_SRC)
 $(TARGET_CLI): $(CMD_CLI_GO_SRC) $(TARGET_BPF)
 	echo "GO:" >&2
 	CGO_CFLAGS=$(CGO_CFLAGS) \
-	$(GO) build -x \
+	#$(GO) build -x \
+	$(GO) build \
 	-tags netgo -ldflags $(GO_EXTLDFLAGS_STATIC) \
 	-o $(TARGET_CLI) ./cmd/cli/$(MAIN).go
 
@@ -94,8 +95,7 @@ remote-build2:
 
 .PHONY: docker
 docker:
-	cd ../
-	docker build -t maciekleks/kseg:$(TAG) -f ./build/Dockerfile .
+	docker build -t maciekleks/kseg:$(TAG) -f Dockerfile .
 	docker push maciekleks/kseg:$(TAG)
 
 # code-genartor must be set in the K8S_CODE_GENERATOR

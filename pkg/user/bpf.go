@@ -21,7 +21,6 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"os"
-	"os/exec"
 	"strings"
 	"sync"
 	"syscall"
@@ -29,9 +28,10 @@ import (
 	"unsafe"
 )
 
+// egg holds EggInfo (extracted from ClusterEggSpec) and ebpf related structures, e.g. maps, channels operating on that maps
 type egg struct {
 	// Depreciated: should all part of egg struct
-	CEggInfo  //TOOD remove from here
+	EggInfo   //TOOD remove from here
 	bpfModule *bpf.Module
 	ipv4ACL   *bpf.BPFMap
 	ipv6ACL   *bpf.BPFMap
@@ -40,12 +40,12 @@ type egg struct {
 }
 
 // depreciated
-func newEgg(ceggi *CEggInfo) *egg {
+func newEgg(eggi *EggInfo) *egg {
 	var egg egg
 	var err error
 
-	egg.CEggInfo = *ceggi //TOOD no needed
-	egg.bpfModule, err = bpf.NewModuleFromFile(ceggi.BPFObjectPath)
+	egg.EggInfo = *eggi //TOOD no needed
+	egg.bpfModule, err = bpf.NewModuleFromFile(eggi.BPFObjectPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(-1)
@@ -57,9 +57,9 @@ func newEgg(ceggi *CEggInfo) *egg {
 		os.Exit(-1)
 	}
 
-	err = attachProg(egg.bpfModule, ceggi.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
+	err = attachProg(egg.bpfModule, eggi.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
 	must(err, "Can't attach TC hook.")
-	err = attachProg(egg.bpfModule, ceggi.EgressInterface, bpf.BPFTcEgress, "tc_egress")
+	err = attachProg(egg.bpfModule, eggi.EgressInterface, bpf.BPFTcEgress, "tc_egress")
 	must(err, "Can't attach TC hook.")
 
 	egg.packets = make(chan []byte) //TODO need Close() on this channel
@@ -67,10 +67,10 @@ func newEgg(ceggi *CEggInfo) *egg {
 	return &egg
 }
 
-func newEmptyEgg(ceggi *CEggInfo) *egg {
+func newEmptyEgg(eggi *EggInfo) *egg {
 	var egg egg
 
-	egg.CEggInfo = *ceggi
+	egg.EggInfo = *eggi
 
 	return &egg
 }
@@ -79,7 +79,7 @@ func newEmptyEgg(ceggi *CEggInfo) *egg {
 func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, netNSPath string, cgroupPath string) error {
 	var err error
 
-	egg.bpfModule, err = bpf.NewModuleFromFile(egg.CEggInfo.BPFObjectPath)
+	egg.bpfModule, err = bpf.NewModuleFromFile(egg.EggInfo.BPFObjectPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(-1)
@@ -92,9 +92,9 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, netNSPath string, c
 	}
 	if len(cgroupPath) == 0 {
 		fmt.Println("---------------Attaching TC programs to interfaces.")
-		err = attachProg(egg.bpfModule, egg.CEggInfo.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
+		err = attachProg(egg.bpfModule, egg.EggInfo.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
 		must(err, "Can't attach TC hook.")
-		err = attachProg(egg.bpfModule, egg.CEggInfo.EgressInterface, bpf.BPFTcEgress, "tc_egress")
+		err = attachProg(egg.bpfModule, egg.EggInfo.EgressInterface, bpf.BPFTcEgress, "tc_egress")
 		must(err, "Can't attach TC hook.")
 	} else {
 		fmt.Println("---------------Attaching cgroup programs.")
@@ -111,18 +111,19 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, netNSPath string, c
 	rb, err := egg.bpfModule.InitRingBuf("packets", egg.packets)
 	must(err, "Can't initialize ring buffer map.")
 
-	rb.Start()
+	//rb.Start()
+	rb.Poll(300)
 	//TODO: remove this:
-	go func() {
-		time.Sleep(3 * time.Second)
-		//_, err := exec.Command("curl", "https://www.onet.pl").Output()
-		//_, err := exec.Command("curl", "-g", "-6", "https://bbc.com").Output()
-		_, err := exec.Command("curl", "-g", "https://bbc.com").Output()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(-1)
-		}
-	}()
+	//go func() {
+	//	time.Sleep(3 * time.Second)
+	//	//_, err := exec.Command("curl", "https://www.onet.pl").Output()
+	//	//_, err := exec.Command("curl", "-g", "-6", "https://bbc.com").Output()
+	//	_, err := exec.Command("curl", "-g", "https://bbc.com").Output()
+	//	if err != nil {
+	//		fmt.Fprintln(os.Stderr, err)
+	//		os.Exit(-1)
+	//	}
+	//}()
 
 	egg.ipv4ACL, err = egg.bpfModule.GetMap("ipv4_lpm_map")
 	egg.ipv6ACL, err = egg.bpfModule.GetMap("ipv6_lpm_map")
@@ -144,9 +145,9 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, netNSPath string, c
 		defer egg.bpfModule.Close()
 
 		var lwg sync.WaitGroup
-		runMapLooper(ctx, egg.ipv4ACL, egg.CNs, ipv4, &lwg, netNSPath, cgroupPath)
-		runMapLooper(ctx, egg.ipv6ACL, egg.CNs, ipv6, &lwg, netNSPath, cgroupPath)
-		egg.runPacketsLooper(ctx, &lwg, egg.packets, netNSPath, cgroupPath)
+		//runMapLooper(ctx, egg.ipv4ACL, egg.CNs, ipv4, &lwg, netNSPath, cgroupPath)
+		//runMapLooper(ctx, egg.ipv6ACL, egg.CNs, ipv6, &lwg, netNSPath, cgroupPath)
+		egg.runPacketsLooper(ctx, &lwg, netNSPath, cgroupPath)
 		lwg.Wait()
 
 		fmt.Println("///Stopping recvLoop.")
@@ -380,7 +381,7 @@ func (egg *egg) updateCNs(cns []CN) error {
 	return nil
 }
 
-func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packets chan []byte, netNsPath string, cgroupPath string) {
+func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, netNsPath string, cgroupPath string) {
 	lwg.Add(1)
 	go func() {
 		defer lwg.Done()
@@ -393,7 +394,7 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 			case <-ctx.Done():
 				fmt.Println("[recvLoop]: stopCh closed.")
 				break recvLoop
-			case b, ok := <-packets:
+			case b, ok := <-egg.packets:
 				fmt.Println("??????[2]")
 				if ok == false {
 					fmt.Println("[recvLoop]: Channel not OK!")
@@ -481,7 +482,7 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, packe
 									err = updateACLValueNew(egg.ipv6ACL, key, val)
 								}
 								must(err, "Can't update ACL.")
-								fmt.Printf("netNsPath: %s cgroupPath: %s - updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", netNsPath, cgroupPath, cn, ip, ttlSec, ttlNs, bootTtlNs)
+								fmt.Printf("egg-ref: %p, netNsPath: %s cgroupPath: %s - updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", egg, netNsPath, cgroupPath, cn, ip, ttlSec, ttlNs, bootTtlNs)
 
 							} else {
 								fmt.Println("DROP")
@@ -546,7 +547,7 @@ func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns *syncx.SafeSlice[CN
 				break mapLoop
 			default:
 				time.Sleep(5 * time.Second)
-				fmt.Printf("\n\n----\n")
+				fmt.Printf("\n\n----bpfM: %p\n", bpfM)
 				i := bpfM.Iterator() //determineHost Endian search by Itertaot in libbfpgo
 				for i.Next() {
 					if i.Err() != nil {
@@ -724,7 +725,7 @@ func updateACLValueNew(acl *bpf.BPFMap, ikey ILPMKey, val ipLPMVal) error {
 		fmt.Println("[updatACL] Can't upate ACLP, err:", err)
 		return err
 	} else {
-		fmt.Printf("[updateACLValue] ACL updated for, key:%v, val:%v\n", ikey, val)
+		fmt.Printf("[updateACLValue-acl-map-ref:%p] ACL updated for, key:%v, val:%v\n", acl, ikey, val)
 	}
 	//!!} else {
 	//!!	fmt.Printf("[updateACLValue] Key already exists in ACL, key:%v val:%v\n", key, binary.LittleEndian.Uint64(v))
