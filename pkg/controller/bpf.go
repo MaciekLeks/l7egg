@@ -1,4 +1,4 @@
-package user
+package controller
 
 /*
    #include <time.h>
@@ -307,7 +307,7 @@ func (egg *egg) updateCNs(cns []CN) error {
 		for _, newone := range cns {
 			if current.cn == newone.cn {
 				egg.CNs.Update(i, func(current *CN) {
-					fmt.Println("%%%>>> egg.CNs.UpdateClientEgg")
+					fmt.Println("%%%>>> egg.CNs.UpdateEgg")
 					current.status = assetSynced
 				})
 				newone.status = assetSynced
@@ -635,7 +635,7 @@ func unmarshalValue(bytes []byte) ipLPMVal {
 //	//aclValEnc := encodeUint32(1)
 //	//fmt.Printf("IP:%s val:%d, hex:%x\n", ip, ip2Uint32(ip), ip2Uint32(ip))
 //	//fmt.Printf("Key:%s val:%s\n", insertNth(hex.EncodeToString(aclKeyEnc.Bytes()), 2), insertNth(hex.EncodeToString(aclValEnc), 2))
-//	//ipv4ACL.UpdateClientEgg(&aclKeyEnc.Bytes, &aclValEnc)
+//	//ipv4ACL.UpdateEgg(&aclKeyEnc.Bytes, &aclValEnc)
 //
 //	upKey := unsafe.Pointer(&key)
 //	//check if not exists first
@@ -670,7 +670,7 @@ func unmarshalValue(bytes []byte) ipLPMVal {
 //	//aclValEnc := encodeUint32(1)
 //	//fmt.Printf("IP:%s val:%d, hex:%x\n", ip, ip2Uint32(ip), ip2Uint32(ip))
 //	//fmt.Printf("Key:%s val:%s\n", insertNth(hex.EncodeToString(aclKeyEnc.Bytes()), 2), insertNth(hex.EncodeToString(aclValEnc), 2))
-//	//ipv4ACL.UpdateClientEgg(&aclKeyEnc.Bytes, &aclValEnc)
+//	//ipv4ACL.UpdateEgg(&aclKeyEnc.Bytes, &aclValEnc)
 //
 //	upKey := unsafe.Pointer(&key)
 //	//check if not exists first
@@ -705,7 +705,7 @@ func updateACLValueNew(acl *bpf.BPFMap, ikey ILPMKey, val ipLPMVal) error {
 	//aclValEnc := encodeUint32(1)
 	//fmt.Printf("IP:%s val:%d, hex:%x\n", ip, ip2Uint32(ip), ip2Uint32(ip))
 	//fmt.Printf("Key:%s val:%s\n", insertNth(hex.EncodeToString(aclKeyEnc.Bytes()), 2), insertNth(hex.EncodeToString(aclValEnc), 2))
-	//ipv4ACL.UpdateClientEgg(&aclKeyEnc.Bytes, &aclValEnc)
+	//ipv4ACL.UpdateEgg(&aclKeyEnc.Bytes, &aclValEnc)
 
 	//check if not exists first
 	upKey := ikey.GetPointer()

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/tools"
-	"github.com/MaciekLeks/l7egg/pkg/user"
 	cgroupsv2 "github.com/containerd/cgroups/v2"
 	"github.com/containerd/containerd"
 	cnins "github.com/containernetworking/plugins/pkg/ns"
@@ -31,7 +30,7 @@ type PodInfo struct {
 	labels        map[string]string
 	nodeName      string
 	containerIDs  []string
-	matchedKeyBox string
+	matchedKeyBox BoxKey
 }
 
 func (c *Controller) handlePodAdd(obj interface{}) {
@@ -135,8 +134,9 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 
 		boxKey, _ := c.checkEggMatch(pod)
 		if pi.matchedKeyBox != boxKey {
-			if pi.matchedKeyBox != "" {
-				if boxKey == "" {
+			var zeroBoxKey BoxKey
+			if pi.matchedKeyBox != zeroBoxKey {
+				if boxKey == zeroBoxKey {
 					fmt.Println("****************** Update Egg to remove to from the egg")
 				} else {
 					fmt.Println("*****************Update Egg to be changed or only policy has changed")
@@ -245,17 +245,17 @@ func (c *Controller) handleObject(obj interface{}) {
 }
 
 // CheckAny searches for first matching between cegg PodSelector and the pod. Returns keyBox name
-func (c *Controller) checkEggMatch(pod *corev1.Pod) (string, bool) {
+func (c *Controller) checkEggMatch(pod *corev1.Pod) (BoxKey, bool) {
 	var found bool
-	var keyBox string
+	var boxKey BoxKey
 
-	manager := user.BpfManagerInstance()
+	manager := BpfManagerInstance()
 	podLabels := labels.Set(pod.Labels)
 
 	fmt.Println("****************** +++++ checkEggMatch podCacheSynced:%t ceggCacheSynced:%t", c.podCacheSynced(), c.podCacheSynced())
 
-	manager.BoxAny(func(key string, box user.IEggBox) bool {
-		eggPodLabels := box.GetEgg().EggInfo.PodLabels
+	manager.BoxAny(func(key BoxKey, box IEggBox) bool {
+		eggPodLabels := box.Egg().EggInfo.PodLabels
 		fmt.Println("+++++ eggPodLabels:", eggPodLabels)
 		if len(eggPodLabels) > 0 {
 			selector := labels.Set(eggPodLabels).AsSelectorPreValidated()
@@ -263,7 +263,7 @@ func (c *Controller) checkEggMatch(pod *corev1.Pod) (string, bool) {
 
 			if selector.Matches(podLabels) {
 				found = true
-				keyBox = key
+				boxKey = key
 				return false //true
 			}
 		}
@@ -277,10 +277,10 @@ func (c *Controller) checkEggMatch(pod *corev1.Pod) (string, bool) {
 		fmt.Println("+++++ checkEggMatch found matching pod to policy ")
 	}
 
-	return keyBox, found
+	return boxKey, found
 }
 
-func (pi *PodInfo) runEgg(ctx context.Context, boxKey string) {
+func (pi *PodInfo) runEgg(ctx context.Context, boxKey BoxKey) {
 	client, err := containerd.New("/var/snap/microk8s/common/run/containerd.sock", containerd.WithDefaultNamespace("k8s.io"))
 	if err != nil {
 		fmt.Printf("Blad podczas tworzenia klienta containerd: %v", err)
@@ -315,7 +315,7 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey string) {
 	// Wyświetl PID procesu init kontenera.
 	fmt.Println("@@@@@@@@@@@ Container PID: %d", pid)
 
-	// cgroup or tc - comment cgroup (set to "") to make tc over cgroup?
+	//cgroup or tc - comment cgroup (set to "") to make tc over cgroup?
 	cgroupPath, err := getContainerdCgroupPath(pid) //cgroup over tc programs
 	//cgroupPath, err := "", nil //tc only
 	if err != nil {
@@ -349,7 +349,7 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey string) {
 		//defer ns.Close()
 		//fmt.Printf("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ {{{{{{{{ currrns2: %v", ns)
 
-		manager := user.BpfManagerInstance()
+		manager := BpfManagerInstance()
 		//err = manager.BoxStart(ctx, boxKey, int(netns.Fd()))
 		err = manager.BoxStart(ctx, boxKey, netns.Path(), cgroupPath)
 		fmt.Println("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ }}}}}}}}, podInfo:%s, boxKey:%", pi.name, boxKey)
@@ -383,6 +383,10 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey string) {
 		os.Exit(1)
 	}
 
+}
+
+func (pi *PodInfo) NamespaceName() types.NamespacedName {
+	return types.NamespacedName{Namespace: pi.namespace, Name: pi.name}
 }
 
 //func (pim *PodInfoMap) Load(pod *corev1.Pod) (PodInfo, bool) {

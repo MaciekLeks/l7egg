@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
-	"github.com/MaciekLeks/l7egg/pkg/user"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,27 +15,27 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func (c *Controller) handleCEggAdd(obj interface{}) {
-	c.enqueueCEgg(obj)
+func (c *Controller) handleEggAdd(obj interface{}) {
+	c.enqueueEgg(obj)
 }
 
-func (c *Controller) handleCEggDelete(obj interface{}) {
-	c.enqueueCEgg(obj)
+func (c *Controller) handleEggDelete(obj interface{}) {
+	c.enqueueEgg(obj)
 }
 
-func (c *Controller) handleCEggUpdate(prev interface{}, obj interface{}) {
+func (c *Controller) handleEggUpdate(prev interface{}, obj interface{}) {
 	ceggPrev := prev.(*v1alpha1.ClusterEgg)
 	cegg := obj.(*v1alpha1.ClusterEgg)
 	if ceggPrev.GetResourceVersion() != cegg.GetResourceVersion() {
 		//handle only update not sync event
-		c.enqueueCEgg(obj)
+		c.enqueueEgg(obj)
 	}
 }
 
 // enqueue cegg takes a ClusterEgg resource and converts it into a namespace/name
 // string which is then put onto the work queue. This method should *not* be
 // passed resources of any type other than Foo.
-func (c *Controller) enqueueCEgg(obj interface{}) {
+func (c *Controller) enqueueEgg(obj interface{}) {
 	var key string
 	var err error
 	if key, err = cache.MetaNamespaceKeyFunc(obj); err != nil {
@@ -49,11 +48,11 @@ func (c *Controller) enqueueCEgg(obj interface{}) {
 // syncHandler compares the actual state with the desired, and attempts to
 // converge the two. It then updates the Status block of the Foo resource
 // with the current status of the resource.
-func (c *Controller) syncCEggHandler(ctx context.Context, key string) error {
+func (c *Controller) syncEggHandler(ctx context.Context, key string) error {
 	// Convert the namespace/name string into a distinct namespace and name
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "resourceName", key)
 
-	_, name, err := splitNamespaceNameFormKey(key)
+	namespace, name, err := splitNamespaceNameFormKey(key)
 	if err != nil {
 		return err
 	}
@@ -66,7 +65,7 @@ func (c *Controller) syncCEggHandler(ctx context.Context, key string) error {
 		if apierrors.IsNotFound(err) {
 			//utilruntime.HandleError(fmt.Errorf("clusteregg '%s' in work queue no longer exists", key))
 			logger.Info("Delete clusteregg.")
-			err = c.deleteEgg(ctx, name)
+			err = c.deleteEgg(ctx, types.NamespacedName{Namespace: namespace, Name: name})
 			if err != nil {
 				return fmt.Errorf("delete clusteregg '%s':%s failed", name, err)
 			}
@@ -82,7 +81,7 @@ func (c *Controller) syncCEggHandler(ctx context.Context, key string) error {
 	}
 
 	logger.Info("Update clusteregg status.")
-	err = c.updateCEggStatus(ctx, cegg)
+	err = c.updateEggStatus(ctx, cegg)
 	if err != nil {
 		return err
 	}
@@ -92,7 +91,7 @@ func (c *Controller) syncCEggHandler(ctx context.Context, key string) error {
 	return nil
 }
 
-func (c *Controller) updateCEggStatus(ctx context.Context, cegg *v1alpha1.ClusterEgg) error {
+func (c *Controller) updateEggStatus(ctx context.Context, cegg *v1alpha1.ClusterEgg) error {
 	// cegg is from the store, so we can't modify it, we need to deep copy it first
 	ceggCopy := cegg.DeepCopy()
 	ceggCopy.Status.Ready = true
@@ -103,17 +102,21 @@ func (c *Controller) updateCEggStatus(ctx context.Context, cegg *v1alpha1.Cluste
 func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "resourceName", cegg.Name)
 
-	manager := user.BpfManagerInstance()
-	if manager.BoxExists(cegg.Name) {
-		err := manager.UpdateClientEgg(cegg.Name, cegg.Spec.CIDRs, cegg.Spec.CommonNames)
-		if err != nil {
-			return fmt.Errorf("updating clusteregg '%s': %s failed", cegg.Name, err.Error())
+	manager := BpfManagerInstance()
+	var err error
+	manager.boxes.Range(func(key BoxKey, value *eggBox) bool {
+		// Find all boxes using the same egg specified by the cegg
+		if key.Egg.Name == cegg.Name && key.Egg.Namespace == cegg.Namespace {
+			err = manager.UpdateEgg(key, cegg.Spec.CIDRs, cegg.Spec.CommonNames)
+			if err != nil {
+				err = fmt.Errorf("updating clusteregg '%s': %s failed", cegg.Name, err.Error())
+				return false
+			}
 		}
-		return nil
-	}
+		return true
+	})
 
 	var podLabels map[string]string
-	var err error
 	if cegg.Spec.PodSelector.Size() != 0 {
 		podLabels, err = metav1.LabelSelectorAsMap(cegg.Spec.PodSelector)
 		if err != nil {
@@ -128,17 +131,17 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 		iiface = "eth0" //TODO #
 		eiface = "eth0" //TODO #
 	}
-	ceggi, err := manager.NewCEggInfo(iiface, eiface, cegg.Spec.CommonNames, cegg.Spec.CIDRs, podLabels)
+	eggi, err := manager.NewEggInfo(iiface, eiface, cegg.Spec.CommonNames, cegg.Spec.CIDRs, podLabels)
 	if err != nil {
 		return fmt.Errorf("creating clusteregg '%s': %s failed", cegg.Name, err.Error())
 	}
 
-	boxKey := cegg.Name
-	manager.BoxStore(boxKey, ceggi)
-
 	// BoxStart cluster socpe egg only if podLabels is empty
+	var boxKey BoxKey
+	boxKey.Egg = types.NamespacedName{Namespace: cegg.Namespace, Name: cegg.Name}
 	if len(podLabels) == 0 {
 		// cluster scope cegg
+		manager.BoxStore(boxKey, eggi)
 		logger.Info("Staring box with cegg.", "box", boxKey)
 		err = manager.BoxStart(ctx, boxKey, "", "")
 		if err != nil {
@@ -151,6 +154,9 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 				pi, ok := c.podInfoMap.Load(podKeys.Get(i))
 				if ok {
 					//TODO handle error
+					boxKey.pod = pi.NamespaceName()
+					manager.BoxStore(boxKey, eggi)
+
 					logger.Info("-----!!!!!!!!!!!!!!!!!!!!!!--------------starting egg egg->pod.", "box", boxKey)
 					pi.runEgg(ctx, boxKey)
 					logger.Info("-----!!!!!!!!!!!!!!!!!!!!!!--------------started egg egg->pod.", "box", boxKey)
@@ -162,9 +168,22 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 	return nil
 }
 
-func (c *Controller) deleteEgg(ctx context.Context, name string) error {
-	manager := user.BpfManagerInstance()
-	return manager.Stop(name)
+// deleteEgg deletes EggInfo and stops its boxes
+func (c *Controller) deleteEgg(ctx context.Context, eggNamespaceName types.NamespacedName) error {
+	logger := klog.LoggerWithValues(klog.FromContext(ctx), "resourceName", eggNamespaceName.Name)
+
+	manager := BpfManagerInstance()
+
+	logger.Info("Deleting egg '%s' boxes.", eggNamespaceName.Name)
+	manager.boxes.Range(func(key BoxKey, value *eggBox) bool {
+		return true
+
+	})
+
+	logger.Info("Deleting egg '%s'.", eggNamespaceName.Name)
+	c.eggInfoMap.Delete(eggNamespaceName)
+
+	return nil
 }
 
 // checkPodMatch searches for all matchings between cegg PodSelector and pods. Returns TODO ???

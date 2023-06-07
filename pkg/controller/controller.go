@@ -5,7 +5,6 @@ import (
 	"fmt"
 	ceggscheme "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned/scheme"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
-	"github.com/MaciekLeks/l7egg/pkg/user"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	coreinformers "k8s.io/client-go/informers/core/v1"
@@ -60,6 +59,7 @@ type Controller struct {
 	recorder record.EventRecorder
 
 	podInfoMap syncx.SafeMap[types.NamespacedName, PodInfo]
+	eggInfoMap syncx.SafeMap[types.NamespacedName, EggInfo] //namespace not used
 }
 
 const (
@@ -101,15 +101,16 @@ func NewController(ctx context.Context,
 
 		//podInfoMap: PodInfoMap{},
 		podInfoMap: syncx.SafeMap[types.NamespacedName, PodInfo]{},
+		eggInfoMap: syncx.SafeMap[types.NamespacedName, EggInfo]{},
 	}
 
 	logger.Info("Setting up event handlers")
 
 	ceggInformer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
-			AddFunc:    c.handleCEggAdd,
-			UpdateFunc: c.handleCEggUpdate,
-			DeleteFunc: c.handleCEggDelete,
+			AddFunc:    c.handleEggAdd,
+			UpdateFunc: c.handleEggUpdate,
+			DeleteFunc: c.handleEggDelete,
 		},
 	)
 
@@ -182,7 +183,7 @@ func (c *Controller) Run(ctx context.Context, ceggWorkers int, podWorkers int) e
 }
 
 func (c *Controller) Wait() {
-	user.BpfManagerInstance().Wait()
+	BpfManagerInstance().Wait()
 }
 
 // runWorker is a long-running function that  continually call the

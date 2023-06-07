@@ -125,7 +125,7 @@ func (c *Controller) syncHandler(ctx context.Context, key string) error {
 	}
 	switch cav {
 	case ctxCeggValue:
-		return c.syncCEggHandler(ctx, key)
+		return c.syncEggHandler(ctx, key)
 	case ctxPodValue:
 		return c.syncPodHandler(ctx, key)
 	}

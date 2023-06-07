@@ -3,16 +3,13 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/MaciekLeks/l7egg/pkg/controller"
 	"github.com/MaciekLeks/l7egg/pkg/tools"
-	"github.com/MaciekLeks/l7egg/pkg/user"
+	"k8s.io/apimachinery/pkg/types"
 	"os"
 )
 
 type argList []string
-
-const (
-	defaultBoxKey = "default"
-)
 
 func (i *argList) String() string {
 	return fmt.Sprint(*i)
@@ -37,9 +34,11 @@ func main() {
 		return
 	}
 
-	manager := user.BpfManagerInstance()
-	clientegg, err := manager.NewCEggInfo(*iface, *eface, cnList, cidrList, nil)
+	manager := controller.BpfManagerInstance()
+	clientegg, err := manager.NewEggInfo(*iface, *eface, cnList, cidrList, nil)
 
+	var defaultBoxKey controller.BoxKey
+	defaultBoxKey.Egg = types.NamespacedName{Name: "default"}
 	manager.BoxStore(defaultBoxKey, clientegg)
 
 	if err != nil {
