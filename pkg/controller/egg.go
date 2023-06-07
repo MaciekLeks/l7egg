@@ -212,10 +212,10 @@ func (c *Controller) checkPodMatch(cegg v1alpha1.ClusterEgg) *syncx.SafeSlice[ty
 	})
 
 	if podKeys.Len() > 0 {
-		fmt.Println("+++++ checkPodMatch found no matching pod to egg ")
+		fmt.Println("+++++ checkPodMatch found no matching pod to egg")
 	} else {
 
-		fmt.Println("+++++ checkPodMatch found matching pod to policy ")
+		fmt.Println("+++++ checkPodMatch found matching pod to policy")
 	}
 
 	return &podKeys
