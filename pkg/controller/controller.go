@@ -226,10 +226,7 @@ func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 		// Run the syncHandler, passing it the namespace/name string of the
 		// Foo resource to be synced.
 		if err = c.syncHandler(ctx, key); err != nil {
-			err = c.queueAddRateLimited(ctx, key)
-			if err != nil {
-				return err
-			}
+			c.queueAddRateLimited(ctx, key)
 			return fmt.Errorf("error syncing '%s': %s, requeuing", key, err.Error())
 		}
 

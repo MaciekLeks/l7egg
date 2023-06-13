@@ -16,11 +16,13 @@ import (
 )
 
 func (c *Controller) handleEggAdd(obj interface{}) {
-	c.enqueueEgg(obj)
+	//c.enqueueEgg(obj)
+	c.handleEggObject(obj)
 }
 
 func (c *Controller) handleEggDelete(obj interface{}) {
-	c.enqueueEgg(obj)
+	c.handleEggObject(obj)
+	//c.enqueueEgg(obj)
 }
 
 func (c *Controller) handleEggUpdate(prev interface{}, obj interface{}) {
@@ -28,8 +30,31 @@ func (c *Controller) handleEggUpdate(prev interface{}, obj interface{}) {
 	cegg := obj.(*v1alpha1.ClusterEgg)
 	if ceggPrev.GetResourceVersion() != cegg.GetResourceVersion() {
 		//handle only update not sync event
-		c.enqueueEgg(obj)
+		//c.enqueueEgg(obj)
+		c.handleEggObject(obj)
 	}
+}
+
+func (c *Controller) handleEggObject(obj interface{}) {
+	var object metav1.Object
+	var ok bool
+	logger := klog.FromContext(context.Background())
+	if object, ok = obj.(metav1.Object); !ok {
+		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+		if !ok {
+			utilruntime.HandleError(fmt.Errorf("error decoding object, invalid type"))
+			return
+		}
+		object, ok = tombstone.Obj.(metav1.Object)
+		if !ok {
+			utilruntime.HandleError(fmt.Errorf("error decoding object tombstone, invalid type"))
+			return
+		}
+		logger.V(4).Info("Recovered deleted object", "resourceName", object.GetName())
+	}
+	logger.V(4).Info("Processing object", "object", klog.KObj(object))
+
+	c.enqueueEgg(obj)
 }
 
 // enqueue cegg takes a ClusterEgg resource and converts it into a namespace/name
@@ -176,6 +201,7 @@ func (c *Controller) deleteEgg(ctx context.Context, eggNamespaceName types.Names
 
 	logger.Info("Deleting egg '%s' boxes.", eggNamespaceName.Name)
 	manager.boxes.Range(func(key BoxKey, value *eggBox) bool {
+		//TODO implement
 		return true
 
 	})
