@@ -13,6 +13,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
+	"reflect"
 )
 
 func (c *Controller) handleEggAdd(obj interface{}) {
@@ -129,62 +130,94 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 
 	manager := BpfManagerInstance()
 	var err error
-	manager.boxes.Range(func(key BoxKey, value *eggBox) bool {
-		// Find all boxes using the same egg specified by the cegg
-		if key.Egg.Name == cegg.Name && key.Egg.Namespace == cegg.Namespace {
-			err = manager.UpdateEgg(key, cegg.Spec.CIDRs, cegg.Spec.CommonNames)
+
+	// Either add or update
+	// If the egg already exists, update it
+	eggNamespaceName := types.NamespacedName{Namespace: cegg.Namespace, Name: cegg.Name}
+	if eggi, ok := c.eggInfoMap.Load(eggNamespaceName); ok {
+		//egg already exists
+		logger.Info("Updating egg")
+
+		var curPodLabels map[string]string
+		if cegg.Spec.PodSelector.Size() != 0 {
+			curPodLabels, err = metav1.LabelSelectorAsMap(cegg.Spec.PodSelector)
 			if err != nil {
-				err = fmt.Errorf("updating clusteregg '%s': %s failed", cegg.Name, err.Error())
-				return false
+				return fmt.Errorf("bad label selector for cegg [%s]: %w", cegg.Name, err)
 			}
 		}
-		return true
-	})
 
-	var podLabels map[string]string
-	if cegg.Spec.PodSelector.Size() != 0 {
-		podLabels, err = metav1.LabelSelectorAsMap(cegg.Spec.PodSelector)
-		if err != nil {
-			return fmt.Errorf("bad label selector for cegg [%s]: %w", cegg.Name, err)
+		if eq := reflect.DeepEqual(curPodLabels, eggi.PodLabels); eq {
+			// egg spec not changed for PodSelector
+
+			logger.Info("Updating egg for CNs, CIDRs only")
+			// simple updating for policies
+			manager.boxes.Range(func(key BoxKey, value *eggBox) bool {
+				// Find all boxes using the same egg specified by the cegg
+				if key.Egg.Name == cegg.Name && key.Egg.Namespace == cegg.Namespace {
+					err = manager.UpdateEgg(key, cegg.Spec.CIDRs, cegg.Spec.CommonNames)
+					if err != nil {
+						err = fmt.Errorf("updating clusteregg '%s': %s failed", cegg.Name, err.Error())
+						return false
+					}
+				}
+				return true
+			})
+		} else {
+			// egg spec for PodSelector changed
+			logger.Info("Updating egg for CNs, CIDRs and PodSelector....")
 		}
-	}
 
-	//TODO tbc
-	iiface := cegg.Spec.IngressInterface
-	eiface := cegg.Spec.EgressInterface
-	if len(podLabels) != 0 {
-		iiface = "eth0" //TODO #
-		eiface = "eth0" //TODO #
-	}
-	eggi, err := manager.NewEggInfo(iiface, eiface, cegg.Spec.CommonNames, cegg.Spec.CIDRs, podLabels)
-	if err != nil {
-		return fmt.Errorf("creating clusteregg '%s': %s failed", cegg.Name, err.Error())
-	}
-
-	// BoxStart cluster socpe egg only if podLabels is empty
-	var boxKey BoxKey
-	boxKey.Egg = types.NamespacedName{Namespace: cegg.Namespace, Name: cegg.Name}
-	if len(podLabels) == 0 {
-		// cluster scope cegg
-		manager.BoxStore(boxKey, eggi)
-		logger.Info("Staring box with cegg.", "box", boxKey)
-		err = manager.BoxStart(ctx, boxKey, "", "")
-		if err != nil {
-			return fmt.Errorf("starting clusteregg '%s': %s", cegg.Name, err.Error())
-		}
 	} else {
-		logger.Info("-----!!!!!!!!!!!!!!!!!!!!!!--------------Pod scope cegg box not started, waiting for pods.", "box", boxKey)
-		if podKeys := c.checkPodMatch(cegg); podKeys.Len() > 0 {
-			for i := 0; i < podKeys.Len(); i++ {
-				pi, ok := c.podInfoMap.Load(podKeys.Get(i))
-				if ok {
-					//TODO handle error
-					boxKey.pod = pi.NamespaceName()
-					manager.BoxStore(boxKey, eggi)
+		//new egg
+		logger.Info("Adding egg")
 
-					logger.Info("-----!!!!!!!!!!!!!!!!!!!!!!--------------starting egg egg->pod.", "box", boxKey)
-					pi.runEgg(ctx, boxKey)
-					logger.Info("-----!!!!!!!!!!!!!!!!!!!!!!--------------started egg egg->pod.", "box", boxKey)
+		var podLabels map[string]string
+		if cegg.Spec.PodSelector.Size() != 0 {
+			podLabels, err = metav1.LabelSelectorAsMap(cegg.Spec.PodSelector)
+			if err != nil {
+				return fmt.Errorf("bad label selector for cegg [%s]: %w", cegg.Name, err)
+			}
+		}
+		//TODO tbc
+
+		iiface := cegg.Spec.IngressInterface
+		eiface := cegg.Spec.EgressInterface
+		if len(podLabels) != 0 {
+			iiface = "eth0" //TODO #
+			eiface = "eth0" //TODO #
+		}
+		eggi, err := manager.NewEggInfo(iiface, eiface, cegg.Spec.CommonNames, cegg.Spec.CIDRs, podLabels)
+		if err != nil {
+			return fmt.Errorf("creating clusteregg '%s': %s failed", cegg.Name, err.Error())
+		}
+
+		// store eggInfo in map
+		c.eggInfoMap.Store(eggNamespaceName, *eggi)
+
+		// BoxStart cluster scope egg only if podLabels is empty
+		var boxKey BoxKey
+		boxKey.Egg = eggNamespaceName
+		if len(podLabels) == 0 {
+			// cluster scope cegg
+			manager.BoxStore(boxKey, eggi)
+			logger.Info("Staring box with cegg.", "box", boxKey)
+			err = manager.BoxStart(ctx, boxKey, "", "")
+			if err != nil {
+				return fmt.Errorf("starting clusteregg '%s': %s", cegg.Name, err.Error())
+			}
+		} else {
+			if podKeys := c.checkPodMatch(cegg); podKeys.Len() > 0 {
+				for i := 0; i < podKeys.Len(); i++ {
+					pi, ok := c.podInfoMap.Load(podKeys.Get(i))
+					if ok {
+						//TODO handle error
+						boxKey.pod = pi.NamespaceName()
+						manager.BoxStore(boxKey, eggi)
+
+						logger.Info("--------------------------Starting egg for the flow egg->pod", "box", boxKey)
+						pi.runEgg(ctx, boxKey)
+						logger.Info("--------------------------Box started for the flow egg->pod", "box", boxKey)
+					}
 				}
 			}
 		}
@@ -232,6 +265,7 @@ func (c *Controller) checkPodMatch(cegg v1alpha1.ClusterEgg) *syncx.SafeSlice[ty
 		selector := matchLabels.AsSelectorPreValidated()
 		if selector.Matches(labels.Set(pi.labels)) {
 			podKeys.Append(key)
+			fmt.Println("****************** +++++ checkPodMach key:%v added", key)
 			return true
 		}
 		return true
