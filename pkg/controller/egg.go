@@ -146,12 +146,25 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 			}
 		}
 
+		fmt.Println("%%%%%%%%%%%%%%%%%%%%%%%%%%%[0]", curPodLabels, eggi.PodLabels)
 		if eq := reflect.DeepEqual(curPodLabels, eggi.PodLabels); !eq {
+
+			fmt.Println("%%%%%%%%%%%%%%%%%%%%%%%%%%%[1]")
+
+			//updates labels in eggi - it's going to be reflected in boxes
+			eggi.PodLabels = curPodLabels //PodSelector's changed
+			c.eggInfoMap.Store(eggNamespaceName, eggi)
+
 			// egg spec for PodSelector changed
 			manager.boxes.Range(func(key BoxKey, value *eggBox) bool {
 				// Find all boxes using the same egg specified by the cegg
+
+				fmt.Println("%%%%%%%%%%%%%%%%%%%%%%%%%%%[2]")
 				if key.Egg.Name == cegg.Name && key.Egg.Namespace == cegg.Namespace {
+
+					fmt.Println("%%%%%%%%%%%%%%%%%%%%%%%%%%%[4]")
 					if len(key.pod.Namespace) > 0 && len(key.pod.Name) > 0 {
+						fmt.Println("%%%%%%%%%%%%%%%%%%%%%%%%%%%[5]")
 						podNamespaceName := types.NamespacedName{Namespace: key.pod.Namespace, Name: key.pod.Name}
 						pi, _ := c.podInfoMap.Load(podNamespaceName)
 						if matched := c.checkSinglePodMatch(pi, cegg); !matched {
@@ -169,6 +182,24 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 				}
 				return true
 			})
+
+			// a new pods may match right now:)
+			var boxKey BoxKey
+			boxKey.Egg = eggNamespaceName
+			if podKeys := c.checkPodMatch(cegg); podKeys.Len() > 0 {
+				for i := 0; i < podKeys.Len(); i++ {
+					pi, ok := c.podInfoMap.Load(podKeys.Get(i))
+					if ok {
+						//TODO handle error
+						boxKey.pod = pi.NamespaceName()
+						manager.BoxStore(boxKey, &eggi)
+
+						logger.Info("--------------------------Starting egg for the flow egg->pod", "box", boxKey)
+						pi.runEgg(ctx, boxKey)
+						logger.Info("--------------------------Box started for the flow egg->pod", "box", boxKey)
+					}
+				}
+			}
 		}
 
 		if err != nil {
