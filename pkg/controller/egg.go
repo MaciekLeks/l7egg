@@ -146,26 +146,48 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 			}
 		}
 
-		if eq := reflect.DeepEqual(curPodLabels, eggi.PodLabels); eq {
-			// egg spec not changed for PodSelector
-
-			logger.Info("Updating egg for CNs, CIDRs only")
-			// simple updating for policies
+		if eq := reflect.DeepEqual(curPodLabels, eggi.PodLabels); !eq {
+			// egg spec for PodSelector changed
 			manager.boxes.Range(func(key BoxKey, value *eggBox) bool {
 				// Find all boxes using the same egg specified by the cegg
 				if key.Egg.Name == cegg.Name && key.Egg.Namespace == cegg.Namespace {
-					err = manager.UpdateEgg(key, cegg.Spec.CIDRs, cegg.Spec.CommonNames)
-					if err != nil {
-						err = fmt.Errorf("updating clusteregg '%s': %s failed", cegg.Name, err.Error())
-						return false
+					if len(key.pod.Namespace) > 0 && len(key.pod.Name) > 0 {
+						podNamespaceName := types.NamespacedName{Namespace: key.pod.Namespace, Name: key.pod.Name}
+						pi, _ := c.podInfoMap.Load(podNamespaceName)
+						if matched := c.checkSinglePodMatch(pi, cegg); !matched {
+							logger.Info("Stopping box", "box", key.String())
+							err = manager.Stop(key)
+							if err != nil {
+								logger.Error(err, "Can't stop box", "box", key.String())
+								//TODO: should stop loop here or iterate over all matching boxes?
+							}
+							logger.Info("Box stopped", "box", key.String())
+						} else {
+							logger.Info("Egg labels changes but still match", "pod", podNamespaceName.String(), "box", key.String())
+						}
 					}
 				}
 				return true
 			})
-		} else {
-			// egg spec for PodSelector changed
-			logger.Info("Updating egg for CNs, CIDRs and PodSelector....")
 		}
+
+		if err != nil {
+			return err
+		}
+
+		// update CNs, CIDRs,...for remaining boxes
+		logger.Info("Updating egg for CNs, CIDRs....")
+		manager.boxes.Range(func(key BoxKey, value *eggBox) bool {
+			// Find all boxes using the same egg specified by the cegg
+			if key.Egg.Name == cegg.Name && key.Egg.Namespace == cegg.Namespace {
+				err = manager.UpdateEgg(key, cegg.Spec.CIDRs, cegg.Spec.CommonNames)
+				if err != nil {
+					err = fmt.Errorf("updating clusteregg '%s': %s failed", cegg.Name, err.Error())
+					return false
+				}
+			}
+			return true
+		})
 
 	} else {
 		//new egg
@@ -279,4 +301,25 @@ func (c *Controller) checkPodMatch(cegg v1alpha1.ClusterEgg) *syncx.SafeSlice[ty
 	}
 
 	return &podKeys
+}
+
+// checkSinglePodMatch matches pod info with cegg PdoSelector and returns true if matches
+func (c *Controller) checkSinglePodMatch(pi PodInfo, cegg v1alpha1.ClusterEgg) bool {
+	var matchLabels labels.Set
+	var err error
+
+	if cegg.Spec.PodSelector.Size() != 0 {
+		matchLabels, err = metav1.LabelSelectorAsMap(cegg.Spec.PodSelector)
+		if err != nil {
+			utilruntime.HandleError(err)
+			return false
+		}
+	}
+
+	selector := matchLabels.AsSelectorPreValidated()
+	if selector.Matches(labels.Set(pi.labels)) {
+		return true
+	}
+
+	return false
 }
