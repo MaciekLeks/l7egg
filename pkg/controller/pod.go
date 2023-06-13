@@ -224,17 +224,17 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 			return err
 		}
 
-		c.podInfoMap.Store(key, PodInfo{
+		pi := PodInfo{
 			name:          pod.Name,
 			namespace:     pod.Namespace,
 			labels:        pod.Labels,
 			nodeName:      pod.Spec.NodeName,
 			containerIDs:  containerdIDs,
 			matchedKeyBox: boxKey,
-		})
+		}
+		c.podInfoMap.Store(key, pi)
 
-		tbd, _ := c.podInfoMap.Load(key) //test only
-		fmt.Printf("************************Update Done: %+v\n", tbd)
+		fmt.Printf("************************Update Done: %+v\n", pi)
 
 	} else { //ADD
 		fmt.Println("***************************Trying to add - phase:", pod.Status)
@@ -257,7 +257,8 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 			if err != nil {
 				return err
 			}
-			c.podInfoMap.Store(key, PodInfo{
+
+			pi := PodInfo{
 				name:         pod.Name,
 				namespace:    pod.Namespace,
 				labels:       pod.Labels,
@@ -265,24 +266,23 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 				containerIDs: containerdIDs,
 				//containerCgroupPaths:
 				matchedKeyBox: boxKey,
-			})
+			}
 
-			if tbd, ok := c.podInfoMap.Load(key); ok {
+			c.podInfoMap.Store(key, pi)
 
-				fmt.Printf("********************Add Done: %+v\n", tbd)
+			fmt.Printf("********************Add Done: %+v\n", pi)
 
-				if matched {
+			if matched {
 
-					fmt.Printf("\n*******************{  Startin egg - hostname:%s, pod node:%s\n\n", nodeHostname, podNodeHostname)
-					if nodeHostname == podNodeHostname {
-						tbd.runEgg(ctx, boxKey)
-					} else {
+				fmt.Printf("\n*******************{  Startin egg - hostname:%s, pod node:%s\n\n", nodeHostname, podNodeHostname)
+				if nodeHostname == podNodeHostname {
+					pi.runEgg(ctx, boxKey)
+				} else {
 
-						fmt.Printf("\n****************{ not running in this node\n")
-					}
-					fmt.Println("**********************}")
-
+					fmt.Printf("\n****************{ not running in this node\n")
 				}
+				fmt.Println("**********************}")
+
 			}
 		} else {
 			fmt.Printf("********************Add Not Done:\n")
