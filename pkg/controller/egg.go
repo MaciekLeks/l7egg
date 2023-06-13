@@ -153,7 +153,6 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 
 			//updates labels in eggi - it's going to be reflected in boxes
 			eggi.PodLabels = curPodLabels //PodSelector's changed
-			c.eggInfoMap.Store(eggNamespaceName, eggi)
 
 			// egg spec for PodSelector changed
 			manager.boxes.Range(func(key BoxKey, value *eggBox) bool {
@@ -192,7 +191,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 					if ok {
 						//TODO handle error
 						boxKey.pod = pi.NamespaceName()
-						manager.BoxStore(boxKey, &eggi)
+						manager.BoxStore(boxKey, eggi)
 
 						logger.Info("--------------------------Starting egg for the flow egg->pod", "box", boxKey)
 						pi.runEgg(ctx, boxKey)
@@ -245,7 +244,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 		}
 
 		// store eggInfo in map
-		c.eggInfoMap.Store(eggNamespaceName, *eggi)
+		c.eggInfoMap.Store(eggNamespaceName, eggi)
 
 		// BoxStart cluster scope egg only if podLabels is empty
 		var boxKey BoxKey
