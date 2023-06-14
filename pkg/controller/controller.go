@@ -58,7 +58,7 @@ type Controller struct {
 
 	recorder record.EventRecorder
 
-	podInfoMap syncx.SafeMap[types.NamespacedName, PodInfo]
+	podInfoMap syncx.SafeMap[types.NamespacedName, *PodInfo]
 	eggInfoMap syncx.SafeMap[types.NamespacedName, *EggInfo] //namespace not used
 }
 
@@ -100,7 +100,7 @@ func NewController(ctx context.Context,
 		recorder: recorder,
 
 		//podInfoMap: PodInfoMap{},
-		podInfoMap: syncx.SafeMap[types.NamespacedName, PodInfo]{},
+		podInfoMap: syncx.SafeMap[types.NamespacedName, *PodInfo]{},
 		eggInfoMap: syncx.SafeMap[types.NamespacedName, *EggInfo]{},
 	}
 

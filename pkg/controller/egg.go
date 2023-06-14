@@ -166,7 +166,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 						fmt.Println("%%%%%%%%%%%%%%%%%%%%%%%%%%%[5]")
 						podNamespaceName := types.NamespacedName{Namespace: key.pod.Namespace, Name: key.pod.Name}
 						pi, _ := c.podInfoMap.Load(podNamespaceName)
-						if matched := c.checkSinglePodMatch(pi, cegg); !matched {
+						if matched := c.checkSinglePodMatch(*pi, cegg); !matched {
 							logger.Info("Stopping box", "box", key.String())
 							err = manager.Stop(key)
 							if err != nil {
@@ -193,9 +193,10 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 						boxKey.pod = pi.NamespaceName()
 						manager.BoxStore(boxKey, eggi)
 
-						logger.Info("--------------------------Starting egg for the flow egg->pod", "box", boxKey)
+						logger.Info("Starting egg for the flow egg->pod", "box", boxKey)
+						pi.matchedKeyBox = boxKey
 						pi.runEgg(ctx, boxKey)
-						logger.Info("--------------------------Box started for the flow egg->pod", "box", boxKey)
+						logger.Info("Box started for the flow egg->pod", "box", boxKey)
 					}
 				}
 			}
@@ -267,6 +268,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 						manager.BoxStore(boxKey, eggi)
 
 						logger.Info("--------------------------Starting egg for the flow egg->pod", "box", boxKey)
+						pi.matchedKeyBox = boxKey
 						pi.runEgg(ctx, boxKey)
 						logger.Info("--------------------------Box started for the flow egg->pod", "box", boxKey)
 					}
@@ -313,7 +315,7 @@ func (c *Controller) checkPodMatch(cegg v1alpha1.ClusterEgg) *syncx.SafeSlice[ty
 
 	fmt.Println("****************** +++++ checkPodMach podCacheSynced:%t ceggCacheSynced:%t", c.podCacheSynced(), c.podCacheSynced())
 
-	c.podInfoMap.Range(func(key types.NamespacedName, pi PodInfo) bool {
+	c.podInfoMap.Range(func(key types.NamespacedName, pi *PodInfo) bool {
 		selector := matchLabels.AsSelectorPreValidated()
 		if selector.Matches(labels.Set(pi.labels)) {
 			podKeys.Append(key)

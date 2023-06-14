@@ -197,14 +197,28 @@ func (c *Controller) deletePodInfo(ctx context.Context, pod *corev1.Pod) error {
 func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "namespace", pod.Namespace, "name", pod.Name)
 	logger.Info("Update pod info.")
-
 	key := types.NamespacedName{pod.Namespace, pod.Name}
 	if pi, ok := c.podInfoMap.Load(key); ok {
 		fmt.Println("***************************Update not add ", key.String(), pod.Status.Phase, pod.DeletionTimestamp)
 
-		boxKey, _ := c.checkEggMatch(pod)
+		boxKey, found := c.checkEggMatch(pod)
+		var zeroBoxKey BoxKey
+		fmt.Printf("pi.matchedBoxKey:%+vboxKey:%+v, found: %t \n", pi.matchedKeyBox, boxKey, found)
+		if !found && pi.matchedKeyBox != zeroBoxKey {
+			//old-matching->cur-not-matching (e.g. someone changed POD label app:test->app:test3)
+			manager := BpfManagerInstance()
+			logger.Info("Stopping box", "box", key.String())
+			err := manager.Stop(pi.matchedKeyBox)
+			if err != nil {
+				logger.Error(err, "Can't stop box", "box", key.String())
+				//TODO are we sure we want to return here?
+				return err
+			}
+			pi.matchedKeyBox = zeroBoxKey
+			logger.Info("Box stopped", "box", key.String())
+		}
+
 		if pi.matchedKeyBox != boxKey {
-			var zeroBoxKey BoxKey
 			if pi.matchedKeyBox != zeroBoxKey {
 				if boxKey == zeroBoxKey {
 					fmt.Println("****************** Update Egg to remove to from the egg")
@@ -232,7 +246,7 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 			containerIDs:  containerdIDs,
 			matchedKeyBox: boxKey,
 		}
-		c.podInfoMap.Store(key, pi)
+		c.podInfoMap.Store(key, &pi)
 
 		fmt.Printf("************************Update Done: %+v\n", pi)
 
@@ -268,7 +282,7 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 				matchedKeyBox: boxKey,
 			}
 
-			c.podInfoMap.Store(key, pi)
+			c.podInfoMap.Store(key, &pi)
 
 			fmt.Printf("********************Add Done: %+v\n", pi)
 
