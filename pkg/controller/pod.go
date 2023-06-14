@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	"github.com/MaciekLeks/l7egg/pkg/tools"
@@ -17,7 +16,6 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
-	"net"
 	"os"
 	"strings"
 )
@@ -53,8 +51,8 @@ func (c *Controller) handlePodUpdate(prev interface{}, obj interface{}) {
 	curPod := obj.(*corev1.Pod)
 
 	if oldPod.GetResourceVersion() != curPod.GetResourceVersion() {
-		_json, _ := json.Marshal(curPod.Status)
-		fmt.Printf("******************* handlePodUpdate-change[%s]: old-rev:%s cur-rev: %s \n\n%+v\n\n", curPod.Name, oldPod.GetResourceVersion(), curPod.GetResourceVersion(), string(_json))
+		//_json, _ := json.Marshal(curPod.Status)
+		//fmt.Printf("******************* handlePodUpdate-change[%s]: old-rev:%s cur-rev: %s \n\n%+v\n\n", curPod.Name, oldPod.GetResourceVersion(), curPod.GetResourceVersion(), string(_json))
 		//handle only update not sync event
 		//c.enqueuePod(obj)
 		c.handlePodObject(obj)
@@ -127,7 +125,7 @@ func (c *Controller) syncPodHandler(ctx context.Context, key string) error {
 	}
 
 	if pod.DeletionTimestamp != nil {
-		logger.Info("-----------Pod is being deleted.")
+		logger.Info("Pod is being deleted.")
 		// when a curPod is deleted gracefully it's deletion timestamp is first modified to reflect a grace period,
 		// and after such time has passed, the kubelet actually deletes it from the store. We receive an update
 		// for modification of the deletion timestamp, not waituntil the kubelet actually deletes the curPod.
@@ -204,7 +202,7 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	var pi *PodInfo
 	manager := BpfManagerInstance()
 	if pi, found = c.podInfoMap.Load(podKey); found {
-		fmt.Println("***************************Update not add ", podKey.String(), pod.Status.Phase, pod.DeletionTimestamp)
+		//fmt.Println("***************************Update not add ", podKey.String(), pod.Status.Phase, pod.DeletionTimestamp)
 
 		boxKey, foundBox := c.findPodBox(pod)
 		var zeroBoxKey BoxKey
@@ -249,22 +247,22 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 
 				// only different code against code for ADD
 				pi.matchedKeyBox = boxKey
-
-				fmt.Printf("\n*******************{  Startin box - hostname:%s, pod node:%s\n\n", nodeHostname, podNodeHostname)
+				logger.Info("Starting box for the flow pod->egg", "box", podKey.String(), "node", nodeHostname, "pod node", podNodeHostname)
 				if nodeHostname == podNodeHostname {
 					pi.runEgg(ctx, boxKey)
-				} else {
+					logger.Info("Box started for the flow pod->egg", "box", podKey.String(), "node", nodeHostname, "pod node", podNodeHostname)
+				} /*else {
 
 					fmt.Printf("\n****************{ not running in this node\n")
 				}
-				fmt.Println("**********************}")
+				fmt.Println("**********************}")*/
 			}
 		}
 
-		fmt.Printf("************************Update Done: %+v\n", pi)
+		//fmt.Printf("************************Update Done: %+v\n", pi)
 
 	} else { //ADD
-		fmt.Println("***************************Trying to add")
+		//fmt.Println("***************************Trying to add")
 		if pod.Status.Phase == corev1.PodRunning {
 			containerdIDs, err := getContainerdIDs(pod.Status.ContainerStatuses)
 			if err != nil {
@@ -283,7 +281,7 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 			c.podInfoMap.Store(podKey, &pi)
 			if eggKeys := c.checkEggMatch(pod); eggKeys.Len() > 0 {
 				if eggKeys.Len() > 1 {
-					logger.Info("More than one egg matched. Choosing the first one.", "eggs", eggKeys)
+					logger.Info("More than one egg matched. Choosing the first one", "eggs", eggKeys)
 				}
 
 				nodeHostname, err := tools.GetHostname()
@@ -303,22 +301,24 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 				pi.matchedKeyBox = boxKey
 				manager.BoxStore(boxKey, eggi)
 
-				fmt.Printf("********************Add Done: %+v\n", pi)
+				//fmt.Printf("********************Add Done: %+v\n", pi)
 
-				fmt.Printf("\n*******************{  Startin egg - hostname:%s, pod node:%s\n\n", nodeHostname, podNodeHostname)
+				//fmt.Printf("\n*******************{  ..Startin egg - hostname:%s, pod node:%s\n\n", nodeHostname, podNodeHostname)
+				logger.Info("Starting box for the flow pod->egg", "box", podKey.String(), "node", nodeHostname, "pod node", podNodeHostname)
 				if nodeHostname == podNodeHostname {
 					pi.runEgg(ctx, boxKey)
-				} else {
+					logger.Info("Box started for the flow pod->egg", "box", podKey.String(), "node", nodeHostname, "pod node", podNodeHostname)
+				} /*else {
 
 					fmt.Printf("\n****************{ not running in this node\n")
 				}
-				fmt.Println("**********************}")
+				fmt.Println("**********************}")*/
 
 			} else {
 
 			}
 		} else {
-			fmt.Printf("********************Add Not Done:\n")
+			logger.V(4).Info("Nor update nor add done")
 		}
 	}
 
@@ -362,14 +362,14 @@ func (c *Controller) findPodBox(pod *corev1.Pod) (BoxKey, bool) {
 	manager := BpfManagerInstance()
 	podLabels := labels.Set(pod.Labels)
 
-	fmt.Println("****************** +++++ findPodBox podCacheSynced:%t ceggCacheSynced:%t", c.podCacheSynced(), c.podCacheSynced())
+	//fmt.Println("****************** +++++ findPodBox podCacheSynced:%t ceggCacheSynced:%t", c.podCacheSynced(), c.podCacheSynced())
 
 	manager.BoxAny(func(key BoxKey, box IEggBox) bool {
 		eggPodLabels := box.Egg().EggInfo.PodLabels
 		fmt.Println("+++++ eggPodLabels:", eggPodLabels)
 		if len(eggPodLabels) > 0 {
 			selector := labels.Set(eggPodLabels).AsSelectorPreValidated()
-			fmt.Printf("\n\nSelector: %s; podLabels:%s\n\n", selector, podLabels)
+			//fmt.Printf("\n\nSelector: %s; podLabels:%s\n\n", selector, podLabels)
 
 			if selector.Matches(podLabels) {
 				found = true
@@ -380,12 +380,13 @@ func (c *Controller) findPodBox(pod *corev1.Pod) (BoxKey, bool) {
 		return true //false
 	})
 
-	if !found {
-		fmt.Println("+++++ findPodBox found no matching pod to egg ")
-	} else {
+	/*
+		if !found {
+			fmt.Println("+++++ findPodBox found no matching pod to egg ")
+		} else {
 
-		fmt.Println("+++++  findPodBox found matching pod to policy ")
-	}
+			fmt.Println("+++++  findPodBox found matching pod to policy ")
+		}*/
 
 	return boxKey, found
 }
@@ -396,25 +397,26 @@ func (c *Controller) checkEggMatch(pod *corev1.Pod) *syncx.SafeSlice[types.Names
 
 	podLabels := labels.Set(pod.Labels)
 
-	fmt.Println("****************** +++++ checkEggMach podCacheSynced:%t ceggCacheSynced:%t", c.podCacheSynced(), c.podCacheSynced())
+	//fmt.Println("****************** +++++ checkEggMach podCacheSynced:%t ceggCacheSynced:%t", c.podCacheSynced(), c.podCacheSynced())
 
 	c.eggInfoMap.Range(func(key types.NamespacedName, eggi *EggInfo) bool {
 		matchLabels := labels.Set(eggi.PodLabels)
 		selector := matchLabels.AsSelectorPreValidated()
 		if selector.Matches(podLabels) {
 			eggKeys.Append(key)
-			fmt.Println("****************** +++++ checkEggMach key:%v added", key)
+			//fmt.Println("****************** +++++ checkEggMach key:%v added", key)
 			return true
 		}
 		return true
 	})
 
-	if eggKeys.Len() > 0 {
-		fmt.Println("+++++ checkPodMatch found no matching pod to egg")
-	} else {
+	/*
+		if eggKeys.Len() > 0 {
+			fmt.Println("+++++ checkPodMatch found no matching pod to egg")
+		} else {
 
-		fmt.Println("+++++ checkPodMatch found matching pod to policy")
-	}
+			fmt.Println("+++++ checkPodMatch found matching pod to policy")
+		}*/
 
 	return &eggKeys
 }
@@ -431,9 +433,9 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey BoxKey) {
 	//namespace := namespaces.Default
 
 	// Pobierz kontener.
-	fmt.Printf("///////////////:)1")
+	//fmt.Printf("///////////////:)1")
 	container, err := client.LoadContainer(ctx, pi.containerIDs[0]) //TODO not only 0 ;)
-	fmt.Printf("///////////////:)2")
+	//fmt.Printf("///////////////:)2")
 	if err != nil {
 		fmt.Printf("Błąd podczas ładowania kontenera: %v", err)
 		return
@@ -454,7 +456,7 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey BoxKey) {
 	}
 
 	// Wyświetl PID procesu init kontenera.
-	fmt.Println("@@@@@@@@@@@ Container PID: %d", pid)
+	//fmt.Println("@@@@@@@@@@@ Container PID: %d", pid)
 
 	//cgroup or tc - comment cgroup (set to "") to make tc over cgroup?
 	cgroupPath, err := getContainerdCgroupPath(pid) //cgroup over tc programs
@@ -464,7 +466,7 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey BoxKey) {
 		return
 	}
 
-	fmt.Println("############# cgroupPath: ", cgroupPath)
+	//fmt.Println("############# cgroupPath: ", cgroupPath)
 
 	path := fmt.Sprintf("/proc/%d/ns/net", pid)
 	netns, err := cnins.GetNS(path)
@@ -477,14 +479,14 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey BoxKey) {
 	//1}
 	//nsid, err := tools.GetNsIDFromFD(netns.Fd())
 
-	fmt.Printf("@@@@@@@@@@@ netns ID: %d", netns.Fd())
+	//fmt.Printf("@@@@@@@@@@@ netns ID: %d", netns.Fd())
 
 	netns.Do(func(_ns cnins.NetNS) error {
-		ifaces, _ := net.Interfaces()
+		//ifaces, _ := net.Interfaces()
 
-		fmt.Printf("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ Interfaces: %v\n", ifaces)
+		//fmt.Printf("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ Interfaces: %v\n", ifaces)
 
-		fmt.Println("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ {{{{{{{{ ns:", _ns.Path(), int(_ns.Fd()))
+		//fmt.Println("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ {{{{{{{{ ns:", _ns.Path(), int(_ns.Fd()))
 
 		//ns, err = nns.GetFromPath(_ns.Path())
 		//defer ns.Close()
@@ -493,7 +495,7 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey BoxKey) {
 		manager := BpfManagerInstance()
 		//err = manager.BoxStart(ctx, boxKey, int(netns.Fd()))
 		err = manager.BoxStart(ctx, boxKey, netns.Path(), cgroupPath)
-		fmt.Println("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ }}}}}}}}, podInfo:%s, boxKey:%", pi.name, boxKey)
+		//fmt.Println("\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ }}}}}}}}, podInfo:%s, boxKey:%", pi.name, boxKey)
 
 		return nil
 	})
