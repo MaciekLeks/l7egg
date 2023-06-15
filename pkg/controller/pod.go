@@ -36,6 +36,12 @@ type PodInfo struct {
 	matchedKeyBox BoxKey
 }
 
+func (pi *PodInfo) set(fn func(val *PodInfo)) {
+	pi.Lock()
+	defer pi.Unlock()
+	fn(pi)
+}
+
 func (c *Controller) handlePodAdd(obj interface{}) {
 	//fmt.Println("******************* handlePodAdd, listerSynced:", c.podCacheSynced())
 	//c.enqueuePod(obj)
@@ -171,9 +177,6 @@ func (c *Controller) deletePodInfo(ctx context.Context, pod *corev1.Pod) error {
 
 	key := types.NamespacedName{pod.Namespace, pod.Name}
 	if pi, ok := c.podInfoMap.Load(key); ok {
-		pi.Lock()
-		defer pi.Unlock()
-
 		manager := BpfManagerInstance()
 		var err error
 		manager.boxes.Range(func(key BoxKey, value *eggBox) bool {
@@ -206,8 +209,6 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	var pi *PodInfo
 	manager := BpfManagerInstance()
 	if pi, found = c.podInfoMap.Load(podKey); found {
-		pi.Lock()
-		defer pi.Unlock()
 		//fmt.Println("***************************Update not add ", podKey.String(), pod.Status.Phase, pod.DeletionTimestamp)
 
 		boxKey, foundBox := c.findPodBox(pod)
@@ -223,7 +224,9 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 				//TODO are we sure we want to return here?
 				return err
 			}
-			pi.matchedKeyBox = zeroBoxKey
+			pi.set(func(v *PodInfo) {
+				v.matchedKeyBox = zeroBoxKey
+			})
 			logger.Info("Box stopped", "box", podKey.String())
 		}
 
@@ -252,7 +255,9 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 				manager.BoxStore(boxKey, eggi)
 
 				// only different code against code for ADD
-				pi.matchedKeyBox = boxKey
+				pi.set(func(v *PodInfo) {
+					v.matchedKeyBox = boxKey
+				})
 				logger.Info("Starting box for the flow pod->egg", "box", podKey.String(), "node", nodeHostname, "pod node", podNodeHostname)
 				if nodeHostname == podNodeHostname {
 					pi.runEgg(ctx, boxKey)
@@ -304,9 +309,9 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 					return fmt.Errorf("egg not found", "egg", eggKey.String())
 				}
 				boxKey := BoxKey{pod: podKey, Egg: eggKey}
-				pi.Lock()
-				defer pi.Unlock()
-				pi.matchedKeyBox = boxKey
+				pi.set(func(v *PodInfo) {
+					v.matchedKeyBox = boxKey
+				})
 				manager.BoxStore(boxKey, eggi)
 
 				//fmt.Printf("********************Add Done: %+v\n", pi)

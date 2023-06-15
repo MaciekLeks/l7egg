@@ -194,7 +194,9 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 						manager.BoxStore(boxKey, eggi)
 
 						logger.Info("Starting egg for the flow egg->pod", "box", boxKey)
-						pi.matchedKeyBox = boxKey
+						pi.set(func(v *PodInfo) {
+							v.matchedKeyBox = boxKey
+						})
 						pi.runEgg(ctx, boxKey)
 						logger.Info("Box started for the flow egg->pod", "box", boxKey)
 					}
@@ -268,7 +270,9 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 						manager.BoxStore(boxKey, eggi)
 
 						logger.Info("Starting box for the flow egg->pod", "box", boxKey)
-						pi.matchedKeyBox = boxKey
+						pi.set(func(v *PodInfo) {
+							v.matchedKeyBox = boxKey
+						})
 						pi.runEgg(ctx, boxKey)
 						logger.Info("Box started for the flow egg->pod", "box", boxKey)
 					}

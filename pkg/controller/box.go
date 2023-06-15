@@ -11,6 +11,7 @@ import (
 )
 
 type EggInfo struct {
+	sync.RWMutex
 	CNs              *syncx.SafeSlice[CN]
 	CIDRs            []*CIDR
 	IngressInterface string
