@@ -18,6 +18,7 @@ import (
 	"k8s.io/klog/v2"
 	"os"
 	"strings"
+	"sync"
 )
 
 // PodInfoMap maps Pod namespace name to PodInfo
@@ -25,6 +26,7 @@ import (
 
 // PodInfo holds POD crucial metadata.
 type PodInfo struct {
+	sync.RWMutex
 	//UID       string
 	name          string
 	namespace     string
@@ -169,6 +171,8 @@ func (c *Controller) deletePodInfo(ctx context.Context, pod *corev1.Pod) error {
 
 	key := types.NamespacedName{pod.Namespace, pod.Name}
 	if pi, ok := c.podInfoMap.Load(key); ok {
+		pi.Lock()
+		defer pi.Unlock()
 
 		manager := BpfManagerInstance()
 		var err error
@@ -202,6 +206,8 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	var pi *PodInfo
 	manager := BpfManagerInstance()
 	if pi, found = c.podInfoMap.Load(podKey); found {
+		pi.Lock()
+		defer pi.Unlock()
 		//fmt.Println("***************************Update not add ", podKey.String(), pod.Status.Phase, pod.DeletionTimestamp)
 
 		boxKey, foundBox := c.findPodBox(pod)
@@ -298,6 +304,8 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 					return fmt.Errorf("egg not found", "egg", eggKey.String())
 				}
 				boxKey := BoxKey{pod: podKey, Egg: eggKey}
+				pi.Lock()
+				defer pi.Unlock()
 				pi.matchedKeyBox = boxKey
 				manager.BoxStore(boxKey, eggi)
 
