@@ -3,8 +3,9 @@ package tools
 import (
 	"encoding/json"
 	"fmt"
+	cnins "github.com/containernetworking/plugins/pkg/ns"
 	"github.com/florianl/go-tc"
-
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"net"
 	"os"
 )
@@ -24,15 +25,15 @@ type TCClsActHelper struct {
 	tcnl    *tc.Tc
 }
 
-func NewOpen(netNS int, iface string) (*TCClsActHelper, error) {
+func NewOpen(netNSFD int, iface string) (*TCClsActHelper, error) {
 
 	devID, err := net.InterfaceByName(iface)
 	if err != nil {
-		return nil, fmt.Errorf("Could not get interface ID: %v\n", err)
+		return nil, fmt.Errorf("Could not get interface %s: %v\n", iface, err)
 	}
 
 	tcnl, err := tc.Open(&tc.Config{
-		NetNS: netNS,
+		NetNS: netNSFD,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("Opening rtnetlink socket: %v\n", err)
@@ -54,7 +55,7 @@ func NewOpen(netNS int, iface string) (*TCClsActHelper, error) {
 	}
 
 	helper := &TCClsActHelper{
-		netNS:   netNS,
+		netNS:   netNSFD,
 		ifaceID: devID.Index,
 		clsact:  clsact,
 		tcnl:    tcnl,
@@ -133,8 +134,8 @@ func must(err error, format string, args ...interface{}) {
 	}
 }
 
-func CleanInterface(netNS int, iface string) {
-	h, err := NewOpen(netNS, iface)
+func CleanInterface(netNs int, iface string) {
+	h, err := NewOpen(netNs, iface)
 	must(err, "Opening RTNETLINK socket")
 	defer h.Close()
 
@@ -154,10 +155,30 @@ func CleanInterface(netNS int, iface string) {
 	must(err, "Deleting clsact qdisc")
 }
 
-func CleanInterfaces(netNS int, iiface string, eiface string) {
-	hi, err := NewOpen(0, iiface)
+func CleanInterfaces(netNsPath string, iiface string, eiface string) {
+	var netns cnins.NetNS
+	var err error
+	if netNsPath != "" {
+		netns, err = cnins.GetNS(netNsPath)
+		if err != nil {
+			utilruntime.HandleError(fmt.Errorf("can't open network namespace: %v", err))
+			return
+		}
+		defer netns.Close()
+		netns.Do(func(_ns cnins.NetNS) error {
+			cleanNsInterface(int(netns.Fd()), iiface, eiface)
+			//TOOD add error handling
+			return nil
+		})
+	} else {
+		cleanNsInterface(int(netns.Fd()), iiface, eiface)
+	}
+}
+
+func cleanNsInterface(netNsFD int, iiface string, eiface string) {
+	hi, err := NewOpen(netNsFD, iiface)
 	must(err, "Opening RTNETLINK socket for ingress interface")
-	he, err := NewOpen(0, eiface)
+	he, err := NewOpen(netNsFD, eiface)
 	must(err, "Opening RTNETLINK socket for egress interface")
 	defer hi.Close()
 	defer he.Close()
@@ -176,3 +197,14 @@ func CleanInterfaces(netNS int, iiface string, eiface string) {
 	err = he.DeleteClsact()
 	must(err, "Deleting clsact qdisc")
 }
+
+//func GetNsIDFromFD(fd uintptr) (int, error) {
+//	//return syscall.GetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_PEERGROUPS)
+//	//return syscall.GetsockoptInt(int(fd), syscall.SOL_SOCKET, 0x3b)
+//	nsID, _, errno := syscall.RawSyscall(syscall.SYS_FCNTL, fd, syscall.F_GETOWN, 0)
+//	if errno != 0 {
+//		return -1, errno
+//	}
+//
+//	return int(nsID), nil
+//}

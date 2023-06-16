@@ -3,8 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/MaciekLeks/l7egg/pkg/controller"
 	"github.com/MaciekLeks/l7egg/pkg/tools"
-	"github.com/MaciekLeks/l7egg/pkg/user"
+	"k8s.io/apimachinery/pkg/types"
 	"os"
 )
 
@@ -33,8 +34,12 @@ func main() {
 		return
 	}
 
-	manager := user.BpfManagerInstance()
-	clientegg, err := manager.NewClientEgg(*iface, *eface, cnList, cidrList)
+	manager := controller.BpfManagerInstance()
+	clientegg, err := manager.NewEggInfo(*iface, *eface, cnList, cidrList, nil)
+
+	var defaultBoxKey controller.BoxKey
+	defaultBoxKey.Egg = types.NamespacedName{Name: "default"}
+	manager.BoxStore(defaultBoxKey, clientegg)
 
 	if err != nil {
 		fmt.Errorf("Creating client egg.", err)
@@ -42,7 +47,7 @@ func main() {
 	}
 	ctx := tools.SetupSignalHandler()
 
-	manager.Start(ctx, "default", clientegg)
+	manager.BoxStart(ctx, defaultBoxKey, "", "")
 	manager.Wait()
 
 }

@@ -200,7 +200,7 @@ func (f *sharedInformerFactory) InformerFor(obj runtime.Object, newFunc internal
 //	defer factory.WaitForStop()    // Returns immediately if nothing was started.
 //	genericInformer := factory.ForResource(resource)
 //	typedInformer := factory.SomeAPIGroup().V1().SomeType()
-//	factory.Start(ctx.Done())          // Start processing these informers.
+//	factory.BoxStart(ctx.Done())          // BoxStart processing these informers.
 //	synced := factory.WaitForCacheSync(ctx.Done())
 //	for v, ok := range synced {
 //	    if !ok {
@@ -209,10 +209,10 @@ func (f *sharedInformerFactory) InformerFor(obj runtime.Object, newFunc internal
 //	    }
 //	}
 //
-//	// Creating informers can also be created after Start, but then
-//	// Start must be called again:
+//	// Creating informers can also be created after BoxStart, but then
+//	// BoxStart must be called again:
 //	anotherGenericInformer := factory.ForResource(resource)
-//	factory.Start(ctx.Done())
+//	factory.BoxStart(ctx.Done())
 type SharedInformerFactory interface {
 	internalinterfaces.SharedInformerFactory
 
