@@ -33,11 +33,20 @@ type ClusterEggList struct {
 }
 
 type ClusterEggSpec struct {
+	Egress  EgressSpec  `json:"egress,omitempty"`
+	Ingress IngressSpec `json:"ingress,omitempty"`
+}
+
+type IngressSpec struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="IngressInterface is immutable"
 	// +kubebuilder:validation:MaxLength=32
 	IngressInterface string `json:"ingressInterface,omitempty"`
+}
 
+type EgressSpec struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="EgressInterface is immutable"
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="EgressInterface is immutable"
 	// +kubebuilder:validation:MaxLength=32
