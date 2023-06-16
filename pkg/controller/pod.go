@@ -36,7 +36,8 @@ type PodInfo struct {
 	matchedKeyBox BoxKey
 }
 
-func (pi *PodInfo) set(fn func(val *PodInfo)) {
+// set sets in a safe manner PodInfo fields.
+func (pi *PodInfo) set(fn func(v *PodInfo)) {
 	pi.Lock()
 	defer pi.Unlock()
 	fn(pi)
