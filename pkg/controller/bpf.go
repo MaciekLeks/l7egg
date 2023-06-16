@@ -161,7 +161,8 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, netNSPath string, c
 func (egg *egg) initCIDRs() {
 	//{cidrs
 	fmt.Println("[ACL]: Init")
-	for _, cidr := range egg.CIDRs {
+	for i := 0; i < egg.CIDRs.Len(); i++ {
+		cidr := egg.CIDRs.Get(i)
 		val := ipLPMVal{
 			ttl:     0,
 			counter: 0,
@@ -177,7 +178,9 @@ func (egg *egg) initCIDRs() {
 			err = updateACLValueNew(egg.ipv6ACL, ip, val)
 		}
 		must(err, "Can't update ACL.")
-		cidr.status = assetSynced
+		egg.CIDRs.Update(i, func(current *CIDR) {
+			current.status = assetSynced
+		})
 	}
 }
 
@@ -191,14 +194,19 @@ func (egg *egg) initCNs() {
 	}
 }
 
-func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
+func (egg *egg) updateCIDRs(cidrs []CIDR) error {
 
-	for _, current := range egg.CIDRs {
-		current.status = assetStale
+	for i := 0; i < egg.CIDRs.Len(); i++ {
+		egg.CIDRs.Update(i, func(current *CIDR) {
+			current.status = assetStale
+		})
 
+		current := egg.CIDRs.Get(i)
 		for _, newone := range cidrs {
 			if current.cidr == newone.cidr {
-				current.status = assetSynced
+				egg.CIDRs.Update(i, func(current *CIDR) {
+					current.status = assetSynced
+				})
 				newone.status = assetSynced
 			}
 		}
@@ -218,12 +226,12 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 
 		//we control CIDR with ttl=0 only
 		if val.ttl == 0 {
-			for _, cidr := range egg.CIDRs {
+			for i := 0; i < egg.CIDRs.Len(); i++ {
+				cidr := egg.CIDRs.Get(i)
 				ipv4Key, ok := cidr.lpmKey.(ipv4LPMKey)
 				if ok {
 					if key.prefixLen == ipv4Key.prefixLen && key.data == ipv4Key.data {
 						if cidr.status == assetStale {
-
 							val.status = uint8(assetStale)
 							err := updateACLValueNew(egg.ipv4ACL, key, val)
 							if err != nil {
@@ -249,7 +257,8 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 
 		//we control CIDR with ttl=0 only
 		if val.ttl == 0 {
-			for _, cidr := range egg.CIDRs {
+			for i := 0; i < egg.CIDRs.Len(); i++ {
+				cidr := egg.CIDRs.Get(i)
 				ipv6Key, ok := cidr.lpmKey.(ipv6LPMKey)
 				if ok {
 					if key.prefixLen == ipv6Key.prefixLen && key.data == ipv6Key.data {
@@ -281,13 +290,12 @@ func (egg *egg) updateCIDRs(cidrs []*CIDR) error {
 				return fmt.Errorf("Can't update ACL %#v", err)
 			}
 			cidr.status = assetSynced
-			//shallow copy of cidr
-			newOne := *cidr
-			egg.CIDRs = append(egg.CIDRs, &newOne)
+			egg.CIDRs.Append(cidr)
 		}
 	}
 
-	for _, cidr := range egg.CIDRs {
+	for i := 0; i < egg.CIDRs.Len(); i++ {
+		cidr := egg.CIDRs.Get(i)
 		if cidr.status != assetSynced {
 			fmt.Printf("Stale keys %#v\n", cidr)
 

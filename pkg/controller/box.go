@@ -13,7 +13,7 @@ import (
 type EggInfo struct {
 	sync.RWMutex
 	CNs              *syncx.SafeSlice[CN]
-	CIDRs            []*CIDR
+	CIDRs            *syncx.SafeSlice[CIDR]
 	IngressInterface string
 	EgressInterface  string
 	BPFObjectPath    string
@@ -94,28 +94,28 @@ func (box *eggBox) Boxes() *egg {
 }
 
 // parseCIDR TODO: only ipv4
-func (m *eggManager) parseCIDR(cidrS string) (*CIDR, error) {
+func (m *eggManager) parseCIDR(cidrS string) (CIDR, error) {
 	ip, ipNet, err := net.ParseCIDR(cidrS)
 	must(err, "Can't parse ipv4 Net.")
 	if err != nil {
-		return nil, fmt.Errorf("can't parse CIDR %s", cidrS)
+		return CIDR{}, fmt.Errorf("can't parse CIDR %s", cidrS)
 	}
 
 	fmt.Println("#### parseCID ", ip, " ipNEt", ipNet)
 
 	prefix, _ := ipNet.Mask.Size()
 	if ipv4 := ip.To4(); ipv4 != nil {
-		return &CIDR{cidrS, m.seqIdGen.Next(), ipv4LPMKey{uint32(prefix), [4]uint8(ipv4)}, assetNew}, nil
+		return CIDR{cidrS, m.seqIdGen.Next(), ipv4LPMKey{uint32(prefix), [4]uint8(ipv4)}, assetNew}, nil
 	} else if ipv6 := ip.To16(); ipv6 != nil {
-		return &CIDR{cidrS, m.seqIdGen.Next(), ipv6LPMKey{uint32(prefix), [16]uint8(ipv6)}, assetNew}, nil
+		return CIDR{cidrS, m.seqIdGen.Next(), ipv6LPMKey{uint32(prefix), [16]uint8(ipv6)}, assetNew}, nil
 	}
 
-	return nil, fmt.Errorf("can't converts CIDR to IPv4/IPv6 %s", cidrS)
+	return CIDR{}, fmt.Errorf("can't converts CIDR to IPv4/IPv6 %s", cidrS)
 }
 
 // ParseCIDRs TODO: only ipv4
-func (m *eggManager) parseCIDRs(cidrsS []string) ([]*CIDR, error) {
-	var cidrs []*CIDR
+func (m *eggManager) parseCIDRs(cidrsS []string) ([]CIDR, error) {
+	var cidrs []CIDR
 	for _, cidrS := range cidrsS {
 		cidr, err := m.parseCIDR(cidrS)
 		if err != nil {
@@ -230,11 +230,14 @@ func (m *eggManager) NewEggInfo(iiface string, eiface string, cnsS []string, cid
 	safeCNs := syncx.SafeSlice[CN]{}
 	safeCNs.Append(cns...)
 
-	clientegg := &EggInfo{ //TODO make a function to wrap this up (parsing, building the object)
+	safeCIDRs := syncx.SafeSlice[CIDR]{}
+	safeCIDRs.Append(cidrs...)
+
+	var clientegg = &EggInfo{ //TODO make a function to wrap this up (parsing, building the object)
 		IngressInterface: iiface,
 		EgressInterface:  eiface,
 		CNs:              &safeCNs,
-		CIDRs:            cidrs,
+		CIDRs:            &safeCIDRs,
 		BPFObjectPath:    "./l7egg.bpf.o",
 		PodLabels:        podLabels,
 	}
