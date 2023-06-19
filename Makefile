@@ -81,17 +81,18 @@ vmlinuxh:
 	echo "vmlinuxh"
 	bpftool btf dump file /sys/kernel/btf/vmlinux format c > ./kernel/vmlinux.h
 
-.PHONY: remote-build
-remote-build3:
-	rsync -ahv  --delete --exclude '.git' . mlk@ubu-ebpf3:~/dev/ebpf-tests/
-	ssh mlk@ubu-ebpf3 "cd ~/dev/ebpf-tests && make clean && make all"
 
-.PHONY: remote-build
+.PHONY: remote-build2
 remote-build2:
 	rsync -ahv  --delete --exclude '.git' . mlk@ubu-ebpf2:~/dev/ebpf-tests/
 	ssh mlk@ubu-ebpf2 "cd ~/dev/ebpf-tests && make clean && make all"
 
-.PHONY: remote-build
+.PHONY: remote-build3
+remote-build3:
+	rsync -ahv  --delete --exclude '.git' . mlk@ubu-ebpf3:~/dev/ebpf-tests/
+	ssh mlk@ubu-ebpf3 "cd ~/dev/ebpf-tests && make clean && make all"
+
+.PHONY: remote-build-all
 remote-build-all: remote-build2 remote-build3
 
 .PHONY: docker

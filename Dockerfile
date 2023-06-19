@@ -19,8 +19,8 @@ RUN wget -qO - https://azlux.fr/repo.gpg.key | apt-key add - \
 #RUN make olddefconfig && make headers_install
 
 WORKDIR /tmp
-RUN curl -LO https://go.dev/dl/go1.20.2.linux-amd64.tar.gz \
-  && rm -rf /usr/local/go && tar -C /usr/local -xzf go1.20.2.linux-amd64.tar.gz \
+RUN curl -LO https://go.dev/dl/go1.20.5.linux-amd64.tar.gz \
+  && rm -rf /usr/local/go && tar -C /usr/local -xzf go1.20.5.linux-amd64.tar.gz \
   && ln -s /usr/local/go/bin/go /usr/local/bin/go
 
 # debian only: we need bpftool >= 7 not 5
@@ -33,7 +33,7 @@ WORKDIR /kseg/lib
 RUN git clone --depth 1 --recurse-submodules https://github.com/aquasecurity/libbpfgo.git \
     && cd libbpfgo/libbpf/src \
     && mkdir build \
-    && OBJDIR=build DESTDIR=/ make install \
+    && BUILD_STATIC_ONLY=y OBJDIR=build DESTDIR=/ make install \
     && ls -la /usr/include/bpf
     # Clones the linux kernel repo and use the latest linux kernel source BPF headers
 #RUN git clone --depth 1 git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git && \
