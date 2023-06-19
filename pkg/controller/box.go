@@ -12,6 +12,7 @@ import (
 
 type EggInfo struct {
 	sync.RWMutex
+	programType      ProgramType
 	CNs              *syncx.SafeSlice[CN]
 	CIDRs            *syncx.SafeSlice[CIDR]
 	IngressInterface string
@@ -57,14 +58,6 @@ type eggManager struct {
 	boxes    syncx.SafeMap[BoxKey, *eggBox]
 	seqIdGen tools.ISeqId[uint16]
 }
-
-type assetStatus byte
-
-const (
-	assetSynced assetStatus = iota
-	assetStale              //could be removed
-	assetNew                //new to add to the ebpf map
-)
 
 type CIDR struct {
 	//TODO ipv6 needed
@@ -215,7 +208,7 @@ func (m *eggManager) BoxAny(f func(boxKey BoxKey, ibox IEggBox) bool) (*eggBox, 
 	return foundBox, found
 }
 
-func (m *eggManager) NewEggInfo(iiface string, eiface string, cnsS []string, cidrsS []string, podLabels map[string]string) (*EggInfo, error) {
+func (m *eggManager) NewEggInfo(programType ProgramType, iiface string, eiface string, cnsS []string, cidrsS []string, podLabels map[string]string) (*EggInfo, error) {
 	cidrs, err := m.parseCIDRs(cidrsS)
 	if err != nil {
 		fmt.Errorf("Parsing input data %#v", err)
@@ -234,6 +227,7 @@ func (m *eggManager) NewEggInfo(iiface string, eiface string, cnsS []string, cid
 	safeCIDRs.Append(cidrs...)
 
 	var clientegg = &EggInfo{ //TODO make a function to wrap this up (parsing, building the object)
+		programType:      programType,
 		IngressInterface: iiface,
 		EgressInterface:  eiface,
 		CNs:              &safeCNs,

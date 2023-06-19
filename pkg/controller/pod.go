@@ -280,11 +280,15 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 			if err != nil {
 				return err
 			}
+			podNodeHostname, err := tools.CleanHostame(pod.Spec.NodeName)
+			if err != nil {
+				return err
+			}
 			pi := PodInfo{
 				name:         pod.Name,
 				namespace:    pod.Namespace,
 				labels:       pod.Labels,
-				nodeName:     pod.Spec.NodeName,
+				nodeName:     podNodeHostname,
 				containerIDs: containerdIDs,
 				//containerCgroupPaths:
 				matchedKeyBox: BoxKey{},
@@ -300,10 +304,7 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 				if err != nil {
 					return err
 				}
-				podNodeHostname, err := tools.CleanHostame(pod.Spec.NodeName)
-				if err != nil {
-					return err
-				}
+
 				eggKey := eggKeys.Get(0)
 				eggi, ok := c.eggInfoMap.Load(eggKey)
 				if !ok {
@@ -472,9 +473,18 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey BoxKey) {
 	// Wyświetl PID procesu init kontenera.
 	//fmt.Println("@@@@@@@@@@@ Container PID: %d", pid)
 
-	//cgroup or tc - comment cgroup (set to "") to make tc over cgroup?
-	cgroupPath, err := getContainerdCgroupPath(pid) //cgroup over tc programs
-	//cgroupPath, err := "", nil //tc only
+	// attaching
+	manager := BpfManagerInstance()
+	box, ok := manager.boxes.Load(boxKey)
+	if !ok {
+		utilruntime.HandleError(fmt.Errorf("Box %s not found", boxKey))
+	}
+	var cgroupPath string
+	if box.egg.programType == ProgramTypeCgroup {
+		cgroupPath, err = getContainerdCgroupPath(pid) //cgroup over tc programs
+	} else {
+		cgroupPath, err = "", nil //tc only}
+	}
 	if err != nil {
 		fmt.Printf("cgroup path error: %v", err)
 		return

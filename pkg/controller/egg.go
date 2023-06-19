@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
+	"github.com/MaciekLeks/l7egg/pkg/tools"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -241,7 +242,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 			iiface = "eth0" //TODO #
 			eiface = "eth0" //TODO #
 		}
-		eggi, err := manager.NewEggInfo(iiface, eiface, cegg.Spec.Egress.CommonNames, cegg.Spec.Egress.CIDRs, podLabels)
+		eggi, err := manager.NewEggInfo(ProgramType(cegg.Spec.ProgramType), iiface, eiface, cegg.Spec.Egress.CommonNames, cegg.Spec.Egress.CIDRs, podLabels)
 		if err != nil {
 			return fmt.Errorf("creating clusteregg '%s': %s failed", cegg.Name, err.Error())
 		}
@@ -265,16 +266,23 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 				for i := 0; i < podKeys.Len(); i++ {
 					pi, ok := c.podInfoMap.Load(podKeys.Get(i))
 					if ok {
-						//TODO handle error
-						boxKey.pod = pi.NamespaceName()
-						manager.BoxStore(boxKey, eggi)
+						nodeHostname, err := tools.GetHostname()
+						if err != nil {
+							return err
+						}
 
-						logger.Info("Starting box for the flow egg->pod", "box", boxKey)
-						pi.set(func(v *PodInfo) {
-							v.matchedKeyBox = boxKey
-						})
-						pi.runEgg(ctx, boxKey)
-						logger.Info("Box started for the flow egg->pod", "box", boxKey)
+						if nodeHostname == pi.nodeName {
+							//TODO handle error
+							boxKey.pod = pi.NamespaceName()
+							manager.BoxStore(boxKey, eggi)
+
+							logger.Info("Starting box for the flow egg->pod", "box", boxKey)
+							pi.set(func(v *PodInfo) {
+								v.matchedKeyBox = boxKey
+							})
+							pi.runEgg(ctx, boxKey)
+							logger.Info("Box started for the flow egg->pod", "box", boxKey)
+						}
 					}
 				}
 			}

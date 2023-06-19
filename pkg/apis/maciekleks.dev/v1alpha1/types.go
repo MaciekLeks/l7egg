@@ -14,6 +14,8 @@ type ClusterEgg struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// +kubebuilder:validation:XValidation:rule="(self.programType == 'tc' && has(self.egress.egressInterface)) || self.programType == 'cgroup'",message="egressInterface is needed if attachType is 'tc'"
+	// +kubebuilder:validation:XValidation:rule="(self.programType == 'tc' && has(self.ingress.ingressInterface)) || self.programType =='cgroup'",message="ingressInterface is needed if attachType is 'tc'"
 	Spec   ClusterEggSpec   `json:"spec,omitempty"`
 	Status ClusterEggStatus `json:"status,omitempty"`
 }
@@ -33,21 +35,24 @@ type ClusterEggList struct {
 }
 
 type ClusterEggSpec struct {
-	Egress  EgressSpec  `json:"egress,omitempty"`
-	Ingress IngressSpec `json:"ingress,omitempty"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=tc;cgroup
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="attachType is immutable"
+	// +kubebuilder:default=cgroup
+	ProgramType string      `json:"programType,omitempty"`
+	Egress      EgressSpec  `json:"egress,omitempty"`
+	Ingress     IngressSpec `json:"ingress,omitempty"`
 }
 
 type IngressSpec struct {
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="IngressInterface is immutable"
 	// +kubebuilder:validation:MaxLength=32
 	IngressInterface string `json:"ingressInterface,omitempty"`
 }
 
 type EgressSpec struct {
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="EgressInterface is immutable"
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="EgressInterface is immutable"
 	// +kubebuilder:validation:MaxLength=32
 	EgressInterface string `json:"egressInterface,omitempty"`
@@ -56,6 +61,6 @@ type EgressSpec struct {
 
 	CIDRs []string `json:"cidrs,omitempty"`
 
-	// +optional
+	// +optionalm
 	PodSelector *metav1.LabelSelector `json:"podSelector,omitempty"`
 }

@@ -4,9 +4,7 @@ metadata:
   name: clusteregg-pod-example
 spec:
   ingress:
-    ingressInterface: any
   egress:
-    egressInterface: any
     commonNames:
     - www.onet.pl
     - www.interia.pl

@@ -67,9 +67,7 @@ $(TARGET_BPF): $(BPF_SRC)
 
 $(TARGET_CLI): $(CMD_CLI_GO_SRC) $(TARGET_BPF)
 	echo "GO:" >&2
-	CGO_CFLAGS=$(CGO_CFLAGS) \
-	#$(GO) build -x \
-	$(GO) build \
+	CGO_CFLAGS=$(CGO_CFLAGS) $(GO) build \
 	-tags netgo -ldflags $(GO_EXTLDFLAGS_STATIC) \
 	-o $(TARGET_CLI) ./cmd/cli/$(MAIN).go
 
@@ -84,14 +82,17 @@ vmlinuxh:
 	bpftool btf dump file /sys/kernel/btf/vmlinux format c > ./kernel/vmlinux.h
 
 .PHONY: remote-build
-remote-build:
-	rsync -ahv --exclude '.git' --delete . mlk@ubu-ebpf:~/ebpf-tests/
-	ssh mlk@ubu-ebpf "cd ~/dev/ebpf-tests && make clean && make all"
+remote-build3:
+	rsync -ahv  --delete --exclude '.git' . mlk@ubu-ebpf3:~/dev/ebpf-tests/
+	ssh mlk@ubu-ebpf3 "cd ~/dev/ebpf-tests && make clean && make all"
 
 .PHONY: remote-build
 remote-build2:
 	rsync -ahv  --delete --exclude '.git' . mlk@ubu-ebpf2:~/dev/ebpf-tests/
 	ssh mlk@ubu-ebpf2 "cd ~/dev/ebpf-tests && make clean && make all"
+
+.PHONY: remote-build
+remote-build-all: remote-build2 remote-build3
 
 .PHONY: docker
 docker:
@@ -116,7 +117,7 @@ k8s-build-client:
 
 .PHONY: k8s-build-cmd-static
 k8s-build-cmd-static: $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
-	CGO_CFLAGS=$(CGO_CFLAGS) \
+	CC=$(CC); CGO_CFLAGS=$(CGO_CFLAGS) \
 	$(GO) build -x \
 	-tags netgo -ldflags $(GO_EXTLDFLAGS_STATIC) \
 	-o $(TARGET_K8S_STATIC) ./cmd/kubernetes/$(MAIN).go

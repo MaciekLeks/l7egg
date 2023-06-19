@@ -52,8 +52,6 @@ spec:
                     x-kubernetes-validations:
                     - message: EgressInterface is immutable
                       rule: self == oldSelf
-                    - message: EgressInterface is immutable
-                      rule: self == oldSelf
                   podSelector:
                     description: A label selector is a label query over a set of resources.
                       The result of matchLabels and matchExpressions are ANDed. An
@@ -112,7 +110,23 @@ spec:
                     - message: IngressInterface is immutable
                       rule: self == oldSelf
                 type: object
+              programType:
+                default: cgroup
+                enum:
+                - tc
+                - cgroup
+                type: string
+                x-kubernetes-validations:
+                - message: attachType is immutable
+                  rule: self == oldSelf
             type: object
+            x-kubernetes-validations:
+            - message: egressInterface is needed if attachType is 'tc'
+              rule: (self.programType == 'tc' && has(self.egress.egressInterface))
+                || self.programType == 'cgroup'
+            - message: ingressInterface is needed if attachType is 'tc'
+              rule: (self.programType == 'tc' && has(self.ingress.ingressInterface))
+                || self.programType =='cgroup'
           status:
             properties:
               ready:
