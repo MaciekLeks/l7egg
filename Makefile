@@ -97,8 +97,9 @@ remote-build-all: remote-build2 remote-build3
 
 .PHONY: docker
 docker:
-	docker build -t maciekleks/kseg:$(TAG) -f Dockerfile .
-	docker push maciekleks/kseg:$(TAG)
+	docker build -t l7egg-base:$(TAG) -f Dockerfile-base .
+	docker build -t maciekleks/l7egg-k8s:ubuntu-$(TAG) -f Dockerfile-ubuntu .
+	#docker push maciekleks/kseg:$(TAG)
 
 # code-genartor must be set in the K8S_CODE_GENERATOR
 # Generates:

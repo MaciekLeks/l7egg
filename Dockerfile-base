@@ -45,5 +45,3 @@ RUN echo "linux-kernel:$(uname -r) bpftool:$(bpftool version)" \
     && make vmlinuxh \
     && make all DEBUG=1 LIBBPF_DIR=/usr \
 
-ENTRYPOINT ["./build/l7egg-static"]
-CMD ["-iface=eth0"]
