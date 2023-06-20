@@ -35,7 +35,7 @@ func main() {
 	}
 
 	manager := controller.BpfManagerInstance()
-	clientegg, err := manager.NewEggInfo(*iface, *eface, cnList, cidrList, nil)
+	clientegg, err := manager.NewEggInfo(controller.ProgramTypeTC, *iface, *eface, cnList, cidrList, nil)
 
 	var defaultBoxKey controller.BoxKey
 	defaultBoxKey.Egg = types.NamespacedName{Name: "default"}

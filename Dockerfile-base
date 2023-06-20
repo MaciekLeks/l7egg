@@ -1,0 +1,38 @@
+FROM ubuntu:lunar
+
+RUN apt-get update  \
+   && apt-get -y install git make clang llvm pkgconf build-essential libelf-dev curl \
+   && apt-get -y install iproute2 vim util-linux wget \
+   && DEBIAN_FRONTEND=noninteractive apt-get -y install tshark
+
+# dog only
+RUN wget -qO - https://azlux.fr/repo.gpg.key | apt-key add - \
+    && echo "deb http://packages.azlux.fr/debian/ stable main" | tee /etc/apt/sources.list.d/azlux.list \
+    && apt-get update \
+    && apt-get -y install dog
+
+WORKDIR /tmp
+RUN curl -LO https://go.dev/dl/go1.20.5.linux-amd64.tar.gz \
+  && rm -rf /usr/local/go && tar -C /usr/local -xzf go1.20.5.linux-amd64.tar.gz \
+  && ln -s /usr/local/go/bin/go /usr/local/bin/go
+
+# debian only: we need bpftool >= 7 not 5
+WORKDIR /l7egg/hacks
+RUN git clone --depth 1 --recurse-submodules https://github.com/libbpf/bpftool.git \
+    && cd bpftool/src \
+    && make install
+
+WORKDIR /l7egg/lib
+RUN git clone --recurse-submodules https://github.com/aquasecurity/libbpfgo.git \
+    && cd libbpfgo \
+    && git fetch --tags \
+    && git checkout v0.4.9-libbpf-1.2.0 \
+    && cd libbpf/src \
+    && mkdir build \
+    && BUILD_STATIC_ONLY=y OBJDIR=build DESTDIR=/ make install
+
+WORKDIR /l7egg
+COPY . .
+RUN echo "linux-kernel:$(uname -r) bpftool:$(bpftool version)" \
+  && make vmlinuxh
+
