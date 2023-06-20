@@ -45,7 +45,8 @@ GO_EXTLDFLAGS_STATIC = '-w -extldflags "-static $(LIBBPF_STATIC_LIB) -lelf -lz"'
 GO_EXTLDFLAGS_DYN = '-w -extldflags "-lelf -lz  -Wl,-rpath=$(LIBBPF_DYN_LIB) -L$(LIBBPF_DYN_LIB) -lbpf"'
 
 .PHONY: all
-all: $(TARGET_BPF) $(TARGET_CLI) $(TARGET_K8S_DYN)
+all: $(TARGET_BPF) $(TARGET_CLI) $(TARGET_K8S_STATIC)
+#all: $(TARGET_BPF) $(TARGET_CLI) $(TARGET_K8S_DYN)
 
 
 $(BPF_SRC): $(BPF_HEADERS)
@@ -97,9 +98,12 @@ remote-build-all: remote-build2 remote-build3
 
 .PHONY: docker
 docker:
-	docker build -t l7egg-base:$(TAG) -f Dockerfile-base .
-	docker build -t maciekleks/l7egg-k8s:ubuntu-$(TAG) -f Dockerfile-ubuntu .
-	#docker push maciekleks/kseg:$(TAG)
+	docker build -t maciekleks/l7egg-base:latest -t maciekleks/l7egg-base:$(TAG) -f Dockerfile-base .
+	docker push maciekleks/l7egg-base:$(TAG)
+	docker build -t maciekleks/l7egg:debug-$(TAG) -f Dockerfile-debug .
+	docker push  maciekleks/l7egg:debug-$(TAG)
+	docker build --build-arg BASE_TAG=$(TAG) -t maciekleks/l7egg:distroless-$(TAG) -f Dockerfile-distroless .
+	docker push  maciekleks/l7egg:distroless-$(TAG)
 
 # code-genartor must be set in the K8S_CODE_GENERATOR
 # Generates:
@@ -117,16 +121,15 @@ k8s-build-client:
 	"maciekleks.dev:v1alpha1" \
 	--go-header-file $(K8S_CODE_GENERATOR)/hack/boilerplate.go.txt
 
-.PHONY: k8s-build-cmd-static
-k8s-build-cmd-static: $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
+$(TARGET_K8S_STATIC): $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
 	CC=$(CC); CGO_CFLAGS=$(CGO_CFLAGS) \
-	$(GO) build -x \
+	$(GO) build \
 	-tags netgo -ldflags $(GO_EXTLDFLAGS_STATIC) \
 	-o $(TARGET_K8S_STATIC) ./cmd/kubernetes/$(MAIN).go
 
 $(TARGET_K8S_DYN): $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
 	CGO_CFLAGS=$(CGO_CFLAGS) \
-	$(GO) build -x \
+	$(GO) build \
 	-tags netgo -ldflags $(GO_EXTLDFLAGS_DYN) \
 	-o $(TARGET_K8S_DYN) ./cmd/kubernetes/$(MAIN).go
 

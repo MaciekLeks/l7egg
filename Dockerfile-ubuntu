@@ -1,3 +1,0 @@
-FROM l7egg-base:latest
-
-ENTRYPOINT ["./build/l7egg-k8s-static"]

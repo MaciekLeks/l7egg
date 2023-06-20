@@ -1,0 +1,6 @@
+ARG BASE_TAG=latest
+FROM maciekleks/l7egg-base:$BASE_TAG
+
+RUN make all DEBUG=1 LIBBPF_DIR=/usr
+
+ENTRYPOINT ["./build/l7egg-k8s-static"]
