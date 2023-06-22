@@ -252,7 +252,7 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 				}
 				boxKey := BoxKey{pod: podKey, Egg: eggKey}
 
-				manager.BoxStore(boxKey, eggi)
+				manager.BoxStore(ctx, boxKey, eggi)
 
 				// only different code against code for ADD
 				pi.set(func(v *PodInfo) {
@@ -316,7 +316,7 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 				pi.set(func(v *PodInfo) {
 					v.matchedKeyBox = boxKey
 				})
-				manager.BoxStore(boxKey, eggi)
+				manager.BoxStore(ctx, boxKey, eggi)
 
 				//fmt.Printf("********************Add Done: %+v\n", pi)
 
@@ -443,6 +443,7 @@ func (c *Controller) checkEggMatch(pod *corev1.Pod) *syncx.SafeSlice[types.Names
 
 func (pi *PodInfo) runEgg(ctx context.Context, boxKey BoxKey) error {
 	logger := klog.FromContext(ctx)
+	fmt.Printf("**********************runEgg-0:\n")
 
 	logger.V(2).Info("runEgg-1")
 	client, err := containerd.New("/var/snap/microk8s/common/run/containerd.sock", containerd.WithDefaultNamespace("k8s.io"))
@@ -451,10 +452,12 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey BoxKey) error {
 	}
 	defer client.Close()
 
+	fmt.Printf("**********************runEgg-1:\n")
 	logger.V(2).Info("runEgg-2")
 	// Ustaw nazwę przestrzeni nazw kontenera.
 	//namespace := namespaces.Default
 
+	fmt.Printf("**********************runEgg-2:\n")
 	// Pobierz kontener.
 	//fmt.Printf("///////////////:)1")
 	container, err := client.LoadContainer(ctx, pi.containerIDs[0]) //TODO not only 0 ;)
@@ -463,6 +466,7 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey BoxKey) error {
 		return fmt.Errorf("Can't load container", err)
 	}
 
+	fmt.Printf("**********************runEgg-3:\n")
 	logger.V(2).Info("runEgg-3")
 	// Pobierz informacje o procesie init kontenera.
 	task, err := container.Task(ctx, nil)
@@ -470,6 +474,7 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey BoxKey) error {
 		return fmt.Errorf("Can't get container task", err)
 	}
 
+	fmt.Printf("**********************runEgg-4:\n")
 	logger.V(2).Info("runEgg-4")
 	// Pobierz PID procesu init kontenera.
 	pid := task.Pid()
@@ -477,6 +482,7 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey BoxKey) error {
 		return fmt.Errorf("Can't get container task PID", err)
 	}
 
+	fmt.Printf("**********************runEgg-5:\n")
 	logger.V(2).Info("runEgg-5")
 	// attaching
 	manager := BpfManagerInstance()
@@ -485,6 +491,7 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey BoxKey) error {
 		utilruntime.HandleError(fmt.Errorf("Box %s not found", boxKey))
 		return fmt.Errorf("Box %s not found", boxKey)
 	}
+	fmt.Printf("**********************runEgg-6:\n")
 	logger.V(2).Info("runEgg-6")
 	var cgroupPath string
 
@@ -494,6 +501,7 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey BoxKey) error {
 		if err != nil {
 			return fmt.Errorf("cgroup path error: %v", err)
 		}
+		fmt.Printf("**********************runEgg-8-cgroup:\n")
 		logger.V(2).Info("runEgg-8 - cgroup!!!")
 		err = manager.BoxStart(ctx, boxKey, "", cgroupPath)
 	} else {
@@ -503,16 +511,22 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey BoxKey) error {
 		netns, err = cnins.GetNS(path)
 		defer netns.Close()
 
+		fmt.Printf("**********************runEgg-7-tc: %+v  path:%s\n", netns, path)
 		logger.V(2).Info("runEgg-7-tc")
 		if err != nil {
+			fmt.Printf("**********************runEgg-7.0-tc: %s\n", err)
 			return fmt.Errorf("failed to get netns: %v", err)
 		}
 
+		fmt.Printf("**********************runEgg-7.1-tc:\n")
 		err = netns.Do(func(_ns cnins.NetNS) error {
+			fmt.Printf("**********************runEgg-8-tc:\n")
 			logger.V(2).Info("runEgg-8 - tc!!!")
 			err := manager.BoxStart(ctx, boxKey, netns.Path(), cgroupPath)
+			fmt.Printf("**********************runEgg-8.1-tc:\n")
 			return err
 		})
+		fmt.Printf("**********************runEgg-7.2-tc:\n")
 	}
 
 	/*{containerd/pkg/ns

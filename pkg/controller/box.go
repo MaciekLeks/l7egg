@@ -6,6 +6,7 @@ import (
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	"github.com/MaciekLeks/l7egg/pkg/tools"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog/v2"
 	"net"
 	"sync"
 )
@@ -19,6 +20,12 @@ type EggInfo struct {
 	EgressInterface  string
 	BPFObjectPath    string
 	PodLabels        map[string]string
+}
+
+func (eggi *EggInfo) set(fn func(v *EggInfo) error) error {
+	eggi.Lock()
+	defer eggi.Unlock()
+	return fn(eggi)
 }
 
 type IEggManager interface {
@@ -239,16 +246,18 @@ func (m *eggManager) NewEggInfo(programType ProgramType, iiface string, eiface s
 }
 
 // BoxStore stores a box but not run it
-func (m *eggManager) BoxStore(boxKey BoxKey, ceggi *EggInfo) {
+func (m *eggManager) BoxStore(ctx context.Context, boxKey BoxKey, ceggi *EggInfo) {
+	logger := klog.FromContext(ctx)
+	logger.Info("Storing box for boxKey%s'\n", boxKey)
 	egg := newEmptyEgg(ceggi)
 	var box eggBox
 	box.egg = egg
-	fmt.Println("*************** storing box:", boxKey)
 	m.boxes.Store(boxKey, &box)
 }
 
 // BoxStart box
 func (m *eggManager) BoxStart(ctx context.Context, boxKey BoxKey, netNsPath string, cgroupPath string) error {
+
 	box, found := m.getBox(boxKey)
 	if !found {
 		return fmt.Errorf("box '%s' not found\n", boxKey)

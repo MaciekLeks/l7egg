@@ -10,6 +10,7 @@ MAIN = l7egg
 GO = /usr/local/go/bin/go
 
 TAG ?= latest
+BASE_TAG ?= latest
 DEBUG ?= 1
 
 BUILD_DIR = build
@@ -99,12 +100,12 @@ remote-build-all: remote-build2 remote-build3
 .PHONY: docker
 docker:
 	docker build -t maciekleks/l7egg-base:latest -t maciekleks/l7egg-base:$(TAG) -f Dockerfile-base .
-	docker push maciekleks/l7egg-base:$(TAG)
+	docker push maciekleks/l7egg-base --all-tags
 	docker build -t maciekleks/l7egg:debug-$(TAG) -f Dockerfile-debug .
 	docker push  maciekleks/l7egg:debug-$(TAG)
-	docker build --build-arg BASE_TAG=$(TAG) -t maciekleks/l7egg:distroless-$(TAG) -f Dockerfile-distroless .
+	docker build --no-cache --build-arg BASE_TAG=$(TAG) -t maciekleks/l7egg:distroless-$(TAG) -f Dockerfile-distroless .
 	docker push  maciekleks/l7egg:distroless-$(TAG)
-
+#
 # code-genartor must be set in the K8S_CODE_GENERATOR
 # Generates:
 # - deepcopy objects

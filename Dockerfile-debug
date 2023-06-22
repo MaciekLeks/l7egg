@@ -1,7 +1,8 @@
 ARG BASE_TAG=latest
 FROM maciekleks/l7egg-base:$BASE_TAG
 
-RUN make all DEBUG=1 LIBBPF_DIR=/usr
+RUN make clean \
+  && make all DEBUG=1 LIBBPF_DIR=/usr
 
 WORKDIR /l7egg/build
 

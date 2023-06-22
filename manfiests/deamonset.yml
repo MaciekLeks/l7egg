@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: l7egg
+spec:
+  selector:
+    matchLabels:
+      app: l7egg
+  template:
+    metadata:
+      labels:
+        app: l7egg
+    spec:
+      hostNetwork: true #only for tc
+      hostPID: true #only for TC
+      containers:
+      - name: l7egg
+        image: maciekleks/l7egg:debug-0.0.24
+        #image: maciekleks/l7egg:distroless-0.0.23
+        #args: ["-v=2"]
+        imagePullPolicy: Always
+        volumeMounts:
+        - name: cgroup-containerd-socket #only for cgroup
+          mountPath: /var/snap/microk8s/common/run/containerd.sock
+          readOnly: true
+        - name: cgroup-fs #only for cgroup
+          mountPath: /sys/fs/cgroup
+          readOnly: true
+        ports:
+        securityContext:
+          privileged: true
+      volumes:
+      - name: cgroup-containerd-socket
+        hostPath:
+          path: /var/snap/microk8s/common/run/containerd.sock
+      - name: cgroup-fs
+        hostPath:
+          path: /sys/fs/cgroup

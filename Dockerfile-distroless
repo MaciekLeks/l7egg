@@ -1,7 +1,8 @@
 ARG BASE_TAG=latest
 FROM maciekleks/l7egg-base:$BASE_TAG as base
 
-RUN make all DEBUG=0 LIBBPF_DIR=/usr
+RUN make clean \
+  && make all DEBUG=0 LIBBPF_DIR=/usr
 
 FROM gcr.io/distroless/base
 
