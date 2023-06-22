@@ -1,0 +1,22 @@
+apiVersion: maciekleks.dev/v1alpha1
+kind: ClusterEgg
+metadata:
+  name: clusteregg-pod-example
+spec:
+  programType: tc
+  ingress:
+    ingressInterface: eth0
+  egress:
+    egressInterface: eth0
+    commonNames:
+    - www.onet.pl
+    - www.interia.pl
+    - cluster.local
+    cidrs:
+    - 10.152.183.0/24
+    - 169.254.1.1/32
+    podSelector:
+      matchLabels:
+        app: tester
+
+k a

@@ -20,6 +20,7 @@ import (
 	bpf "github.com/aquasecurity/libbpfgo"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
+	"k8s.io/klog/v2"
 	"os"
 	"strings"
 	"sync"
@@ -81,27 +82,29 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, netNSPath string, c
 
 	egg.bpfModule, err = bpf.NewModuleFromFile(egg.EggInfo.BPFObjectPath)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(-1)
+		return err
 	}
 
 	err = egg.bpfModule.BPFLoadObject()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(-1)
+		return err
 	}
+
+	logger := klog.FromContext(ctx)
+
+	logger.Info("Attaching eBPF program having", "netNSPath", netNSPath, "cgroupPath", cgroupPath)
 	if len(cgroupPath) == 0 {
-		fmt.Println("---------------Attaching TC programs to interfaces.")
 		err = attachProg(egg.bpfModule, egg.EggInfo.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
 		must(err, "Can't attach TC hook.")
 		err = attachProg(egg.bpfModule, egg.EggInfo.EgressInterface, bpf.BPFTcEgress, "tc_egress")
 		must(err, "Can't attach TC hook.")
+		logger.Info("Attached eBPF program to tc hooks")
 	} else {
-		fmt.Println("---------------Attaching cgroup programs.")
 		err = attachCgroupProg(egg.bpfModule, "cgroup__skb_egress", bpf.BPFAttachTypeCgroupInetEgress, cgroupPath)
 		must(err, "can't attach cgroup hook")
 		err = attachCgroupProg(egg.bpfModule, "cgroup__skb_ingress", bpf.BPFAttachTypeCgroupInetIngress, cgroupPath)
 		must(err, "can't attach cgroup hook")
+		logger.Info("Attached eBPF program to cgroup hooks")
 		//err = attachCgroupProg(egg.bpfModule, "cgroup__sock", bpf.BPFAttachTypeCgroupSockOps)
 		//must(err, "can't attach cgroup hook")
 	}

@@ -198,7 +198,10 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 						pi.set(func(v *PodInfo) {
 							v.matchedKeyBox = boxKey
 						})
-						pi.runEgg(ctx, boxKey)
+						err = pi.runEgg(ctx, boxKey)
+						if err != nil {
+							return err
+						}
 						logger.Info("Box started for the flow egg->pod", "box", boxKey)
 					}
 				}
@@ -280,7 +283,10 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 							pi.set(func(v *PodInfo) {
 								v.matchedKeyBox = boxKey
 							})
-							pi.runEgg(ctx, boxKey)
+							err = pi.runEgg(ctx, boxKey)
+							if err != nil {
+								return err
+							}
 							logger.Info("Box started for the flow egg->pod", "box", boxKey)
 						}
 					}
