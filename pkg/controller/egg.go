@@ -322,15 +322,26 @@ func (c *Controller) deleteEgg(ctx context.Context, eggNamespaceName types.Names
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "resourceName", eggNamespaceName.Name)
 
 	manager := BpfManagerInstance()
-
-	logger.Info("Deleting egg '%s' boxes.", eggNamespaceName.Name)
+	logger.Info("Deleting egg's boxes")
+	var err error
 	manager.boxes.Range(func(key BoxKey, value *eggBox) bool {
-		//TODO implement
+		if key.Egg == eggNamespaceName {
+			logger.Info("Stopping box", "box", key)
+			err = manager.Stop(key)
+			if err != nil {
+				logger.Error(err, "Stopping box failed.", "box", key)
+				return false
+			}
+		}
 		return true
 
 	})
 
-	logger.Info("Deleting egg '%s'.", eggNamespaceName.Name)
+	if err != nil {
+		return err
+	}
+
+	logger.Info("Egg deleted.")
 	c.eggInfoMap.Delete(eggNamespaceName)
 
 	return nil

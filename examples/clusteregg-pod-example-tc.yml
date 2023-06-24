@@ -18,5 +18,3 @@ spec:
     podSelector:
       matchLabels:
         app: tester
-
-k a

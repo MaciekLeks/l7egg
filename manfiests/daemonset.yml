@@ -15,8 +15,8 @@ spec:
       hostPID: true #only for TC
       containers:
       - name: l7egg
-        image: maciekleks/l7egg:debug-0.0.24
-        #image: maciekleks/l7egg:distroless-0.0.23
+        #image: maciekleks/l7egg:debug-0.0.24
+        image: maciekleks/l7egg:distroless-0.0.24
         #args: ["-v=2"]
         imagePullPolicy: Always
         volumeMounts:
