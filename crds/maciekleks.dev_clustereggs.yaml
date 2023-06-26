@@ -121,11 +121,11 @@ spec:
                   rule: self == oldSelf
             type: object
             x-kubernetes-validations:
-            - message: egressInterface is needed if attachType is 'tc'
-              rule: (self.programType == 'tc' && has(self.egress.egressInterface))
-                || self.programType == 'cgroup'
-            - message: ingressInterface is needed if attachType is 'tc'
-              rule: (self.programType == 'tc' && has(self.ingress.ingressInterface))
+            - message: interfaceName is needed if attachType is 'tc'
+              rule: (self.programType == 'tc' && has(self.egress.interfaceName)) ||
+                self.programType == 'cgroup'
+            - message: interfaceName is needed if attachType is 'tc'
+              rule: (self.programType == 'tc' && has(self.ingress.interfaceName))
                 || self.programType =='cgroup'
           status:
             properties:

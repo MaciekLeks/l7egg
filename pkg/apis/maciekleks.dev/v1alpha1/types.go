@@ -14,8 +14,8 @@ type ClusterEgg struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// +kubebuilder:validation:XValidation:rule="(self.programType == 'tc' && has(self.egress.egressInterface)) || self.programType == 'cgroup'",message="egressInterface is needed if attachType is 'tc'"
-	// +kubebuilder:validation:XValidation:rule="(self.programType == 'tc' && has(self.ingress.ingressInterface)) || self.programType =='cgroup'",message="ingressInterface is needed if attachType is 'tc'"
+	// +kubebuilder:validation:XValidation:rule="(self.programType == 'tc' && has(self.egress.interfaceName)) || self.programType == 'cgroup'",message="interfaceName is needed if attachType is 'tc'"
+	// +kubebuilder:validation:XValidation:rule="(self.programType == 'tc' && has(self.ingress.interfaceName)) || self.programType =='cgroup'",message="interfaceName is needed if attachType is 'tc'"
 	Spec   ClusterEggSpec   `json:"spec,omitempty"`
 	Status ClusterEggStatus `json:"status,omitempty"`
 }
