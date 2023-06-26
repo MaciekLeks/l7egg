@@ -1,10 +1,12 @@
 ARG BASE_TAG=latest
 FROM maciekleks/l7egg-base:$BASE_TAG as base
 
-RUN make all DEBUG=0 LIBBPF_DIR=/usr \
+RUN make clean \
+  && make all DEBUG=0 LIBBPF_DIR=/usr
 
 FROM gcr.io/distroless/base
 
-COPY --from=base /l7egg/build/l7egg-k8s-static /build/l7egg-k8s-static
+WORKDIR /l7egg/build
+COPY --from=base /l7egg/build/l7egg-k8s-static /l7egg/build/l7egg.bpf.o ./
 
-ENTRYPOINT ["./build/l7egg-k8s-static"]
+ENTRYPOINT ["./l7egg-k8s-static"]

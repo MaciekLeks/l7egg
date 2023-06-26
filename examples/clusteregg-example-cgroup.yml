@@ -1,15 +1,13 @@
 apiVersion: maciekleks.dev/v1alpha1
 kind: ClusterEgg
 metadata:
-  name: clusteregg-example-tc
+  name: clusteregg-example-cgroup
 spec:
   programType: tc
 
   ingress:
-    ingressInterface: enp0s3
 
   egress:
-    egressInterface: enp0s3
     commonNames:
     - www.onet.pl
     - .ubuntu.com

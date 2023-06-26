@@ -39,13 +39,13 @@ func main() {
 
 	var defaultBoxKey controller.BoxKey
 	defaultBoxKey.Egg = types.NamespacedName{Name: "default"}
-	manager.BoxStore(defaultBoxKey, clientegg)
+	ctx := tools.SetupSignalHandler()
+	manager.BoxStore(ctx, defaultBoxKey, clientegg)
 
 	if err != nil {
 		fmt.Errorf("Creating client egg.", err)
 		os.Exit(1)
 	}
-	ctx := tools.SetupSignalHandler()
 
 	manager.BoxStart(ctx, defaultBoxKey, "", "")
 	manager.Wait()

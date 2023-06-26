@@ -78,7 +78,7 @@ func main() {
 		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 	}
 
-	logger.V(2).Info("Length of clustereggs: %d\n", len(ceggs.Items))
+	logger.V(2).Info("Length of clustereggs", "len", len(ceggs.Items))
 
 	ceggInformerFactory := cegginformerfactory.NewSharedInformerFactory(ceggClientset, 30*time.Second)
 	kubeInformerFactory := informers.NewSharedInformerFactory(kubeClientset, 30*time.Second)
