@@ -249,8 +249,8 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 		}
 		//TODO tbc
 
-		iiface := cegg.Spec.Ingress.IngressInterface
-		eiface := cegg.Spec.Egress.EgressInterface
+		iiface := cegg.Spec.Ingress.InterfaceName
+		eiface := cegg.Spec.Egress.InterfaceName
 		if len(podLabels) != 0 {
 			iiface = "eth0" //TODO #
 			eiface = "eth0" //TODO #

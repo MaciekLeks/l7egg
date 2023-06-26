@@ -5,9 +5,9 @@ metadata:
 spec:
   programType: tc
   ingress:
-    ingressInterface: eth0
+    interfaceName: eth0
   egress:
-    egressInterface: eth0
+    interfaceName: eth0
     commonNames:
     - www.onet.pl
     - www.interia.pl

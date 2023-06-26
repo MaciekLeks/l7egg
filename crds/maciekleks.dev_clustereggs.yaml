@@ -46,11 +46,11 @@ spec:
                     items:
                       type: string
                     type: array
-                  egressInterface:
+                  interfaceName:
                     maxLength: 32
                     type: string
                     x-kubernetes-validations:
-                    - message: EgressInterface is immutable
+                    - message: interfaceName is immutable
                       rule: self == oldSelf
                   podSelector:
                     description: A label selector is a label query over a set of resources.
@@ -103,11 +103,11 @@ spec:
                 type: object
               ingress:
                 properties:
-                  ingressInterface:
+                  interfaceName:
                     maxLength: 32
                     type: string
                     x-kubernetes-validations:
-                    - message: IngressInterface is immutable
+                    - message: interfaceName is immutable
                       rule: self == oldSelf
                 type: object
               programType:

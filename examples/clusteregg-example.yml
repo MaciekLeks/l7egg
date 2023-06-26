@@ -6,10 +6,10 @@ spec:
   programType: tc
 
   ingress:
-    ingressInterface: enp0s3
+      interfaceName: enp0s3
 
   egress:
-    egressInterface: enp0s3
+    interfaceName: enp0s3
     commonNames:
     - www.onet.pl
     - .ubuntu.com

@@ -46,16 +46,16 @@ type ClusterEggSpec struct {
 
 type IngressSpec struct {
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="IngressInterface is immutable"
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="interfaceName is immutable"
 	// +kubebuilder:validation:MaxLength=32
-	IngressInterface string `json:"ingressInterface,omitempty"`
+	InterfaceName string `json:"interfaceName,omitempty"`
 }
 
 type EgressSpec struct {
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="EgressInterface is immutable"
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="interfaceName is immutable"
 	// +kubebuilder:validation:MaxLength=32
-	EgressInterface string `json:"egressInterface,omitempty"`
+	InterfaceName string `json:"interfaceName,omitempty"`
 
 	CommonNames []string `json:"commonNames,omitempty"`
 
