@@ -3,9 +3,9 @@ kind: ClusterEgg
 metadata:
   name: clusteregg-example-cgroup
 spec:
-  programType: tc
+  programType: cgroup
 
-  ingress:
+  ingress: {}
 
   egress:
     commonNames:
