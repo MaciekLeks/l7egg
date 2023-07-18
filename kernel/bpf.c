@@ -23,8 +23,7 @@
 #define IP_SYNCED 0
 #define IP_STALE 1
 
-//#define TC_ACT_OK 0 // will terminate the packet processing pipeline and allows the packet to proceed
-#define TC_ACT_OK -1 // will use the default action configured from tc
+#define TC_ACT_OK 0 // will terminate the packet processing pipeline and allows the packet to proceed
 #define TC_ACT_SHOT 2 // will terminate the packet processing pipeline and drops the packet
 #define TC_ACT_UNSPEC -1  //will use the default action configured from tc (similarly as returning -1 from a classifier)
 #define TC_ACT_PIPE 3 //will iterate to the next action, if available
@@ -732,14 +731,19 @@ process_relative(struct __sk_buff *skb, enum bpf_hdr_start_off hdr_start_off, bo
 SEC("tc")
 int tc_ingress(struct __sk_buff *skb) {
     //return process(skb, false);
-    return process_relative(skb, BPF_HDR_START_MAC, false);
+    //return process_relative(skb, BPF_HDR_START_MAC, false);
+    int ret;
+    ret = process_relative(skb, BPF_HDR_START_MAC, false);
+    return (ret == TC_ACT_OK) ? TC_ACT_UNSPEC : ret;
 }
 
-SEC("tc")
+SEC("classifier")
 int tc_egress(struct __sk_buff *skb) {
     //return firewall(skb);
     //return process(skb, true);
-    return process_relative(skb, BPF_HDR_START_MAC, true);
+    int ret;
+    ret = process_relative(skb, BPF_HDR_START_MAC, true);
+    return (ret == TC_ACT_OK) ? TC_ACT_UNSPEC: ret;
 }
 
 //test only for go-tc
@@ -754,7 +758,9 @@ int tc_egress(struct __sk_buff *skb) {
 //int tc_egress2(struct __sk_buff *skb) {
 //    //return firewall(skb);
 //    //return process(skb, true);
-//    return process_relative(skb, BPF_HDR_START_MAC, true);
+//    int ret;
+//    ret = process_relative(skb, BPF_HDR_START_MAC, true);
+//    return (ret == 0) ? -1 : ret;
 //}
 
 // depreciated - use process_relative instead

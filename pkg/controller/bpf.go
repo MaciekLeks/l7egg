@@ -33,7 +33,7 @@ import (
 
 const (
 	BpfIngressSection = "tc"
-	BpfEgressSection  = "tc"
+	BpfEgressSection  = "classifier"
 	BpfObjectFileName = "l7egg.o"
 	BpfIngressProgram = "tc_ingress"
 	BpfEgressProgram  = "tc_egress"
@@ -779,14 +779,17 @@ func attachTcEgressStack(bpfModule *bpf.Module, iface, netNsPath string) error {
 	if err != nil {
 		return err
 	}
-
-	netns, err := cnins.GetNS(netNsPath)
-	if err != nil {
-		utilruntime.HandleError(fmt.Errorf("can't open network namespace: %v", err))
-		return err
+	var netnsfd int
+	if netNsPath != "" {
+		netns, err := cnins.GetNS(netNsPath)
+		if err != nil {
+			utilruntime.HandleError(fmt.Errorf("can't open network namespace: %v", err))
+			return err
+		}
+		netnsfd = int(netns.Fd())
 	}
 
-	if err := tools.AttachEgressBpfFilter(int(netns.Fd()), iface, tcProg.FileDescriptor(), BpfObjectFileName, BpfEgressSection); err != nil {
+	if err := tools.AttachEgressBpfFilter(netnsfd, iface, tcProg.FileDescriptor(), BpfObjectFileName, BpfEgressSection); err != nil {
 		return err
 	}
 
@@ -799,13 +802,17 @@ func attachTcIngressStack(bpfModule *bpf.Module, iface, netNsPath string) error 
 		return err
 	}
 
-	netns, err := cnins.GetNS(netNsPath)
-	if err != nil {
-		utilruntime.HandleError(fmt.Errorf("can't open network namespace: %v", err))
-		return err
+	var netnsfd int
+	if netNsPath != "" {
+		netns, err := cnins.GetNS(netNsPath)
+		if err != nil {
+			utilruntime.HandleError(fmt.Errorf("can't open network namespace: %v", err))
+			return err
+		}
+		netnsfd = int(netns.Fd())
 	}
 
-	if err := tools.AttachIngressBpfFilter(int(netns.Fd()), iface, tcProg.FileDescriptor(), BpfObjectFileName, BpfIngressSection); err != nil {
+	if err := tools.AttachIngressBpfFilter(netnsfd, iface, tcProg.FileDescriptor(), BpfObjectFileName, BpfIngressSection); err != nil {
 		return err
 	}
 

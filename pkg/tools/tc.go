@@ -66,7 +66,7 @@ func (tcf *TcFacade) addHtbQdisc(parent, handle uint32) error {
 		},
 	}
 	//TODO: Add od replace?
-	if err := tcf.tcm.Qdisc().Add(&qdisc); err != nil {
+	if err := tcf.tcm.Qdisc().Replace(&qdisc); err != nil {
 		return fmt.Errorf("could not assign htb to iface: %v\n", err)
 	}
 
