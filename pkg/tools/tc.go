@@ -131,10 +131,13 @@ func (tcf *TcFacade) addHtbClass(parent, handle uint32) error {
 
 func (tcf *TcFacade) addBpfFilter(parent, handle uint32, flowId *uint32, bpfFd int, bpfFilePath, bpfSec string) error {
 	var info uint32
-	var pref uint32 = 0
+	var pref uint32 = 49152
 	var protocol uint32 = unix.ETH_P_ALL
 	info |= pref << 16
 	info |= protocol
+
+	//print info with hex format
+	fmt.Printf("info: %x\n", info)
 
 	filter := tc.Object{
 		tc.Msg{
@@ -142,7 +145,7 @@ func (tcf *TcFacade) addBpfFilter(parent, handle uint32, flowId *uint32, bpfFd i
 			Ifindex: uint32(tcf.ifaceID),
 			Parent:  parent,
 			Handle:  handle,
-			Info:    info,
+			Info:    0x300, //little endian
 		},
 		tc.Attribute{
 			Kind: "bpf",
