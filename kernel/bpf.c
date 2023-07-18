@@ -743,14 +743,14 @@ int tc_egress(struct __sk_buff *skb) {
 }
 
 //test only for go-tc
-//SEC("mlk_ingress")
+//SEC(".mlk_ingress")
 //int tc_ingress2(struct __sk_buff *skb) {
 //    //return process(skb, false);
 //    return process_relative(skb, BPF_HDR_START_MAC, false);
 //}
 //
 ////test only for go-tc
-//SEC("mlk_egress")
+//SEC(".mlk_egress")
 //int tc_egress2(struct __sk_buff *skb) {
 //    //return firewall(skb);
 //    //return process(skb, true);

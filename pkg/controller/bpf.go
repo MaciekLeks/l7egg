@@ -31,6 +31,14 @@ import (
 	"unsafe"
 )
 
+const (
+	BpfIngressSection = "tc"
+	BpfEgressSection  = "tc"
+	BpfObjectFileName = "l7egg.o"
+	BpfIngressProgram = "tc_ingress"
+	BpfEgressProgram  = "tc_egress"
+)
+
 // egg holds EggInfo (extracted from ClusterEggSpec) and ebpf related structures, e.g. maps, channels operating on that maps
 type egg struct {
 	// Depreciated: should all part of egg struct
@@ -100,10 +108,10 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, netNsPath string, c
 		fmt.Printf("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
 
 		//err = attachTcProg(egg.bpfModule, egg.EggInfo.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
-		err = attachTcIngressStack(egg.bpfModule, egg.EggInfo.EgressInterface, "tc_ingress", netNsPath)
+		err = attachTcIngressStack(egg.bpfModule, egg.EggInfo.EgressInterface, netNsPath)
 		must(err, "Can't attach TC hook.")
 		//err = attachTcProg(egg.bpfModule, egg.EggInfo.EgressInterface, bpf.BPFTcEgress, "tc_egress")
-		err = attachTcEgressStack(egg.bpfModule, egg.EggInfo.EgressInterface, "tc_egress", netNsPath)
+		err = attachTcEgressStack(egg.bpfModule, egg.EggInfo.EgressInterface, netNsPath)
 		must(err, "Can't attach TC hook.")
 		logger.Info("Attached eBPF program to tc hooks")
 
@@ -766,8 +774,8 @@ func removeACLKey(acl *bpf.BPFMap, key ipv4LPMKey) error {
 	return nil
 }
 
-func attachTcEgressStack(bpfModule *bpf.Module, iface, program, netNsPath string) error {
-	tcProg, err := bpfModule.GetProgram(program)
+func attachTcEgressStack(bpfModule *bpf.Module, iface, netNsPath string) error {
+	tcProg, err := bpfModule.GetProgram(BpfEgressProgram)
 	if err != nil {
 		return err
 	}
@@ -778,15 +786,15 @@ func attachTcEgressStack(bpfModule *bpf.Module, iface, program, netNsPath string
 		return err
 	}
 
-	if err := tools.AttachEgressBpfFilter(int(netns.Fd()), iface, tcProg.FileDescriptor(), "l7egg.bpf.o", "tc"); err != nil {
+	if err := tools.AttachEgressBpfFilter(int(netns.Fd()), iface, tcProg.FileDescriptor(), BpfObjectFileName, BpfEgressSection); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func attachTcIngressStack(bpfModule *bpf.Module, iface, program, netNsPath string) error {
-	tcProg, err := bpfModule.GetProgram(program)
+func attachTcIngressStack(bpfModule *bpf.Module, iface, netNsPath string) error {
+	tcProg, err := bpfModule.GetProgram(BpfIngressProgram)
 	if err != nil {
 		return err
 	}
@@ -797,7 +805,7 @@ func attachTcIngressStack(bpfModule *bpf.Module, iface, program, netNsPath strin
 		return err
 	}
 
-	if err := tools.AttachIngressBpfFilter(int(netns.Fd()), iface, tcProg.FileDescriptor(), "l7egg.bpf.o", "tc"); err != nil {
+	if err := tools.AttachIngressBpfFilter(int(netns.Fd()), iface, tcProg.FileDescriptor(), BpfObjectFileName, BpfIngressSection); err != nil {
 		return err
 	}
 

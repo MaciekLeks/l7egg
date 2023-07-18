@@ -87,7 +87,7 @@ func (tcf *TcFacade) addIngressQdisc(parent, handle uint32) error {
 		},
 	}
 
-	if err := tcf.tcm.Qdisc().Add(&qdisc); err != nil {
+	if err := tcf.tcm.Qdisc().Replace(&qdisc); err != nil {
 		return fmt.Errorf("could not assign ingress to iface: %v\n", err)
 	}
 
@@ -151,7 +151,8 @@ func (tcf *TcFacade) addBpfFilter(parent, handle uint32, flowId *uint32, bpfFd i
 				//FD: uint32Ptr(uint32(bpfFD)), Name: stringPtr(fmt.Sprintf("%s:[%s]", bpfFilePath, bpfSec)),
 				FD: uint32Ptr(uint32(bpfFd)),
 				//Name:  stringPtr("l7egg.bpf.o:[tc]"),
-				Name:  stringPtr(fmt.Sprintf("%s:[%s]", bpfFilePath, bpfSec)), //e.g. l7egg.bpf.o:[tc]
+				Name: stringPtr(fmt.Sprintf("%s:[%s]", bpfFilePath, bpfSec)), //e.g. l7egg.bpf.o:[tc]
+				//Name:  stringPtr(fmt.Sprintf("%s", bpfFilePath)), //e.g. l7egg.bpf.o
 				Flags: uint32Ptr(0x1),
 				//FlagsGen: uint32Ptr(0x8),
 				ClassID: flowId,
@@ -252,6 +253,7 @@ func AttachIngressBpfFilter(netNs int, iface string, bpfFd int, bpfFileName, bpf
 
 	fmt.Println("%%%%%%%%%%%%%%%%%%%%%%%% ##1")
 	filterHandle := core.BuildHandle(0x100, 0x12)
+	//if err := tcf.addBpfFilter(qdiscHandle, filterHandle, nil, bpfFd, bpfFileName, bpfSec); err != nil {
 	if err := tcf.addBpfFilter(qdiscHandle, filterHandle, nil, bpfFd, bpfFileName, bpfSec); err != nil {
 		return err
 	}
