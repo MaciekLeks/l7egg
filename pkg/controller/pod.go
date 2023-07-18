@@ -522,6 +522,7 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey BoxKey) error {
 		err = netns.Do(func(_ns cnins.NetNS) error {
 			fmt.Printf("**********************runEgg-8-tc:\n")
 			logger.V(2).Info("runEgg-8 - tc!!!")
+			netns.Fd()
 			err := manager.BoxStart(ctx, boxKey, netns.Path(), cgroupPath)
 			fmt.Printf("**********************runEgg-8.1-tc:\n")
 			return err

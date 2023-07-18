@@ -1,7 +1,7 @@
 apiVersion: maciekleks.dev/v1alpha1
 kind: ClusterEgg
 metadata:
-  name: clusteregg-pod-example
+  name: clusteregg-pod-example-tc
 spec:
   programType: tc
   ingress:
@@ -12,6 +12,11 @@ spec:
     - www.onet.pl
     - www.interia.pl
     - cluster.local
+    - www.speedtest.net
+    - hkfree.org
+    - dawis-it.pl
+    - speedtest.skynet.net.pl
+    - speedtestsrv.telnaptelecom.pl
     cidrs:
     - 10.152.183.0/24
     - 169.254.1.1/32

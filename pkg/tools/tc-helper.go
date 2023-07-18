@@ -5,6 +5,8 @@ import (
 	"fmt"
 	cnins "github.com/containernetworking/plugins/pkg/ns"
 	"github.com/florianl/go-tc"
+	"github.com/florianl/go-tc/core"
+	"golang.org/x/sys/unix"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"net"
 	"os"
@@ -46,6 +48,7 @@ func NewOpen(netNSFD int, iface string) (*TCClsActHelper, error) {
 
 	var clsact *tc.Object
 	for _, qdisc := range qdiscs {
+
 		if int(qdisc.Ifindex) == devID.Index {
 			if "clsact" == qdisc.Kind {
 				tmp := qdisc //copy object
@@ -196,6 +199,151 @@ func cleanNsInterface(netNsFD int, iiface string, eiface string) {
 
 	err = he.DeleteClsact()
 	must(err, "Deleting clsact qdisc")
+}
+
+func ShapeEgressInterface(netNsPath string, eiface string) {
+	var netns cnins.NetNS
+	var err error
+	if netNsPath != "" {
+		netns, err = cnins.GetNS(netNsPath)
+		if err != nil {
+			utilruntime.HandleError(fmt.Errorf("can't open network namespace: %v", err))
+			return
+		}
+		defer netns.Close()
+		netns.Do(func(_ns cnins.NetNS) error {
+			shapeEgressInterface(int(netns.Fd()), eiface)
+			//TOOD add error handling
+			return nil
+		})
+	} else {
+
+		//cgroups
+		//shapeNsInterface(int(netns.Fd()), iiface, eiface)
+	}
+}
+
+func shapeEgressInterface(netNsFD int, eiface string) error {
+	devID, err := net.InterfaceByName(eiface)
+	if err != nil {
+		return fmt.Errorf("Could not get interface %s: %v\n", eiface, err)
+	}
+
+	tcnl, err := tc.Open(&tc.Config{
+		NetNS: netNsFD,
+	})
+	if err != nil {
+		return fmt.Errorf("Opening rtnetlink socket: %v\n", err)
+	}
+
+	must(err, "Opening RTNETLINK socket for egress interface")
+	defer tcnl.Close()
+
+	fmt.Println("Shaping 1")
+	//
+	//var qdisc = tc.Object{
+	//	Msg: tc.Msg{
+	//		Family:  unix.AF_UNSPEC,
+	//		Ifindex: uint32(devID.Index),
+	//		Handle:  core.BuildHandle(0x1, 0x0),
+	//		Parent:  tc.HandleRoot,
+	//		Info:    0,
+	//	},
+	//	Attribute: tc.Attribute{
+	//		Kind: "htb",
+	//		Htb: &tc.Htb{
+	//			Init: &tc.HtbGlob{
+	//				Version:      0x3,
+	//				Rate2Quantum: 0xa,
+	//			},
+	//		},
+	//	},
+	//}
+	////TODO: Add od replace?
+	//if err := tcnl.Qdisc().Add(&qdisc); err != nil {
+	//	return fmt.Errorf("could not assign htb to eiface: %v\n", err)
+	//}
+
+	fmt.Println("Shaping 2")
+
+	//rate := uint64(100)
+	var class = tc.Object{
+		Msg: tc.Msg{
+			Family:  unix.AF_UNSPEC,
+			Ifindex: uint32(devID.Index),
+			Handle:  core.BuildHandle(0x1, 0x1),
+			Parent:  HandleEgress, //qdisc.Handle,
+			Info:    0,
+		},
+		Attribute: tc.Attribute{
+			Kind: "htb",
+			Htb: &tc.Htb{
+				Parms: &tc.HtbOpt{
+					Rate: tc.RateSpec{
+						Rate:      128000,
+						Linklayer: 1,
+					},
+					Ceil: tc.RateSpec{
+						Rate:      128000,
+						Linklayer: 1,
+					},
+					Buffer:  125000,
+					Cbuffer: 195312,
+					Quantum: 12800,
+				},
+			},
+		},
+	}
+	if err := tcnl.Class().Add(&class); err != nil {
+		fmt.Errorf("could not assign class to eiface: %v\n", err)
+		return nil
+	}
+
+	fmt.Println("Shaping 3")
+	// write a filter using tc-go: "tc filter add dev enp0s9 protocol ip parent 1: prio 1 u32 match ip dst 192.168.57.4/32 flowid 1:99 "
+	//filter := tc.Object{
+	//	tc.Msg{
+	//		Family:  unix.AF_UNSPEC,
+	//		Ifindex: uint32(devID.Index),
+	//		Handle:  0,
+	//		Parent:  qdisc.Handle,
+	//		Info:    65544,
+	//	},
+	//	tc.Attribute{
+	//		Kind: "u32",
+	//		U32: &tc.U32{
+	//			ClassID: &class.Handle,
+	//			Sel: &tc.U32Sel{
+	//				NKeys: 1,
+	//				Keys: []tc.U32Key{
+	//					{
+	//						Mask: 0, // /0
+	//						Val:  0, // 0.0.0.0
+	//					},
+	//				},
+	//			},
+	//		},
+	//	},
+	//}
+	//
+	//if err := tcnl.Filter().Add(&filter); err != nil {
+	//	fmt.Errorf("could not assign u32 filter to eiface (%s): %v\n", devID.Name, err)
+	//	return nil
+	//}
+	//fmt.Println("Shaping 4")
+
+	return nil
+}
+
+func unshapeEgressInterface(netNsFD int, eiface string) {
+	//he, err := NewOpen(netNsFD, eiface)
+	//must(err, "Opening RTNETLINK socket for egress interface")
+	//defer he.Close()
+	//
+	//if err := he.tcnl.Qdisc().Delete(&qdisc); err != nil {
+	//	fmt.Fprintf(os.Stderr, "could not assign htb to lo: %v\n", err)
+	//	return
+	//}
 }
 
 //func GetNsIDFromFD(fd uintptr) (int, error) {
