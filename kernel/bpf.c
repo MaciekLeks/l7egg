@@ -732,9 +732,9 @@ SEC("tc")
 int tc_ingress(struct __sk_buff *skb) {
     //return process(skb, false);
     //return process_relative(skb, BPF_HDR_START_MAC, false);
-    int ret;
-    ret = process_relative(skb, BPF_HDR_START_MAC, false);
-    return (ret == TC_ACT_OK) ? TC_ACT_UNSPEC : ret;
+    //int ret;
+    return process_relative(skb, BPF_HDR_START_MAC, false);
+    //return (ret == TC_ACT_OK) ? TC_ACT_UNSPEC : ret;
 }
 
 SEC("classifier")

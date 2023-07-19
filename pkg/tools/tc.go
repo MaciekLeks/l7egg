@@ -9,6 +9,14 @@ import (
 	"os"
 )
 
+const (
+	handleMajMask     uint32 = 0xFFFF0000
+	handleMinMask     uint32 = 0x0000FFFF
+	TcHandleHtbQdisc  uint32 = 0x1 << 16
+	TcHandleHtbClass  uint32 = 0x1<<16 | 0x10
+	TcHandleHtbFilter uint32 = 0x10<<16 | 0x1
+)
+
 type TcFacade struct {
 	netNs   int
 	ifaceID int
@@ -130,14 +138,14 @@ func (tcf *TcFacade) addHtbClass(parent, handle uint32) error {
 }
 
 func (tcf *TcFacade) addBpfFilter(parent, handle uint32, flowId *uint32, bpfFd int, bpfFilePath, bpfSec string) error {
-	var info uint32
-	var pref uint32 = 49152
-	var protocol uint32 = unix.ETH_P_ALL
-	info |= pref << 16
-	info |= protocol
+	//var info uint32
+	//var pref uint32 = 49152
+	//var protocol uint32 = unix.ETH_P_ALL
+	//info |= pref << 16
+	//info |= protocol
 
 	//print info with hex format
-	fmt.Printf("info: %x\n", info)
+	//fmt.Printf("info: %x\n", info)
 
 	filter := tc.Object{
 		tc.Msg{
@@ -145,7 +153,7 @@ func (tcf *TcFacade) addBpfFilter(parent, handle uint32, flowId *uint32, bpfFd i
 			Ifindex: uint32(tcf.ifaceID),
 			Parent:  parent,
 			Handle:  handle,
-			Info:    0x300, //little endian
+			Info:    0x300, //little endian of unix.ETH_P_ALL
 		},
 		tc.Attribute{
 			Kind: "bpf",
