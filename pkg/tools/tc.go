@@ -18,10 +18,24 @@ const (
 	TcHandleIngressFilter uint32 = 0x10<<16 | 0x2 //hex:10:2
 )
 
+type tcObjectType uint8
+
+const (
+	tcObjectTypeQdisc  tcObjectType = 1
+	tcObjectTypeClass  tcObjectType = 2
+	tcObjectTypeFilter tcObjectType = 3
+)
+
+type tcObject struct {
+	tc.Object
+	tcObjectType tcObjectType
+}
+
 type TcFacade struct {
 	netNs   int
 	ifaceID int
 	tcm     *tc.Tc
+	objects []tcObject //to easily erase them - no refs needed
 }
 
 func NewTcClient(netNsFd int, iface string) (*TcFacade, error) {
@@ -74,6 +88,12 @@ func (tcf *TcFacade) addHtbQdisc(parent, handle uint32) error {
 			},
 		},
 	}
+
+	tcf.objects = append(tcf.objects, tcObject{
+		Object:       qdisc,
+		tcObjectType: tcObjectTypeQdisc,
+	})
+
 	//TODO: Add od replace?
 	if err := tcf.tcm.Qdisc().Replace(&qdisc); err != nil {
 		return fmt.Errorf("could not assign htb to iface: %v\n", err)
@@ -99,6 +119,11 @@ func (tcf *TcFacade) addIngressQdisc(parent, handle uint32) error {
 	if err := tcf.tcm.Qdisc().Replace(&qdisc); err != nil {
 		return fmt.Errorf("could not assign ingress to iface: %v\n", err)
 	}
+
+	tcf.objects = append(tcf.objects, tcObject{
+		Object:       qdisc,
+		tcObjectType: tcObjectTypeQdisc,
+	})
 
 	return nil
 }
@@ -213,7 +238,40 @@ func bytesPtr(v []byte) *[]byte {
 	return &v
 }
 
-func AttachEgressBpfFilter(netNs int, iface string, bpfFd int, bpfFileName, bpfSec string) error {
+// Clean cleans up the tc stack (ingress and egress) attached to the given interface; Stops on first error
+func Clean(netNs int, iface string) error {
+	tcf, err := NewTcClient(netNs, iface)
+	if err != nil {
+		return err
+	}
+	defer tcf.Close()
+
+	for i := range tcf.objects {
+		switch tcf.objects[i].tcObjectType {
+		case tcObjectTypeQdisc:
+			if err := tcf.tcm.Qdisc().Delete(&tcf.objects[i].Object); err != nil {
+				return err
+			}
+		case tcObjectTypeClass:
+			// not used - qdisc deletion is enough
+			if err := tcf.tcm.Class().Delete(&tcf.objects[i].Object); err != nil {
+				return err
+			}
+		case tcObjectTypeFilter:
+			// not used - qdisc deletion is enough
+			if err := tcf.tcm.Class().Delete(&tcf.objects[i].Object); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("unknown object type: %v", tcf.objects[i].tcObjectType)
+		}
+	}
+
+	return nil
+}
+
+// AttachEgressStack attaches a tc egress stack to the given interface, htb qdisc, htb class and bpf filter
+func AttachEgressStack(netNs int, iface string, bpfFd int, bpfFileName, bpfSec string) error {
 	tcf, err := NewTcClient(netNs, iface)
 	if err != nil {
 		return err
@@ -238,7 +296,8 @@ func AttachEgressBpfFilter(netNs int, iface string, bpfFd int, bpfFileName, bpfS
 	return nil
 }
 
-func AttachIngressBpfFilter(netNs int, iface string, bpfFd int, bpfFileName, bpfSec string) error {
+// AttachIngressStack attaches a tc ingress stack to the given interface, ingress qdisc and bpf filter
+func AttachIngressStack(netNs int, iface string, bpfFd int, bpfFileName, bpfSec string) error {
 	fmt.Println("%%%%%%%%%%%%%%%%%%%%%%%% ##0")
 	tcf, err := NewTcClient(netNs, iface)
 	if err != nil {

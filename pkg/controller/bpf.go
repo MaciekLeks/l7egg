@@ -790,7 +790,7 @@ func attachTcEgressStack(bpfModule *bpf.Module, iface, netNsPath string) error {
 	}
 	fmt.Printf("[attachTcEgressStack] netnsfd:%d\n", netnsfd)
 
-	if err := tools.AttachEgressBpfFilter(netnsfd, iface, tcProg.FileDescriptor(), BpfObjectFileName, BpfEgressSection); err != nil {
+	if err := tools.AttachEgressStack(netnsfd, iface, tcProg.FileDescriptor(), BpfObjectFileName, BpfEgressSection); err != nil {
 		return err
 	}
 
@@ -814,7 +814,7 @@ func attachTcIngressStack(bpfModule *bpf.Module, iface, netNsPath string) error 
 	}
 	fmt.Printf("[attachTcIngressStack] netnsfd:%d\n", netnsfd)
 
-	if err := tools.AttachIngressBpfFilter(netnsfd, iface, tcProg.FileDescriptor(), BpfObjectFileName, BpfIngressSection); err != nil {
+	if err := tools.AttachIngressStack(netnsfd, iface, tcProg.FileDescriptor(), BpfObjectFileName, BpfIngressSection); err != nil {
 		return err
 	}
 
