@@ -739,11 +739,9 @@ int tc_ingress(struct __sk_buff *skb) {
 
 SEC("classifier")
 int tc_egress(struct __sk_buff *skb) {
-    //return firewall(skb);
-    //return process(skb, true);
-    int ret;
-    ret = process_relative(skb, BPF_HDR_START_MAC, true);
-    return (ret == TC_ACT_OK) ? TC_ACT_UNSPEC: ret;
+    //skb->tc_classid = TC_H_MAKE(1,10);
+    skb->tc_classid = 0x10010; //hex classid handle: 1:10
+    return process_relative(skb, BPF_HDR_START_MAC, true);
 }
 
 //test only for go-tc

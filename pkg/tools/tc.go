@@ -3,18 +3,19 @@ package tools
 import (
 	"fmt"
 	"github.com/florianl/go-tc"
-	"github.com/florianl/go-tc/core"
 	"golang.org/x/sys/unix"
 	"net"
 	"os"
 )
 
 const (
-	handleMajMask     uint32 = 0xFFFF0000
-	handleMinMask     uint32 = 0x0000FFFF
-	TcHandleHtbQdisc  uint32 = 0x1 << 16
-	TcHandleHtbClass  uint32 = 0x1<<16 | 0x10
-	TcHandleHtbFilter uint32 = 0x10<<16 | 0x1
+	handleMajMask         uint32 = 0xFFFF0000
+	handleMinMask         uint32 = 0x0000FFFF
+	TcHandleHtbQdisc      uint32 = 0x1 << 16      //hex:1:0
+	TcHandleHtbClass      uint32 = 0x1<<16 | 0x10 //hex:1:10
+	TcHandleHtbFilter     uint32 = 0x10<<16 | 0x1 //hex:10:1
+	TcHandleIngressQdisc  uint32 = 0xffff << 16   //hex:ffff:0
+	TcHandleIngressFilter uint32 = 0x10<<16 | 0x2 //hex:10:2
 )
 
 type TcFacade struct {
@@ -219,17 +220,17 @@ func AttachEgressBpfFilter(netNs int, iface string, bpfFd int, bpfFileName, bpfS
 	}
 	defer tcf.Close()
 
-	qdiscHandle := core.BuildHandle(0x100, 0)
+	qdiscHandle := TcHandleHtbQdisc
 	if err := tcf.addHtbQdisc(tc.HandleRoot, qdiscHandle); err != nil {
 		return err
 	}
 
-	classHandle := core.BuildHandle(0x100, 0x1)
+	classHandle := TcHandleHtbClass
 	if err := tcf.addHtbClass(qdiscHandle, classHandle); err != nil {
 		return err
 	}
 
-	filterHandle := core.BuildHandle(0x100, 0x11)
+	filterHandle := TcHandleHtbFilter
 	if err := tcf.addBpfFilter(qdiscHandle, filterHandle, &classHandle, bpfFd, bpfFileName, bpfSec); err != nil {
 		return err
 	}
@@ -257,13 +258,15 @@ func AttachIngressBpfFilter(netNs int, iface string, bpfFd int, bpfFileName, bpf
 		tcm_parent = FFFF:FFF1 = 4294967281
 		tcm_handle = FFFF:FFF0 = 4294901760
 	*/
-	qdiscHandle := core.BuildHandle(0xffff, 0x0000)
+	//qdiscHandle := core.BuildHandle(0xffff, 0x0000)
+	qdiscHandle := TcHandleIngressQdisc
 	if err := tcf.addIngressQdisc(tc.HandleIngress, qdiscHandle); err != nil {
 		return err
 	}
 
 	fmt.Println("%%%%%%%%%%%%%%%%%%%%%%%% ##1")
-	filterHandle := core.BuildHandle(0x100, 0x12)
+	//filterHandle := core.BuildHandle(0x100, 0x12)
+	filterHandle := TcHandleIngressFilter
 	//if err := tcf.addBpfFilter(qdiscHandle, filterHandle, nil, bpfFd, bpfFileName, bpfSec); err != nil {
 	if err := tcf.addBpfFilter(qdiscHandle, filterHandle, nil, bpfFd, bpfFileName, bpfSec); err != nil {
 		return err
