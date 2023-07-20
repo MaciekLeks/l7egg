@@ -18,10 +18,8 @@ import (
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	"github.com/MaciekLeks/l7egg/pkg/tools"
 	bpf "github.com/aquasecurity/libbpfgo"
-	cnins "github.com/containernetworking/plugins/pkg/ns"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog/v2"
 	"os"
 	"strings"
@@ -51,33 +49,33 @@ type egg struct {
 }
 
 // depreciated
-func newEgg(eggi *EggInfo) *egg {
-	var egg egg
-	var err error
-
-	egg.EggInfo = *eggi //TOOD no needed
-	egg.bpfModule, err = bpf.NewModuleFromFile(eggi.BPFObjectPath)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(-1)
-	}
-
-	err = egg.bpfModule.BPFLoadObject()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(-1)
-	}
-
-	err = attachTcProg(egg.bpfModule, eggi.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
-	must(err, "Can't attach TC hook.")
-	err = attachTcProg(egg.bpfModule, eggi.EgressInterface, bpf.BPFTcEgress, "tc_egress")
-	must(err, "Can't attach TC hook.")
-
-	egg.packets = make(chan []byte) //TODO need Close() on this channel
-
-	return &egg
-}
-
+//
+//	func newEgg(eggi *EggInfo) *egg {
+//		var egg egg
+//		var err error
+//
+//		egg.EggInfo = *eggi //TOOD no needed
+//		egg.bpfModule, err = bpf.NewModuleFromFile(eggi.BPFObjectPath)
+//		if err != nil {
+//			fmt.Fprintln(os.Stderr, err)
+//			os.Exit(-1)
+//		}
+//
+//		err = egg.bpfModule.BPFLoadObject()
+//		if err != nil {
+//			fmt.Fprintln(os.Stderr, err)
+//			os.Exit(-1)
+//		}
+//
+//		err = attachTcProg(egg.bpfModule, eggi.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
+//		must(err, "Can't attach TC hook.")
+//		err = attachTcProg(egg.bpfModule, eggi.EgressInterface, bpf.BPFTcEgress, "tc_egress")
+//		must(err, "Can't attach TC hook.")
+//
+//		egg.packets = make(chan []byte) //TODO need Close() on this channel
+//
+//		return &egg
+//	}
 func newEmptyEgg(eggi *EggInfo) *egg {
 	var egg egg
 
@@ -157,14 +155,25 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, netNsPath string, c
 	wg.Add(1)
 	go func() {
 		//LIFO
-		defer wg.Done()
+
 		defer func() {
 			if len(cgroupPath) == 0 {
-				tools.CleanInterfaces(netNsPath, egg.IngressInterface, egg.EgressInterface)
+				//tools.CleanInterfaces(netNsPath, egg.IngressInterface, egg.EgressInterface)
+				if err := tools.CleanIngressTcNetStack(netNsPath, egg.IngressInterface); err != nil {
+					fmt.Println(err)
+				}
+				if err := tools.CleanEgressTcNetStack(netNsPath, egg.EgressInterface); err != nil {
+					fmt.Println(err)
+				}
 			}
 		}()
 		//only egress needed
-		defer egg.bpfModule.Close()
+		//defer egg.bpfModule.Close()
+		defer func() {
+			fmt.Println("eeeeeeeee")
+			egg.bpfModule.Close()
+			fmt.Println("fffffff")
+		}()
 
 		var lwg sync.WaitGroup
 		//runMapLooper(ctx, egg.ipv4ACL, egg.CNs, ipv4, &lwg, netNsPath, cgroupPath)
@@ -779,18 +788,8 @@ func attachTcEgressStack(bpfModule *bpf.Module, iface, netNsPath string) error {
 	if err != nil {
 		return err
 	}
-	var netnsfd int
-	if netNsPath != "" {
-		netns, err := cnins.GetNS(netNsPath)
-		if err != nil {
-			utilruntime.HandleError(fmt.Errorf("can't open network namespace: %v", err))
-			return err
-		}
-		netnsfd = int(netns.Fd())
-	}
-	fmt.Printf("[attachTcEgressStack] netnsfd:%d\n", netnsfd)
 
-	if err := tools.AttachEgressStack(netnsfd, iface, tcProg.FileDescriptor(), BpfObjectFileName, BpfEgressSection); err != nil {
+	if err := tools.AttachEgressTcNetStack(netNsPath, iface, tcProg.FileDescriptor(), BpfObjectFileName, BpfEgressSection); err != nil {
 		return err
 	}
 
@@ -803,18 +802,7 @@ func attachTcIngressStack(bpfModule *bpf.Module, iface, netNsPath string) error 
 		return err
 	}
 
-	var netnsfd int
-	if netNsPath != "" {
-		netns, err := cnins.GetNS(netNsPath)
-		if err != nil {
-			utilruntime.HandleError(fmt.Errorf("can't open network namespace: %v", err))
-			return err
-		}
-		netnsfd = int(netns.Fd())
-	}
-	fmt.Printf("[attachTcIngressStack] netnsfd:%d\n", netnsfd)
-
-	if err := tools.AttachIngressStack(netnsfd, iface, tcProg.FileDescriptor(), BpfObjectFileName, BpfIngressSection); err != nil {
+	if err := tools.AttachIngressTcNetStack(netNsPath, iface, tcProg.FileDescriptor(), BpfObjectFileName, BpfIngressSection); err != nil {
 		return err
 	}
 

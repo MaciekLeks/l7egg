@@ -2,6 +2,7 @@ package tools
 
 import (
 	"fmt"
+	cnins "github.com/containernetworking/plugins/pkg/ns"
 	"github.com/florianl/go-tc"
 	"golang.org/x/sys/unix"
 	"net"
@@ -18,42 +19,57 @@ const (
 	TcHandleIngressFilter uint32 = 0x10<<16 | 0x2 //hex:10:2
 )
 
-type tcObjectType uint8
+//type tcObjectType uint8
+//type tcDirection uint8
 
-const (
-	tcObjectTypeQdisc  tcObjectType = 1
-	tcObjectTypeClass  tcObjectType = 2
-	tcObjectTypeFilter tcObjectType = 3
-)
-
-type tcObject struct {
-	tc.Object
-	tcObjectType tcObjectType
-}
+//const (
+//	tcObjectTypeQdisc  tcObjectType = 1
+//	tcObjectTypeClass  tcObjectType = 2
+//	tcObjectTypeFilter tcObjectType = 3
+//
+//	tcDirectionIngress tcDirection = 1
+//	tcDirectionEgress  tcDirection = 2
+//)
+////
+//type tcObject struct {
+//	tc.Object
+//	tcObjectType tcObjectType
+//}
+//
+//type tcObjectKey struct {
+//	devId       int
+//	tcDirection tcDirection
+//}
 
 type TcFacade struct {
-	netNs   int
+	//netNs   cnins.NetNS
 	ifaceID int
 	tcm     *tc.Tc
-	objects []tcObject //to easily erase them - no refs needed
+	//objects syncx.SafeMap[tcObjectKey, []tcObject] //to easily erase them - no refs needed
 }
 
-func NewTcClient(netNsFd int, iface string) (*TcFacade, error) {
+func NewTcFacade(iface string) (*TcFacade, error) {
+	//netNs, err := NetNamespace(netNsPath)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//defer netNs.Close()
 
+	//fmt.Printf("[attachTcEgressStack] netnsfd:%+v\n", netNs)
 	devID, err := net.InterfaceByName(iface)
 	if err != nil {
 		return nil, fmt.Errorf("Could not get interface %s: %v\n", iface, err)
 	}
 
 	tcm, err := tc.Open(&tc.Config{
-		NetNS: netNsFd,
+		//NetNS: int(netNs.Fd()), //not working in go-tc - error?
 	})
 	if err != nil {
 		return nil, fmt.Errorf("Opening rtnetlink socket: %v\n", err)
 	}
 
 	tcf := &TcFacade{
-		netNs:   netNsFd,
+		//netNs:   netNs,
 		ifaceID: devID.Index,
 		tcm:     tcm,
 	}
@@ -62,13 +78,24 @@ func NewTcClient(netNsFd int, iface string) (*TcFacade, error) {
 }
 
 func (tcf *TcFacade) Close() {
+	//if err := tcf.netNs.Close(); err != nil {
+	//	fmt.Fprintf(os.Stderr, "Closing netns: %v\n", err)
+	//}
 	if err := tcf.tcm.Close(); err != nil {
 		fmt.Fprintf(os.Stderr, "Closing rtnetlink socket: %v\n", err)
 	}
 }
 
-func (tcf *TcFacade) addHtbQdisc(parent, handle uint32) error {
-	var qdisc = tc.Object{
+//func (tcf *TcFacade) storeObject(ifaceId int, tcDirection tcDirection, tcObject tcObject) {
+//	key := tcObjectKey{ifaceId, tcDirection}
+//	if m, ok := tcf.objects.Load(key); ok {
+//		m = append(m, tcObject)
+//		tcf.objects.Store(key, m)
+//	}
+//}
+
+func (tcf *TcFacade) buildHtbQdiscSpec(parent, handle uint32) *tc.Object {
+	return &tc.Object{
 		Msg: tc.Msg{
 			Family:  unix.AF_UNSPEC,
 			Ifindex: uint32(tcf.ifaceID),
@@ -88,22 +115,36 @@ func (tcf *TcFacade) addHtbQdisc(parent, handle uint32) error {
 			},
 		},
 	}
+}
 
-	tcf.objects = append(tcf.objects, tcObject{
-		Object:       qdisc,
-		tcObjectType: tcObjectTypeQdisc,
-	})
+func (tcf *TcFacade) addHtbQdisc(parent, handle uint32) error {
+	var qdisc = tcf.buildHtbQdiscSpec(parent, handle)
 
-	//TODO: Add od replace?
-	if err := tcf.tcm.Qdisc().Replace(&qdisc); err != nil {
+	//tcf.storeObject(tcf.ifaceID, tcDirectionEgress, tcObject{
+	//	Object:       qdisc,
+	//	tcObjectType: tcObjectTypeQdisc,
+	//})
+	//
+	if err := tcf.tcm.Qdisc().Replace(qdisc); err != nil {
 		return fmt.Errorf("could not assign htb to iface: %v\n", err)
 	}
 
 	return nil
 }
 
-func (tcf *TcFacade) addIngressQdisc(parent, handle uint32) error {
-	var qdisc = tc.Object{
+// deleteHtbQdisc deletes the htb qdisc from the given interface to clear all child objects, e.g. classes, filters,...
+func (tcf *TcFacade) deleteHtbQdisc(parent, handle uint32) error {
+	var qdisc = tcf.buildHtbQdiscSpec(parent, handle)
+
+	if err := tcf.tcm.Qdisc().Delete(qdisc); err != nil {
+		return fmt.Errorf("could not delete iface qdisc: %v\n", err)
+	}
+
+	return nil
+}
+
+func (tcf *TcFacade) buildIngressQdiscSpec(parent, handle uint32) *tc.Object {
+	return &tc.Object{
 		Msg: tc.Msg{
 			Family:  unix.AF_UNSPEC,
 			Ifindex: uint32(tcf.ifaceID),
@@ -115,15 +156,30 @@ func (tcf *TcFacade) addIngressQdisc(parent, handle uint32) error {
 			Kind: "ingress",
 		},
 	}
+}
 
-	if err := tcf.tcm.Qdisc().Replace(&qdisc); err != nil {
+func (tcf *TcFacade) addIngressQdisc(parent, handle uint32) error {
+	var qdisc = tcf.buildIngressQdiscSpec(parent, handle)
+
+	if err := tcf.tcm.Qdisc().Replace(qdisc); err != nil {
 		return fmt.Errorf("could not assign ingress to iface: %v\n", err)
 	}
 
-	tcf.objects = append(tcf.objects, tcObject{
-		Object:       qdisc,
-		tcObjectType: tcObjectTypeQdisc,
-	})
+	//tcf.storeObject(tcf.ifaceID, tcDirectionIngress, tcObject{
+	//	Object:       qdisc,
+	//	tcObjectType: tcObjectTypeQdisc,
+	//})
+
+	return nil
+}
+
+// deleteIngressQdisc deletes the ingress qdisc from the given interface to clear its object - filter
+func (tcf *TcFacade) deleteIngressQdisc(parent, handle uint32) error {
+	var qdisc = tcf.buildIngressQdiscSpec(parent, handle)
+
+	if err := tcf.tcm.Qdisc().Delete(qdisc); err != nil {
+		return fmt.Errorf("could not delete iface qdisc: %v\n", err)
+	}
 
 	return nil
 }
@@ -238,41 +294,139 @@ func bytesPtr(v []byte) *[]byte {
 	return &v
 }
 
-// Clean cleans up the tc stack (ingress and egress) attached to the given interface; Stops on first error
-func Clean(netNs int, iface string) error {
-	tcf, err := NewTcClient(netNs, iface)
+// CleanInterface cleans up the tc stack (ingress and egress) attached to the given interface; Stops on first error
+//func cleanInterface(netNsPath string, iface string, tcDirection tcDirection) error {
+//	tcf, err := NewTcFacade(netNsPath, iface)
+//	if err != nil {
+//		fmt.Printf("cleanInterface netTcFacade error: %+v", err)
+//		return err
+//	}
+//	defer tcf.Close()
+//
+//	err = tcf.netNs.Do(func(_ns cnins.NetNS) error {
+//		netNsFd := int(_ns.Fd())
+//
+//		fmt.Printf("cleanInterface netNsFd #2: %d\n", netNsFd)
+//
+//		devId, err := net.InterfaceByName(iface)
+//		if err != nil {
+//			fmt.Printf("cleanInterface dev error: %d\n", netNsFd)
+//			return fmt.Errorf("Could not get interface %s: %v\n", iface, err)
+//		}
+//
+//		fmt.Printf("cleanInterface devId.Index: %d\n", devId.Index)
+//
+//		// print everything in tcf.objects maps
+//		tcf.objects.Range(func(k tcObjectKey, v []tcObject) bool {
+//			fmt.Printf("cleanInterface tcf.objects: %+v: %+v\n", k, v)
+//			return true
+//		})
+//
+//		if objects, ok := tcf.objects.Load(tcObjectKey{devId.Index, tcDirection}); ok {
+//
+//			fmt.Printf("cleanInterface objects: %+v\n", objects)
+//
+//			for i := range objects {
+//				switch objects[i].tcObjectType {
+//				case tcObjectTypeQdisc:
+//					fmt.Printf("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Deleting Qdisc %+v\n", objects[i])
+//					if err := tcf.tcm.Qdisc().Delete(&objects[i].Object); err != nil {
+//						return err
+//					}
+//					fmt.Printf("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Deleted %+v\n", objects[i])
+//				case tcObjectTypeClass:
+//					// not used - qdisc deletion is enough
+//					if err := tcf.tcm.Class().Delete(&objects[i].Object); err != nil {
+//						return err
+//					}
+//				case tcObjectTypeFilter:
+//					// not used - qdisc deletion is enough
+//					if err := tcf.tcm.Class().Delete(&objects[i].Object); err != nil {
+//						return err
+//					}
+//				default:
+//					return fmt.Errorf("unknown object type: %v", objects[i].tcObjectType)
+//				}
+//			}
+//		} else {
+//			return fmt.Errorf("could not find objects for interface %s", iface)
+//		}
+//
+//		fmt.Printf("end")
+//		return nil
+//	})
+//
+//	fmt.Printf("end2")
+//	return err
+//}
+//
+//func CleanIngressStack(netNsPath string, iface string) error {
+//	fmt.Printf("CleanIngressStack\n")
+//	return cleanInterface(netNsPath, iface, tcDirectionIngress)
+//}
+//
+//func CleanEgressStack(netNsPath string, iface string) error {
+//	fmt.Printf("CleanEgressStack\n")
+//	return cleanInterface(netNsPath, iface, tcDirectionEgress)
+//}
+
+func CleanIngressTcNetStack(netNsPath string, iface string) error {
+	fmt.Printf("CleanIngressStack\n")
+
+	netNs, err := NetNamespace(netNsPath)
 	if err != nil {
 		return err
 	}
-	defer tcf.Close()
+	defer netNs.Close()
 
-	for i := range tcf.objects {
-		switch tcf.objects[i].tcObjectType {
-		case tcObjectTypeQdisc:
-			if err := tcf.tcm.Qdisc().Delete(&tcf.objects[i].Object); err != nil {
-				return err
-			}
-		case tcObjectTypeClass:
-			// not used - qdisc deletion is enough
-			if err := tcf.tcm.Class().Delete(&tcf.objects[i].Object); err != nil {
-				return err
-			}
-		case tcObjectTypeFilter:
-			// not used - qdisc deletion is enough
-			if err := tcf.tcm.Class().Delete(&tcf.objects[i].Object); err != nil {
-				return err
-			}
-		default:
-			return fmt.Errorf("unknown object type: %v", tcf.objects[i].tcObjectType)
+	err = netNs.Do(func(_ns cnins.NetNS) error {
+		tcf, err := NewTcFacade(iface)
+		//tcf, err := NewTcFacade(netNsFd, iface)
+		if err != nil {
+			return err
 		}
-	}
+		defer tcf.Close()
 
-	return nil
+		if err := tcf.deleteIngressQdisc(tc.HandleIngress, TcHandleIngressQdisc); err != nil {
+			return err
+		}
+		return nil
+	})
+
+	return err
 }
 
-// AttachEgressStack attaches a tc egress stack to the given interface, htb qdisc, htb class and bpf filter
-func AttachEgressStack(netNs int, iface string, bpfFd int, bpfFileName, bpfSec string) error {
-	tcf, err := NewTcClient(netNs, iface)
+func CleanEgressTcNetStack(netNsPath string, iface string) error {
+	fmt.Printf("CleanEgressTcNetStack\n")
+
+	netNs, err := NetNamespace(netNsPath)
+	if err != nil {
+		return err
+	}
+	defer netNs.Close()
+
+	err = netNs.Do(func(_ns cnins.NetNS) error {
+		tcf, err := NewTcFacade(iface)
+		//tcf, err := NewTcFacade(netNsFd, iface)
+		if err != nil {
+			return err
+		}
+		defer tcf.Close()
+
+		if err := tcf.deleteHtbQdisc(tc.HandleRoot, TcHandleHtbQdisc); err != nil {
+			return err
+		}
+		return nil
+	})
+
+	return err
+}
+
+// AttachEgressTcNetStack attaches a tc egress stack to the given interface, htb qdisc, htb class and bpf filter
+func AttachEgressTcNetStack(netNsPath string, iface string, bpfFd int, bpfFileName, bpfSec string) error {
+
+	tcf, err := NewTcFacade(iface)
+	//tcf, err := NewTcFacade(netNsFd, iface)
 	if err != nil {
 		return err
 	}
@@ -296,10 +450,9 @@ func AttachEgressStack(netNs int, iface string, bpfFd int, bpfFileName, bpfSec s
 	return nil
 }
 
-// AttachIngressStack attaches a tc ingress stack to the given interface, ingress qdisc and bpf filter
-func AttachIngressStack(netNs int, iface string, bpfFd int, bpfFileName, bpfSec string) error {
-	fmt.Println("%%%%%%%%%%%%%%%%%%%%%%%% ##0")
-	tcf, err := NewTcClient(netNs, iface)
+// AttachIngressTcNetStack attaches a tc ingress stack to the given interface, ingress qdisc and bpf filter
+func AttachIngressTcNetStack(netNsPath string, iface string, bpfFd int, bpfFileName, bpfSec string) error {
+	tcf, err := NewTcFacade(iface)
 	if err != nil {
 		return err
 	}
@@ -323,7 +476,6 @@ func AttachIngressStack(netNs int, iface string, bpfFd int, bpfFileName, bpfSec 
 		return err
 	}
 
-	fmt.Println("%%%%%%%%%%%%%%%%%%%%%%%% ##1")
 	//filterHandle := core.BuildHandle(0x100, 0x12)
 	filterHandle := TcHandleIngressFilter
 	//if err := tcf.addBpfFilter(qdiscHandle, filterHandle, nil, bpfFd, bpfFileName, bpfSec); err != nil {
@@ -331,6 +483,5 @@ func AttachIngressStack(netNs int, iface string, bpfFd int, bpfFileName, bpfSec 
 		return err
 	}
 
-	fmt.Println("%%%%%%%%%%%%%%%%%%%%%%%% ##2")
 	return nil
 }

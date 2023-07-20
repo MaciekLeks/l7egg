@@ -36,7 +36,7 @@ type IEggManager interface {
 	Exists(string)
 }
 
-// eggManager holds EggInfo and steering variables (stopFunc to stop it from the controller witout stopping the controller iself).
+// eggBox holds EggInfo and steering variables (stopFunc to stop it from the controller witout stopping the controller iself).
 // waitGroup synchronize bpf main groutine starting from user.run function
 type eggBox struct {
 	stopFunc  context.CancelFunc
