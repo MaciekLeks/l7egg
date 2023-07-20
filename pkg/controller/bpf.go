@@ -155,7 +155,8 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, netNsPath string, c
 	wg.Add(1)
 	go func() {
 		//LIFO
-
+		defer wg.Done() //added with new tc filter approach via go-tc
+		defer egg.bpfModule.Close()
 		defer func() {
 			if len(cgroupPath) == 0 {
 				//tools.CleanInterfaces(netNsPath, egg.IngressInterface, egg.EgressInterface)
@@ -167,13 +168,6 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, netNsPath string, c
 				}
 			}
 		}()
-		//only egress needed
-		//defer egg.bpfModule.Close()
-		defer func() {
-			fmt.Println("eeeeeeeee")
-			egg.bpfModule.Close()
-			fmt.Println("fffffff")
-		}()
 
 		var lwg sync.WaitGroup
 		//runMapLooper(ctx, egg.ipv4ACL, egg.CNs, ipv4, &lwg, netNsPath, cgroupPath)
@@ -184,6 +178,7 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, netNsPath string, c
 		fmt.Println("///Stopping recvLoop.")
 		rb.Stop()
 		rb.Close()
+		fmt.Println("recvLoop stopped.")
 	}()
 
 	return nil
