@@ -7,7 +7,6 @@ import (
 	"github.com/MaciekLeks/l7egg/pkg/tools"
 	cgroupsv2 "github.com/containerd/cgroups/v2"
 	"github.com/containerd/containerd"
-	cnins "github.com/containernetworking/plugins/pkg/ns"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -505,29 +504,35 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey BoxKey) error {
 		logger.V(2).Info("runEgg-8 - cgroup!!!")
 		err = manager.BoxStart(ctx, boxKey, "", cgroupPath)
 	} else {
-		cgroupPath, err = "", nil //tc only}
-		path := fmt.Sprintf("/proc/%d/ns/net", pid)
-		var netns cnins.NetNS
-		netns, err = cnins.GetNS(path)
-		defer netns.Close()
+		//cgroupPath, err = "", nil //tc only}
+		//path := fmt.Sprintf("/proc/%d/ns/net", pid)
+		//var netns cnins.NetNS
+		//netns, err = cnins.GetNS(path)
+		//defer netns.Close()
+		//
+		//fmt.Printf("**********************runEgg-7-tc: %+v netns.Path:%s  path:%s\n", netns, netns.Path(), path)
+		//logger.V(2).Info("runEgg-7-tc")
+		//if err != nil {
+		//	fmt.Printf("**********************runEgg-7.0-tc: %s\n", err)
+		//	return fmt.Errorf("failed to get netns: %v", err)
+		//}
+		//
+		//fmt.Printf("**********************runEgg-7.1-tc:\n")
+		//err = netns.Do(func(_ns cnins.NetNS) error {
+		//	fmt.Printf("**********************runEgg-8-tc:\n")
+		//	logger.V(2).Info("runEgg-8 - tc!!!")
+		//	netns.Fd()
+		//	err := manager.BoxStart(ctx, boxKey, netns.Path(), cgroupPath)
+		//	fmt.Printf("**********************runEgg-8.1-tc:\n")
+		//	return err
+		//})
+		//fmt.Printf("**********************runEgg-7.2-tc:\n")
 
-		fmt.Printf("**********************runEgg-7-tc: %+v  path:%s\n", netns, path)
-		logger.V(2).Info("runEgg-7-tc")
-		if err != nil {
-			fmt.Printf("**********************runEgg-7.0-tc: %s\n", err)
-			return fmt.Errorf("failed to get netns: %v", err)
-		}
+		cgroupPath, err = "", nil //tc only}
+		netNsPath := fmt.Sprintf("/proc/%d/ns/net", pid)
 
 		fmt.Printf("**********************runEgg-7.1-tc:\n")
-		err = netns.Do(func(_ns cnins.NetNS) error {
-			fmt.Printf("**********************runEgg-8-tc:\n")
-			logger.V(2).Info("runEgg-8 - tc!!!")
-			netns.Fd()
-			err := manager.BoxStart(ctx, boxKey, netns.Path(), cgroupPath)
-			fmt.Printf("**********************runEgg-8.1-tc:\n")
-			return err
-		})
-		fmt.Printf("**********************runEgg-7.2-tc:\n")
+		err = manager.BoxStart(ctx, boxKey, netNsPath, cgroupPath)
 	}
 
 	/*{containerd/pkg/ns

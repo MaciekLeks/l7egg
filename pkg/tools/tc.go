@@ -424,64 +424,82 @@ func CleanEgressTcNetStack(netNsPath string, iface string) error {
 
 // AttachEgressTcNetStack attaches a tc egress stack to the given interface, htb qdisc, htb class and bpf filter
 func AttachEgressTcNetStack(netNsPath string, iface string, bpfFd int, bpfFileName, bpfSec string) error {
-
-	tcf, err := NewTcFacade(iface)
-	//tcf, err := NewTcFacade(netNsFd, iface)
+	netNs, err := NetNamespace(netNsPath)
 	if err != nil {
 		return err
 	}
-	defer tcf.Close()
+	defer netNs.Close()
 
-	qdiscHandle := TcHandleHtbQdisc
-	if err := tcf.addHtbQdisc(tc.HandleRoot, qdiscHandle); err != nil {
-		return err
-	}
+	err = netNs.Do(func(_ns cnins.NetNS) error {
+		tcf, err := NewTcFacade(iface)
+		//tcf, err := NewTcFacade(netNsFd, iface)
+		if err != nil {
+			return err
+		}
+		defer tcf.Close()
 
-	classHandle := TcHandleHtbClass
-	if err := tcf.addHtbClass(qdiscHandle, classHandle); err != nil {
-		return err
-	}
+		qdiscHandle := TcHandleHtbQdisc
+		if err := tcf.addHtbQdisc(tc.HandleRoot, qdiscHandle); err != nil {
+			return err
+		}
 
-	filterHandle := TcHandleHtbFilter
-	if err := tcf.addBpfFilter(qdiscHandle, filterHandle, &classHandle, bpfFd, bpfFileName, bpfSec); err != nil {
-		return err
-	}
+		classHandle := TcHandleHtbClass
+		if err := tcf.addHtbClass(qdiscHandle, classHandle); err != nil {
+			return err
+		}
 
-	return nil
+		filterHandle := TcHandleHtbFilter
+		if err := tcf.addBpfFilter(qdiscHandle, filterHandle, &classHandle, bpfFd, bpfFileName, bpfSec); err != nil {
+			return err
+		}
+		return nil
+	})
+
+	return err
 }
 
 // AttachIngressTcNetStack attaches a tc ingress stack to the given interface, ingress qdisc and bpf filter
 func AttachIngressTcNetStack(netNsPath string, iface string, bpfFd int, bpfFileName, bpfSec string) error {
-	tcf, err := NewTcFacade(iface)
+	netNs, err := NetNamespace(netNsPath)
 	if err != nil {
 		return err
 	}
-	defer tcf.Close()
+	defer netNs.Close()
 
-	/*
-		sudo strace -e trace=sendmsg -v -s 1000 -x tc qdisc add dev enp0s9 ingress
-		sendmsg(3, {msg_name={sa_family=AF_NETLINK, nl_pid=0, nl_groups=00000000}, msg_namelen=12,
-		msg_iov=[{iov_base=[{nlmsg_len=48, nlmsg_type=RTM_NEWQDISC, nlmsg_flags=NLM_F_REQUEST|NLM_F_ACK|NLM_F_EXCL|NLM_F_CREATE,
-		nlmsg_seq=1689673373, nlmsg_pid=0}, {tcm_family=AF_UNSPEC, tcm_ifindex=if_nametoindex("enp0s9"),
-		tcm_handle=4294901760, tcm_parent=4294967281, tcm_info=0}, [{nla_len=12, nla_type=TCA_KIND}, "\x69\x6e\x67\x72\x65\x73\x73\x00"...]],
-		iov_len=48}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, 0) = 48
+	err = netNs.Do(func(_ns cnins.NetNS) error {
+		tcf, err := NewTcFacade(iface)
+		if err != nil {
+			return err
+		}
+		defer tcf.Close()
 
-		where:
-		tcm_parent = FFFF:FFF1 = 4294967281
-		tcm_handle = FFFF:FFF0 = 4294901760
-	*/
-	//qdiscHandle := core.BuildHandle(0xffff, 0x0000)
-	qdiscHandle := TcHandleIngressQdisc
-	if err := tcf.addIngressQdisc(tc.HandleIngress, qdiscHandle); err != nil {
-		return err
-	}
+		/*
+			sudo strace -e trace=sendmsg -v -s 1000 -x tc qdisc add dev enp0s9 ingress
+			sendmsg(3, {msg_name={sa_family=AF_NETLINK, nl_pid=0, nl_groups=00000000}, msg_namelen=12,
+			msg_iov=[{iov_base=[{nlmsg_len=48, nlmsg_type=RTM_NEWQDISC, nlmsg_flags=NLM_F_REQUEST|NLM_F_ACK|NLM_F_EXCL|NLM_F_CREATE,
+			nlmsg_seq=1689673373, nlmsg_pid=0}, {tcm_family=AF_UNSPEC, tcm_ifindex=if_nametoindex("enp0s9"),
+			tcm_handle=4294901760, tcm_parent=4294967281, tcm_info=0}, [{nla_len=12, nla_type=TCA_KIND}, "\x69\x6e\x67\x72\x65\x73\x73\x00"...]],
+			iov_len=48}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, 0) = 48
 
-	//filterHandle := core.BuildHandle(0x100, 0x12)
-	filterHandle := TcHandleIngressFilter
-	//if err := tcf.addBpfFilter(qdiscHandle, filterHandle, nil, bpfFd, bpfFileName, bpfSec); err != nil {
-	if err := tcf.addBpfFilter(qdiscHandle, filterHandle, nil, bpfFd, bpfFileName, bpfSec); err != nil {
-		return err
-	}
+			where:
+			tcm_parent = FFFF:FFF1 = 4294967281
+			tcm_handle = FFFF:FFF0 = 4294901760
+		*/
+		//qdiscHandle := core.BuildHandle(0xffff, 0x0000)
+		qdiscHandle := TcHandleIngressQdisc
+		if err := tcf.addIngressQdisc(tc.HandleIngress, qdiscHandle); err != nil {
+			return err
+		}
 
-	return nil
+		//filterHandle := core.BuildHandle(0x100, 0x12)
+		filterHandle := TcHandleIngressFilter
+		//if err := tcf.addBpfFilter(qdiscHandle, filterHandle, nil, bpfFd, bpfFileName, bpfSec); err != nil {
+		if err := tcf.addBpfFilter(qdiscHandle, filterHandle, nil, bpfFd, bpfFileName, bpfSec); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	return err
 }
