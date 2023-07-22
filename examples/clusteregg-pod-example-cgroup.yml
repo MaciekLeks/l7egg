@@ -3,7 +3,7 @@ kind: ClusterEgg
 metadata:
   name: clusteregg-pod-example
 spec:
-  ingress:
+  ingress: {}
   egress:
     commonNames:
     - www.onet.pl

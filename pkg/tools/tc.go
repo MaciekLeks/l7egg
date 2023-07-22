@@ -1,12 +1,17 @@
 package tools
 
 import (
+	"errors"
 	"fmt"
 	cnins "github.com/containernetworking/plugins/pkg/ns"
 	"github.com/florianl/go-tc"
 	"golang.org/x/sys/unix"
+	"io/fs"
 	"net"
 	"os"
+	"path/filepath"
+	"strconv"
+	"syscall"
 )
 
 const (
@@ -17,6 +22,11 @@ const (
 	TcHandleHtbFilter     uint32 = 0x10<<16 | 0x1 //hex:10:1
 	TcHandleIngressQdisc  uint32 = 0xffff << 16   //hex:ffff:0
 	TcHandleIngressFilter uint32 = 0x10<<16 | 0x2 //hex:10:2
+
+	CgroupFsRootDir = "/sys/fs/cgroup"
+	CgroupFsName    = "l7egg"
+	CgroupNetCls    = "net_cls"
+	CgroupFsType    = "cgroup"
 )
 
 //type tcObjectType uint8
@@ -258,6 +268,35 @@ func addBpfFilter(tcm *tc.Tc, ifindex, parent, handle uint32, flowId *uint32, bp
 	return nil
 }
 
+func addCgroupFilter(tcm *tc.Tc, ifindex, parent, handle uint32) error {
+	filter := tc.Object{
+		tc.Msg{
+			Family:  unix.AF_UNSPEC,
+			Ifindex: ifindex,
+			Parent:  parent,
+			Handle:  handle,
+			Info:    0xa0008, //little endian of unix.ETH_P_ALL
+		},
+		tc.Attribute{
+			Kind: "cgroup",
+			Cgroup: &tc.Cgroup{
+				Ematch: &tc.Ematch{
+					Hdr: &tc.EmatchTreeHdr{
+						NMatches: 0,
+					},
+					Matches: &[]tc.EmatchMatch{},
+				},
+			},
+		},
+	}
+
+	if err := tcm.Filter().Add(&filter); err != nil {
+		return fmt.Errorf("could not assign filter to iface qdisc: %v\n", err)
+	}
+
+	return nil
+}
+
 // uint32Ptr is a helper function that returns a pointer to the uint32 input value.
 func uint32Ptr(v uint32) *uint32 {
 	return &v
@@ -274,6 +313,62 @@ func stringPtr(v string) *string {
 
 func bytesPtr(v []byte) *[]byte {
 	return &v
+}
+
+// isCgroupNetClsMountPoint checks if the given path is a cgroup net_cls mount point by checking existance of net_cls.classid file
+// this code is not necessary if after syscall.Mount we check if err is of syscall.EBUSY, but this code could add more
+func isCgroupNetClsMountPoint(path string) bool {
+	_, err := os.Stat(filepath.Join(path, "net_cls.classid"))
+	if err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			//just in case of returning such error
+			return true
+		}
+		return false
+	}
+	return true
+}
+
+// createCgroupNetCls creates a cgroup net_cls controller
+// temp: until https://github.com/containerd/cgroups/issues/301 is fixed
+func createCgroupNetCls(classId *uint32) error {
+	root := filepath.Join(CgroupFsRootDir, CgroupNetCls)
+	path := filepath.Join(root, CgroupFsName)
+
+	fmt.Println("-1-1-1-1-1-1-1-1-1-")
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		return err
+	}
+
+	fmt.Println("000000000000000")
+
+	fmt.Println("DDDDDDD", isCgroupNetClsMountPoint(root))
+	if !isCgroupNetClsMountPoint(root) {
+		if err := syscall.Mount(CgroupFsType, root, CgroupFsType, 0, CgroupNetCls); err != nil {
+			// this condition is not needed if isCgroupNetClsMountPoint is used, but why not check this twice
+			if !errors.Is(err, syscall.EBUSY) {
+				return err
+			}
+		}
+	}
+
+	if err := syscall.Mount(CgroupFsType, root, CgroupFsType, 0, CgroupNetCls); err != nil {
+		if errors.Is(err, syscall.EBUSY) {
+			fmt.Printf("GICIO - busy")
+		} else {
+			return err
+		}
+	}
+
+	if classId != nil {
+		return os.WriteFile(
+			filepath.Join(path, "net_cls.classid"),
+			[]byte(strconv.FormatUint(uint64(*classId), 10)),
+			os.FileMode(0),
+		)
+	}
+
+	return nil
 }
 
 func CleanIngressTcNetStack(netNsPath string, iface string) error {
@@ -328,8 +423,8 @@ func CleanEgressTcNetStack(netNsPath string, iface string) error {
 	return err
 }
 
-// AttachEgressTcNetStack attaches a tc egress stack to the given interface, htb qdisc, htb class and bpf filter
-func AttachEgressTcNetStack(netNsPath string, iface string, bpfFd int, bpfFileName, bpfSec string) error {
+// AttachEgressTcBpfNetStack attaches a tc egress stack to the given interface, htb qdisc, htb class and bpf filter
+func AttachEgressTcBpfNetStack(netNsPath string, iface string, bpfFd int, bpfFileName, bpfSec string) error {
 	netNs, err := NetNamespace(netNsPath)
 	if err != nil {
 		return err
@@ -364,8 +459,75 @@ func AttachEgressTcNetStack(netNsPath string, iface string, bpfFd int, bpfFileNa
 	return err
 }
 
-// AttachIngressTcNetStack attaches a tc ingress stack to the given interface, ingress qdisc and bpf filter
-func AttachIngressTcNetStack(netNsPath string, iface string, bpfFd int, bpfFileName, bpfSec string) error {
+// AttachEgressTcCgroupNetStack attaches a tc egress stack to the given interface, htb qdisc, htb class and bpf filter
+func AttachEgressTcCgroupNetStack(netNsPath string, iface string) error {
+	netNs, err := NetNamespace(netNsPath)
+	if err != nil {
+		return err
+	}
+	defer netNs.Close()
+
+	fmt.Println("YYYYYYYYYYYYYY - 0")
+	err = createCgroupNetCls(uint32Ptr(TcHandleHtbClass)) //see: https://github.com/containerd/cgroups/issues/301
+	if err != nil {
+		return err
+	}
+
+	/* see: https://github.com/containerd/cgroups/issues/301
+	//src: https://man.archlinux.org/man/core/iproute2/tc-cgroup.8.en
+	// equivalent to: mkdir /sys/fs/cgroup/net_cls
+	netClsController := cgroup1.NewNetCls(CgroupFsRootDir)
+	// equivalent to: mount -t cgroup -onet_cls net_cls /sys/fs/cgroup/net_cls
+	// TODO: should not this be unmounted at the end?
+	err = syscall.Mount(CgroupFs, CgroupFsNetClsDir, CgroupFs, 0, CgroupNetCls)
+	if err != nil {
+		return err
+	}
+	// equivalent to: mkdir /sys/fs/cgroup/net_cls/l7egg
+	//                echo 0x100010 > /sys/fs/cgroup/net_cls/l7egg/net_cls.classid
+	err = netClsController.Create(CgroupFsRelativePath, &specs.LinuxResources{
+		Network: &specs.LinuxNetwork{
+			ClassID: uint32Ptr(TcHandleHtbClass), //1:10
+		},
+	})
+	if err != nil {
+		return err
+	}
+	*/
+	fmt.Println("YYYYYYYYYYYYYY - 2")
+
+	err = netNs.Do(func(_ns cnins.NetNS) error {
+		tcm, ifindex, err := NewTcFacade(iface)
+		//tcf, err := NewTcFacade(netNsFd, iface)
+		if err != nil {
+			return err
+		}
+		defer closeTcm(tcm)
+
+		qdiscHandle := TcHandleHtbQdisc
+		if err := addHtbQdisc(tcm, ifindex, tc.HandleRoot, qdiscHandle); err != nil {
+			return err
+		}
+
+		classHandle := TcHandleHtbClass
+		if err := addHtbClass(tcm, ifindex, qdiscHandle, classHandle); err != nil {
+			return err
+		}
+
+		filterHandle := TcHandleHtbFilter
+		if err := addCgroupFilter(tcm, ifindex, qdiscHandle, filterHandle); err != nil {
+			return err
+		}
+		return nil
+	})
+
+	fmt.Println("YYYYYYYYYYYYYY - 3")
+
+	return err
+}
+
+// AttachIngressTcBpfNetStack attaches a tc ingress stack to the given interface, ingress qdisc and bpf filter
+func AttachIngressTcBpfNetStack(netNsPath string, iface string, bpfFd int, bpfFileName, bpfSec string) error {
 	netNs, err := NetNamespace(netNsPath)
 	if err != nil {
 		return err

@@ -502,7 +502,8 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey BoxKey) error {
 		}
 		fmt.Printf("**********************runEgg-8-cgroup:\n")
 		logger.V(2).Info("runEgg-8 - cgroup!!!")
-		err = manager.BoxStart(ctx, boxKey, "", cgroupPath)
+		netNsPath := fmt.Sprintf("/proc/%d/ns/net", pid) //needed by cgroup tc filters
+		err = manager.BoxStart(ctx, boxKey, netNsPath, cgroupPath)
 	} else {
 		//cgroupPath, err = "", nil //tc only}
 		//path := fmt.Sprintf("/proc/%d/ns/net", pid)

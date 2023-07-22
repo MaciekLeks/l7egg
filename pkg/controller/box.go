@@ -39,10 +39,11 @@ type IEggManager interface {
 // eggBox holds EggInfo and steering variables (stopFunc to stop it from the controller witout stopping the controller iself).
 // waitGroup synchronize bpf main groutine starting from user.run function
 type eggBox struct {
-	stopFunc  context.CancelFunc
-	waitGroup *sync.WaitGroup //TODO: only ene goroutine (in run(...)) - changing to channel?
-	egg       *egg
-	netNsPath string
+	stopFunc    context.CancelFunc
+	waitGroup   *sync.WaitGroup //TODO: only ene goroutine (in run(...)) - changing to channel?
+	egg         *egg
+	programInfo ProgramInfo
+	//netNsPath string
 	// active if box with bpf is running
 	active bool
 }
@@ -267,12 +268,18 @@ func (m *eggManager) BoxStart(ctx context.Context, boxKey BoxKey, netNsPath stri
 	var subWaitGroup sync.WaitGroup
 	box.stopFunc = stopFunc
 	box.waitGroup = &subWaitGroup
-	box.netNsPath = netNsPath
+	//box.netNsPath = netNsPath
+	box.programInfo = ProgramInfo{
+		box.egg.programType,
+		netNsPath,
+		cgroupPath,
+	}
+
 	box.active = true
 
 	m.boxes.Store(boxKey, box)
 
-	return box.egg.run(subCtx, &subWaitGroup, netNsPath, cgroupPath)
+	return box.egg.run(subCtx, &subWaitGroup, box.programInfo /*netNsPath, cgroupPath*/)
 }
 
 // Stop Stops one box
