@@ -247,17 +247,26 @@ func (m *eggManager) NewEggInfo(programType ProgramType, iiface string, eiface s
 }
 
 // BoxStore stores a box but not run it
-func (m *eggManager) BoxStore(ctx context.Context, boxKey BoxKey, ceggi *EggInfo) {
+func (m *eggManager) BoxStore(ctx context.Context, boxKey BoxKey, ceggi *EggInfo) error {
 	logger := klog.FromContext(ctx)
 	logger.Info("Storing box for boxKey%s'\n", boxKey)
 	egg := newEmptyEgg(ceggi)
+	if ceggi.programType == ProgramTypeCgroup { //TODO needed only if shaping
+		cgroup, err := tools.CreateCgroupNetCls(tools.CgroupFsName, tools.TcHandleHtbClass) //TODO classid: 10:10 always?
+		if err != nil {
+			return err
+		}
+		egg.cgroupNetCls = cgroup
+	}
 	var box eggBox
 	box.egg = egg
 	m.boxes.Store(boxKey, &box)
+
+	return nil
 }
 
 // BoxStart box
-func (m *eggManager) BoxStart(ctx context.Context, boxKey BoxKey, netNsPath string, cgroupPath string) error {
+func (m *eggManager) BoxStart(ctx context.Context, boxKey BoxKey, netNsPath string, cgroupPath string, pids ...uint32) error {
 
 	box, found := m.getBox(boxKey)
 	if !found {
@@ -279,7 +288,7 @@ func (m *eggManager) BoxStart(ctx context.Context, boxKey BoxKey, netNsPath stri
 
 	m.boxes.Store(boxKey, box)
 
-	return box.egg.run(subCtx, &subWaitGroup, box.programInfo /*netNsPath, cgroupPath*/)
+	return box.egg.run(subCtx, &subWaitGroup, box.programInfo /*netNsPath, cgroupPath*/, pids...)
 }
 
 // Stop Stops one box

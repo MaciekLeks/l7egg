@@ -18,6 +18,7 @@ import (
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	"github.com/MaciekLeks/l7egg/pkg/tools"
 	bpf "github.com/aquasecurity/libbpfgo"
+	"github.com/containerd/cgroups/v3/cgroup1"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"k8s.io/klog/v2"
@@ -40,11 +41,12 @@ const (
 // egg holds EggInfo (extracted from ClusterEggSpec) and ebpf related structures, e.g. maps, channels operating on that maps
 type egg struct {
 	// Depreciated: should all part of egg struct
-	EggInfo   //TOOD remove from here
-	bpfModule *bpf.Module
-	ipv4ACL   *bpf.BPFMap
-	ipv6ACL   *bpf.BPFMap
-	packets   chan []byte
+	EggInfo      //TOOD remove from here
+	bpfModule    *bpf.Module
+	ipv4ACL      *bpf.BPFMap
+	ipv6ACL      *bpf.BPFMap
+	packets      chan []byte
+	cgroupNetCls cgroup1.Cgroup //cgroup net_cls for cgroup programs
 	//aclLoock  sync.RWMutex
 }
 
@@ -85,7 +87,7 @@ func newEmptyEgg(eggi *EggInfo) *egg {
 }
 
 // run runs the egg, and if neither nsNetPath nor cgroupPath is set, it will run the egg in the current network netspace (tc over cgroup
-func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, programInfo ProgramInfo /*netNsPath string, cgroupPath string*/) error {
+func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, programInfo ProgramInfo /*netNsPath string, cgroupPath string*/, pids ...uint32) error {
 	var err error
 
 	egg.bpfModule, err = bpf.NewModuleFromFile(egg.EggInfo.BPFObjectPath)
@@ -116,7 +118,7 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, programInfo Program
 		//tools.ShapeEgressInterface(netNsPath, egg.EgressInterface)
 
 	} else {
-		err = attachTcCgroupEgressStack(egg.EgressInterface, programInfo.netNsPath)
+		err = attachTcCgroupEgressStack(egg.EgressInterface, egg.cgroupNetCls, programInfo.netNsPath, pids...)
 		must(err, "can't attach tc cgroup stack")
 		err = attachCgroupProg(egg.bpfModule, "cgroup__skb_egress", bpf.BPFAttachTypeCgroupInetEgress, programInfo.cgroupPath)
 		must(err, "can't attach cgroup hook")
@@ -811,9 +813,9 @@ func attachTcBpfIngressStack(bpfModule *bpf.Module, iface, netNsPath string) err
 	return nil
 }
 
-func attachTcCgroupEgressStack(iface, netNsPath string) error {
+func attachTcCgroupEgressStack(iface string, cgroupNetCls cgroup1.Cgroup, netNsPath string, pids ...uint32) error {
 	fmt.Println("ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ")
-	if err := tools.AttachEgressTcCgroupNetStack(netNsPath, iface); err != nil {
+	if err := tools.AttachEgressTcCgroupNetStack(netNsPath, cgroupNetCls, iface, pids...); err != nil {
 		return err
 	}
 

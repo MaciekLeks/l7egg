@@ -3,14 +3,15 @@ package tools
 import (
 	"errors"
 	"fmt"
+	"github.com/containerd/cgroups/v3/cgroup1"
 	cnins "github.com/containernetworking/plugins/pkg/ns"
 	"github.com/florianl/go-tc"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"golang.org/x/sys/unix"
 	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"syscall"
 )
 
@@ -331,12 +332,51 @@ func isCgroupNetClsMountPoint(path string) bool {
 
 // createCgroupNetCls creates a cgroup net_cls controller
 // temp: until https://github.com/containerd/cgroups/issues/301 is fixed
-func createCgroupNetCls(classId *uint32) error {
-	root := filepath.Join(CgroupFsRootDir, CgroupNetCls)
-	path := filepath.Join(root, CgroupFsName)
+//func createCgroupNetCls(classId *uint32) error {
+//	root := filepath.Join(CgroupFsRootDir, CgroupNetCls)
+//	path := filepath.Join(root, CgroupFsName)
+//
+//	fmt.Println("-1-1-1-1-1-1-1-1-1-")
+//	if err := os.MkdirAll(path, 0o755); err != nil {
+//		return err
+//	}
+//
+//	fmt.Println("000000000000000")
+//
+//	fmt.Println("DDDDDDD", isCgroupNetClsMountPoint(root))
+//	if !isCgroupNetClsMountPoint(root) {
+//		if err := syscall.Mount(CgroupFsType, root, CgroupFsType, 0, CgroupNetCls); err != nil {
+//			// this condition is not needed if isCgroupNetClsMountPoint is used, but why not check this twice
+//			if !errors.Is(err, syscall.EBUSY) {
+//				return err
+//			}
+//		}
+//	}
+//
+//	if err := syscall.Mount(CgroupFsType, root, CgroupFsType, 0, CgroupNetCls); err != nil {
+//		if errors.Is(err, syscall.EBUSY) {
+//			fmt.Printf("GICIO - busy")
+//		} else {
+//			return err
+//		}
+//	}
+//
+//	if classId != nil {
+//		return os.WriteFile(
+//			filepath.Join(path, "net_cls.classid"),
+//			[]byte(strconv.FormatUint(uint64(*classId), 10)),
+//			os.FileMode(0),
+//		)
+//	}
+//
+//	return nil
+//}
+
+func mountCgroupNetClsFs() error {
+	root := filepath.Join(CgroupFsRootDir, string(cgroup1.NetCLS))
 
 	fmt.Println("-1-1-1-1-1-1-1-1-1-")
-	if err := os.MkdirAll(path, 0o755); err != nil {
+	if err := os.MkdirAll(root, 0o755); err != nil {
 		return err
 	}
 
@@ -360,15 +400,29 @@ func createCgroupNetCls(classId *uint32) error {
 		}
 	}
 
-	if classId != nil {
-		return os.WriteFile(
-			filepath.Join(path, "net_cls.classid"),
-			[]byte(strconv.FormatUint(uint64(*classId), 10)),
-			os.FileMode(0),
-		)
+	return nil
+}
+
+// createCgroupNetCls creates a cgroup net_cls controller
+// see: https://github.com/containerd/cgroups/issues/301
+func createSubCgroupNetCls(name string, classId uint32) (cgroup1.Cgroup, error) {
+	return cgroup1.New(cgroup1.StaticPath(name),
+		&specs.LinuxResources{
+			Network: &specs.LinuxNetwork{
+				ClassID: uint32Ptr(classId), //10:10
+			},
+		}, /*,
+		cgroup1.WithHiearchy(func() ([]cgroup1.Subsystem, error) {
+			return []cgroup1.Subsystem{cgroup1.NewNetCls("/sys/fs/cgroup")}, nil
+		})*/)
+}
+
+func CreateCgroupNetCls(name string, classId uint32) (cgroup1.Cgroup, error) {
+	if err := mountCgroupNetClsFs(); err != nil {
+		return nil, err
 	}
 
-	return nil
+	return createSubCgroupNetCls(name, classId)
 }
 
 func CleanIngressTcNetStack(netNsPath string, iface string) error {
@@ -460,7 +514,7 @@ func AttachEgressTcBpfNetStack(netNsPath string, iface string, bpfFd int, bpfFil
 }
 
 // AttachEgressTcCgroupNetStack attaches a tc egress stack to the given interface, htb qdisc, htb class and bpf filter
-func AttachEgressTcCgroupNetStack(netNsPath string, iface string) error {
+func AttachEgressTcCgroupNetStack(netNsPath string, cgroupNetCls cgroup1.Cgroup, iface string, pids ...uint32) error {
 	netNs, err := NetNamespace(netNsPath)
 	if err != nil {
 		return err
@@ -468,7 +522,13 @@ func AttachEgressTcCgroupNetStack(netNsPath string, iface string) error {
 	defer netNs.Close()
 
 	fmt.Println("YYYYYYYYYYYYYY - 0")
-	err = createCgroupNetCls(uint32Ptr(TcHandleHtbClass)) //see: https://github.com/containerd/cgroups/issues/301
+	for i := 0; i < len(pids); i++ {
+		fmt.Println("YYYYYYYYYYYYYY - adding pid", pids[i])
+		if err = cgroupNetCls.AddTask(cgroup1.Process{Pid: int(pids[i])}); err != nil {
+			return err
+		}
+		fmt.Println("YYYYYYYYYYYYYY - adding pid", pids[i])
+	}
 	if err != nil {
 		return err
 	}
