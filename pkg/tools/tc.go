@@ -59,6 +59,12 @@ const (
 //	//objects syncx.SafeMap[tcObjectKey, []tcObject] //to easily erase them - no refs needed
 //}
 
+// should be the same as in pkg/controller/egg_info.go
+type TcShaping struct {
+	// Rate in bits per second
+	Rate uint32
+}
+
 func NewTcFacade(iface string) (*tc.Tc, uint32, error) {
 	devId, err := net.InterfaceByName(iface)
 	if err != nil {
@@ -177,7 +183,7 @@ func deleteIngressQdisc(tcm *tc.Tc, ifindex, parent, handle uint32) error {
 	return nil
 }
 
-func addHtbClass(tcm *tc.Tc, ifindex, parent, handle uint32) error {
+func addHtbClass(tcm *tc.Tc, ifindex, parent, handle uint32, shaping TcShaping) error {
 	var class = tc.Object{
 		Msg: tc.Msg{
 			Family:  unix.AF_UNSPEC,
@@ -191,11 +197,11 @@ func addHtbClass(tcm *tc.Tc, ifindex, parent, handle uint32) error {
 			Htb: &tc.Htb{
 				Parms: &tc.HtbOpt{
 					Rate: tc.RateSpec{
-						Rate:      128000,
+						Rate:      shaping.Rate,
 						Linklayer: 1,
 					},
 					Ceil: tc.RateSpec{
-						Rate:      128000,
+						Rate:      shaping.Rate, //TODO chahnego ceil
 						Linklayer: 1,
 					},
 					Buffer:  125000,
@@ -478,7 +484,7 @@ func CleanEgressTcNetStack(netNsPath string, iface string) error {
 }
 
 // AttachEgressTcBpfNetStack attaches a tc egress stack to the given interface, htb qdisc, htb class and bpf filter
-func AttachEgressTcBpfNetStack(netNsPath string, iface string, bpfFd int, bpfFileName, bpfSec string) error {
+func AttachEgressTcBpfNetStack(netNsPath string, iface string, bpfFd int, bpfFileName, bpfSec string, shaping TcShaping) error {
 	netNs, err := NetNamespace(netNsPath)
 	if err != nil {
 		return err
@@ -499,7 +505,7 @@ func AttachEgressTcBpfNetStack(netNsPath string, iface string, bpfFd int, bpfFil
 		}
 
 		classHandle := TcHandleHtbClass
-		if err := addHtbClass(tcm, ifindex, qdiscHandle, classHandle); err != nil {
+		if err := addHtbClass(tcm, ifindex, qdiscHandle, classHandle, shaping); err != nil {
 			return err
 		}
 
@@ -514,7 +520,7 @@ func AttachEgressTcBpfNetStack(netNsPath string, iface string, bpfFd int, bpfFil
 }
 
 // AttachEgressTcCgroupNetStack attaches a tc egress stack to the given interface, htb qdisc, htb class and bpf filter
-func AttachEgressTcCgroupNetStack(netNsPath string, cgroupNetCls cgroup1.Cgroup, iface string, pids ...uint32) error {
+func AttachEgressTcCgroupNetStack(netNsPath string, cgroupNetCls cgroup1.Cgroup, iface string, shaping TcShaping, pids ...uint32) error {
 	netNs, err := NetNamespace(netNsPath)
 	if err != nil {
 		return err
@@ -570,7 +576,7 @@ func AttachEgressTcCgroupNetStack(netNsPath string, cgroupNetCls cgroup1.Cgroup,
 		}
 
 		classHandle := TcHandleHtbClass
-		if err := addHtbClass(tcm, ifindex, qdiscHandle, classHandle); err != nil {
+		if err := addHtbClass(tcm, ifindex, qdiscHandle, classHandle, shaping); err != nil {
 			return err
 		}
 

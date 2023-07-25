@@ -25,7 +25,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 	"unsafe"
 )
@@ -111,14 +110,14 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, programInfo Program
 		err = attachTcBpfIngressStack(egg.bpfModule, egg.EggInfo.EgressInterface, programInfo.netNsPath)
 		must(err, "Can't attach TC hook.")
 		//err = attachTcProg(egg.bpfModule, egg.EggInfo.EgressInterface, bpf.BPFTcEgress, "tc_egress")
-		err = attachTcBpfEgressStack(egg.bpfModule, egg.EggInfo.EgressInterface, programInfo.netNsPath)
+		err = attachTcBpfEgressStack(egg.bpfModule, egg.EggInfo.EgressInterface, programInfo.netNsPath, egg.Shaping)
 		must(err, "Can't attach TC hook.")
 		logger.Info("Attached eBPF program to tc hooks")
 
 		//tools.ShapeEgressInterface(netNsPath, egg.EgressInterface)
 
 	} else {
-		err = attachTcCgroupEgressStack(egg.EgressInterface, egg.cgroupNetCls, programInfo.netNsPath, pids...)
+		err = attachTcCgroupEgressStack(egg.EgressInterface, egg.cgroupNetCls, egg.Shaping, programInfo.netNsPath, pids...)
 		must(err, "can't attach tc cgroup stack")
 		err = attachCgroupProg(egg.bpfModule, "cgroup__skb_egress", bpf.BPFAttachTypeCgroupInetEgress, programInfo.cgroupPath)
 		must(err, "can't attach cgroup hook")
@@ -201,8 +200,8 @@ func (egg *egg) initCIDRs() {
 		val := ipLPMVal{
 			ttl:     0,
 			counter: 0,
-			id:      cidr.id,
-			status:  uint8(assetSynced),
+			//id:      cidr.id, //test
+			status: uint8(assetSynced),
 		}
 
 		var err error
@@ -787,13 +786,13 @@ func removeACLKey(acl *bpf.BPFMap, key ipv4LPMKey) error {
 	return nil
 }
 
-func attachTcBpfEgressStack(bpfModule *bpf.Module, iface, netNsPath string) error {
+func attachTcBpfEgressStack(bpfModule *bpf.Module, iface, netNsPath string, shaping ShapingInfo) error {
 	tcProg, err := bpfModule.GetProgram(BpfEgressProgram)
 	if err != nil {
 		return err
 	}
 
-	if err := tools.AttachEgressTcBpfNetStack(netNsPath, iface, tcProg.FileDescriptor(), BpfObjectFileName, BpfEgressSection); err != nil {
+	if err := tools.AttachEgressTcBpfNetStack(netNsPath, iface, tcProg.FileDescriptor(), BpfObjectFileName, BpfEgressSection, tools.TcShaping(shaping)); err != nil {
 		return err
 	}
 
@@ -813,9 +812,9 @@ func attachTcBpfIngressStack(bpfModule *bpf.Module, iface, netNsPath string) err
 	return nil
 }
 
-func attachTcCgroupEgressStack(iface string, cgroupNetCls cgroup1.Cgroup, netNsPath string, pids ...uint32) error {
+func attachTcCgroupEgressStack(iface string, cgroupNetCls cgroup1.Cgroup, shaping ShapingInfo, netNsPath string, pids ...uint32) error {
 	fmt.Println("ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ")
-	if err := tools.AttachEgressTcCgroupNetStack(netNsPath, cgroupNetCls, iface, pids...); err != nil {
+	if err := tools.AttachEgressTcCgroupNetStack(netNsPath, cgroupNetCls, iface, tools.TcShaping(shaping), pids...); err != nil {
 		return err
 	}
 
@@ -823,40 +822,40 @@ func attachTcCgroupEgressStack(iface string, cgroupNetCls cgroup1.Cgroup, netNsP
 	return nil
 }
 
-func attachTcProg(bpfModule *bpf.Module, ifaceName string, attachPoint bpf.TcAttachPoint, progName string) error {
-	hook := bpfModule.TcHookInit()
-	err := hook.SetInterfaceByName(ifaceName)
-	must(err, "Failed to set tc hook on interface %s.", ifaceName)
-
-	fmt.Printf("[attachTcProg]:%s\n", progName)
-	hook.SetAttachPoint(attachPoint)
-	hook.Create()
-	err = hook.Create()
-	if err != nil {
-		if errno, ok := err.(syscall.Errno); ok && errno != syscall.EEXIST {
-			_, _ = fmt.Fprintf(os.Stderr, "TC hook create: %v.\n", err)
-		}
-	}
-
-	tcProg, err := bpfModule.GetProgram(progName)
-	if tcProg == nil {
-		_, _ = fmt.Fprintln(os.Stderr, err)
-		os.Exit(-1)
-	}
-
-	var tcOpts bpf.TcOpts
-	//if attachPoint == bpf.BPFTcEgress {
-	//	hook.SetParent(10, 10)
-	//	fmt.Printf("---------------------hook %+v", hook)
-	//}
-	tcOpts.ProgFd = int(tcProg.FileDescriptor())
-	err = hook.Attach(&tcOpts)
-	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err)
-		os.Exit(-1)
-	}
-	return err
-}
+//func attachTcProg(bpfModule *bpf.Module, ifaceName string, attachPoint bpf.TcAttachPoint, progName string) error {
+//	hook := bpfModule.TcHookInit()
+//	err := hook.SetInterfaceByName(ifaceName)
+//	must(err, "Failed to set tc hook on interface %s.", ifaceName)
+//
+//	fmt.Printf("[attachTcProg]:%s\n", progName)
+//	hook.SetAttachPoint(attachPoint)
+//	hook.Create()
+//	err = hook.Create()
+//	if err != nil {
+//		if errno, ok := err.(syscall.Errno); ok && errno != syscall.EEXIST {
+//			_, _ = fmt.Fprintf(os.Stderr, "TC hook create: %v.\n", err)
+//		}
+//	}
+//
+//	tcProg, err := bpfModule.GetProgram(progName)
+//	if tcProg == nil {
+//		_, _ = fmt.Fprintln(os.Stderr, err)
+//		os.Exit(-1)
+//	}
+//
+//	var tcOpts bpf.TcOpts
+//	//if attachPoint == bpf.BPFTcEgress {
+//	//	hook.SetParent(10, 10)
+//	//	fmt.Printf("---------------------hook %+v", hook)
+//	//}
+//	tcOpts.ProgFd = int(tcProg.FileDescriptor())
+//	err = hook.Attach(&tcOpts)
+//	if err != nil {
+//		_, _ = fmt.Fprintln(os.Stderr, err)
+//		os.Exit(-1)
+//	}
+//	return err
+//}
 
 func must(err error, format string, args ...interface{}) {
 	if err != nil {

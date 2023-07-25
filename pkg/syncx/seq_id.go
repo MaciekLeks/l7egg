@@ -1,4 +1,4 @@
-package tools
+package syncx
 
 import "sync"
 

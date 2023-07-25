@@ -11,6 +11,7 @@ require (
 	github.com/florianl/go-tc v0.4.2
 	github.com/google/gopacket v1.1.19
 	github.com/opencontainers/runtime-spec v1.1.0-rc.1
+	github.com/rs/xid v1.5.0
 	golang.org/x/sys v0.7.0
 	k8s.io/api v0.26.3
 	k8s.io/apimachinery v0.26.3

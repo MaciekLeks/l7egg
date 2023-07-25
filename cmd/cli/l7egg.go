@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
 	"github.com/MaciekLeks/l7egg/pkg/controller"
 	"github.com/MaciekLeks/l7egg/pkg/tools"
 	"k8s.io/apimachinery/pkg/types"
@@ -35,7 +36,18 @@ func main() {
 	}
 
 	manager := controller.BpfManagerInstance()
-	clientegg, err := manager.NewEggInfo(controller.ProgramTypeTC, *iface, *eface, cnList, cidrList, nil)
+	clientegg, err := controller.NewEggInfo(
+		v1alpha1.ClusterEggSpec{
+			string(controller.ProgramTypeTC),
+			v1alpha1.EgressSpec{
+				InterfaceName: *eface,
+				CommonNames:   cnList,
+				CIDRs:         cidrList,
+				Shaping:       v1alpha1.ShapingSpec{},
+				PodSelector:   nil,
+			},
+			v1alpha1.IngressSpec{*iface},
+		})
 
 	var defaultBoxKey controller.BoxKey
 	defaultBoxKey.Egg = types.NamespacedName{Name: "default"}

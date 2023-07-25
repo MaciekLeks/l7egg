@@ -61,6 +61,15 @@ type EgressSpec struct {
 
 	CIDRs []string `json:"cidrs,omitempty"`
 
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="shaping is immutable in this version"
+	Shaping ShapingSpec `json:"shaping,omitempty"`
+
 	// +optional
 	PodSelector *metav1.LabelSelector `json:"podSelector,omitempty"`
+}
+
+type ShapingSpec struct {
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^\d+[k|m]bps$`
+	Rate string `json:"rate,omitempty"`
 }

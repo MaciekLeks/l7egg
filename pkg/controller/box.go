@@ -3,30 +3,13 @@ package controller
 import (
 	"context"
 	"fmt"
+	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	"github.com/MaciekLeks/l7egg/pkg/tools"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
-	"net"
 	"sync"
 )
-
-type EggInfo struct {
-	sync.RWMutex
-	programType      ProgramType
-	CNs              *syncx.SafeSlice[CN]
-	CIDRs            *syncx.SafeSlice[CIDR]
-	IngressInterface string
-	EgressInterface  string
-	BPFObjectPath    string
-	PodLabels        map[string]string
-}
-
-func (eggi *EggInfo) set(fn func(v *EggInfo) error) error {
-	eggi.Lock()
-	defer eggi.Unlock()
-	return fn(eggi)
-}
 
 type IEggManager interface {
 	Start(context.Context, string, *EggInfo)
@@ -63,22 +46,8 @@ func (bk BoxKey) String() string {
 
 type eggManager struct {
 	//boxes    map[string]eggBox
-	boxes    syncx.SafeMap[BoxKey, *eggBox]
-	seqIdGen tools.ISeqId[uint16]
-}
-
-type CIDR struct {
-	//TODO ipv6 needed
-	cidr   string
-	id     uint16
-	lpmKey ILPMKey
-	status assetStatus
-}
-
-type CN struct {
-	cn     string
-	id     uint16
-	status assetStatus
+	boxes syncx.SafeMap[BoxKey, *eggBox]
+	//seqIdGen syncx.ISeqId[uint16] //tbd: moved to syncx.Sequencer
 }
 
 var (
@@ -94,65 +63,11 @@ func (box *eggBox) Boxes() *egg {
 	return box.egg
 }
 
-// parseCIDR TODO: only ipv4
-func (m *eggManager) parseCIDR(cidrS string) (CIDR, error) {
-	ip, ipNet, err := net.ParseCIDR(cidrS)
-	must(err, "Can't parse ipv4 Net.")
-	if err != nil {
-		return CIDR{}, fmt.Errorf("can't parse CIDR %s", cidrS)
-	}
-
-	fmt.Println("#### parseCID ", ip, " ipNEt", ipNet)
-
-	prefix, _ := ipNet.Mask.Size()
-	if ipv4 := ip.To4(); ipv4 != nil {
-		return CIDR{cidrS, m.seqIdGen.Next(), ipv4LPMKey{uint32(prefix), [4]uint8(ipv4)}, assetNew}, nil
-	} else if ipv6 := ip.To16(); ipv6 != nil {
-		return CIDR{cidrS, m.seqIdGen.Next(), ipv6LPMKey{uint32(prefix), [16]uint8(ipv6)}, assetNew}, nil
-	}
-
-	return CIDR{}, fmt.Errorf("can't converts CIDR to IPv4/IPv6 %s", cidrS)
-}
-
-// ParseCIDRs TODO: only ipv4
-func (m *eggManager) parseCIDRs(cidrsS []string) ([]CIDR, error) {
-	var cidrs []CIDR
-	for _, cidrS := range cidrsS {
-		cidr, err := m.parseCIDR(cidrS)
-		if err != nil {
-			return nil, err
-		}
-		cidrs = append(cidrs, cidr)
-	}
-
-	return cidrs, nil
-}
-
-// ParseCN returns CN object from string
-func (m *eggManager) parseCN(cnS string) (CN, error) {
-	//TODO add some validation before returning CN
-	//we are sync - due to we do not have to update kernel side
-	return CN{cnS, m.seqIdGen.Next(), assetNew}, nil
-}
-
-func (m *eggManager) parseCNs(cnsS []string) ([]CN, error) {
-	var cns []CN
-	for _, cnS := range cnsS {
-		cn, err := m.parseCN(cnS)
-		if err != nil {
-			return nil, err
-		}
-		cns = append(cns, cn)
-	}
-
-	return cns, nil
-}
-
 func BpfManagerInstance() *eggManager {
 	once.Do(func() {
 		instance = &eggManager{
-			boxes:    syncx.SafeMap[BoxKey, *eggBox]{},
-			seqIdGen: tools.New[uint16](),
+			boxes: syncx.SafeMap[BoxKey, *eggBox]{},
+			//seqIdGen: syncx.New[uint16](),
 		}
 	})
 	return instance
@@ -169,37 +84,6 @@ func (m *eggManager) BoxExists(boxKey BoxKey) bool {
 	return false
 }
 
-//
-//func (m *eggManager) BoxByLabels(inMap map[string]string) (*eggBox, bool) {
-//	var foundBox *eggBox
-//	var found bool
-//	mapS := fmt.Sprint(inMap)
-//	//TODO if during this iteration m.boxes changes we will not know it, see sync map Range doc
-//	m.boxes.Range(func(key, value any) bool {
-//		box, ok := value.(*eggBox)
-//		if !ok {
-//			runtime.HandleError(fmt.Errorf("can't convert map value to eggBox"))
-//			return true
-//		}
-//
-//		fmt.Printf("++++++++++++++++++++++++++= Found Box??? pre")
-//		if len(box.egg.PodLabels) > 0 {
-//			fmt.Printf("++++++++++++++++++++++++++= Found Box???")
-//			//We are not using any of k8s specific package here so simple map equality check must be enough
-//			if fmt.Sprint(box.egg.PodLabels) == mapS {
-//				fmt.Printf("++++++++++++++++++++++++++= Found Box")
-//				found = true
-//				foundBox = box
-//				return false
-//			}
-//
-//		}
-//
-//		return true
-//	})
-//	return foundBox, found
-//}
-
 // BoxAny returns box that satisfies the f function
 func (m *eggManager) BoxAny(f func(boxKey BoxKey, ibox IEggBox) bool) (*eggBox, bool) {
 	var foundBox *eggBox
@@ -214,36 +98,6 @@ func (m *eggManager) BoxAny(f func(boxKey BoxKey, ibox IEggBox) bool) (*eggBox, 
 	})
 
 	return foundBox, found
-}
-
-func (m *eggManager) NewEggInfo(programType ProgramType, iiface string, eiface string, cnsS []string, cidrsS []string, podLabels map[string]string) (*EggInfo, error) {
-	cidrs, err := m.parseCIDRs(cidrsS)
-	if err != nil {
-		fmt.Errorf("Parsing input data %#v", err)
-		return nil, err
-	}
-
-	cns, err := m.parseCNs(cnsS)
-	if err != nil {
-		fmt.Errorf("Parsing input data %#v", err)
-		return nil, err
-	}
-	safeCNs := syncx.SafeSlice[CN]{}
-	safeCNs.Append(cns...)
-
-	safeCIDRs := syncx.SafeSlice[CIDR]{}
-	safeCIDRs.Append(cidrs...)
-
-	var clientegg = &EggInfo{ //TODO make a function to wrap this up (parsing, building the object)
-		programType:      programType,
-		IngressInterface: iiface,
-		EgressInterface:  eiface,
-		CNs:              &safeCNs,
-		CIDRs:            &safeCIDRs,
-		BPFObjectPath:    "./l7egg.bpf.o",
-		PodLabels:        podLabels,
-	}
-	return clientegg, nil
 }
 
 // BoxStore stores a box but not run it
@@ -298,6 +152,7 @@ func (m *eggManager) Stop(boxKey BoxKey) error {
 		return fmt.Errorf("box '%s' not found\n", boxKey)
 	}
 	fmt.Println("$$$>>>deleteEgg: stopping")
+
 	box.stopFunc()
 	fmt.Println("$$$>>>deleteEgg: waiting")
 	box.waitGroup.Wait()
@@ -340,7 +195,7 @@ func (m *eggManager) getBox(boxKey BoxKey) (*eggBox, bool) {
 
 func (m *eggManager) UpdateCIDRs(boxKey BoxKey, newCIDRsS []string) error {
 
-	cidrs, err := m.parseCIDRs(newCIDRsS)
+	cidrs, err := parseCIDRs(newCIDRsS)
 	if err != nil {
 		return fmt.Errorf("Parsing input data %#v", err)
 	}
@@ -359,9 +214,7 @@ func (m *eggManager) UpdateCIDRs(boxKey BoxKey, newCIDRsS []string) error {
 }
 
 func (m *eggManager) UpdateCNs(boxKey BoxKey, newCNsS []string) error {
-
-	//TODO: parsing needed!!!
-	cns, err := m.parseCNs(newCNsS)
+	cns, err := parseCNs(newCNsS)
 	if err != nil {
 		return fmt.Errorf("Parsing input data %#v", err)
 	}
@@ -379,15 +232,15 @@ func (m *eggManager) UpdateCNs(boxKey BoxKey, newCNsS []string) error {
 	return nil
 }
 
-func (m *eggManager) UpdateEgg(boxKey BoxKey, newCIDRsS []string, newCNsS []string) error {
+func (m *eggManager) UpdateEgg(boxKey BoxKey, newSpec v1alpha1.ClusterEggSpec) error {
 	fmt.Printf("+++++++++++++++ 1")
-	err := m.UpdateCIDRs(boxKey, newCIDRsS)
+	err := m.UpdateCIDRs(boxKey, newSpec.Egress.CIDRs)
 	if err != nil {
 		return err
 	}
 
 	fmt.Printf("+++++++++++++++ 2")
-	err = m.UpdateCNs(boxKey, newCNsS)
+	err = m.UpdateCNs(boxKey, newSpec.Egress.CommonNames)
 	if err != nil {
 		return err
 	}
@@ -395,15 +248,3 @@ func (m *eggManager) UpdateEgg(boxKey BoxKey, newCIDRsS []string, newCNsS []stri
 	fmt.Printf("+++++++++++++++ 3")
 	return nil
 }
-
-//
-//func findAndDelete(s []string, item string) []string {
-//	index := 0
-//	for _, i := range s {
-//		if i != item {
-//			s[index] = i
-//			index++
-//		}
-//	}
-//	return s[:index]
-//}

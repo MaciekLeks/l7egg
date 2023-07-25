@@ -5,6 +5,8 @@ metadata:
 spec:
   ingress: {}
   egress:
+    shaping:
+      rate: 2mbps
     commonNames:
     - www.onet.pl
     - www.interia.pl
@@ -12,7 +14,7 @@ spec:
     cidrs:
     - 10.152.183.0/24
     - 169.254.1.1/32
+    - 192.168.57.0/24
     podSelector:
       matchLabels:
         app: tester
-

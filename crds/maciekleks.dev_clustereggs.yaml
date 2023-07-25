@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.12.0
+    controller-gen.kubebuilder.io/version: v0.12.1
   name: clustereggs.maciekleks.dev
 spec:
   group: maciekleks.dev
@@ -100,6 +100,15 @@ spec:
                         type: object
                     type: object
                     x-kubernetes-map-type: atomic
+                  shaping:
+                    properties:
+                      rate:
+                        pattern: ^\d+[k|m]bps$
+                        type: string
+                    type: object
+                    x-kubernetes-validations:
+                    - message: shaping is immutable in this version
+                      rule: self == oldSelf
                 type: object
               ingress:
                 properties:
@@ -124,7 +133,7 @@ spec:
             - message: Egress interfaceName is needed if attachType is 'tc'
               rule: (self.programType == 'tc' && has(self.egress.interfaceName)) ||
                 (self.programType == 'cgroup' && !has(self.egress.interfaceName))
-            - message: Ingress interfaceName is needed only if attachType is 'tc'
+            - message: Ingress interfaceName is needed if attachType is 'tc'
               rule: (self.programType == 'tc' && has(self.ingress.interfaceName))
                 || (self.programType =='cgroup' && !has(self.ingress.interfaceName))
           status:
