@@ -61,8 +61,10 @@ const (
 
 // should be the same as in pkg/controller/egg_info.go
 type TcShaping struct {
-	// Rate in bits per second
+	// Rate in bytes per second
 	Rate uint32
+	// Rate in bytes per second
+	Ceil uint32
 }
 
 func NewTcFacade(iface string) (*tc.Tc, uint32, error) {
@@ -201,7 +203,7 @@ func addHtbClass(tcm *tc.Tc, ifindex, parent, handle uint32, shaping TcShaping) 
 						Linklayer: 1,
 					},
 					Ceil: tc.RateSpec{
-						Rate:      shaping.Rate, //TODO chahnego ceil
+						Rate:      shaping.Ceil,
 						Linklayer: 1,
 					},
 					Buffer:  125000,

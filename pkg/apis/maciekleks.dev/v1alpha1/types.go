@@ -72,4 +72,7 @@ type ShapingSpec struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Pattern=`^\d+[k|m]bit$`
 	Rate string `json:"rate,omitempty"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^\d+[k|m]bit$`
+	Ceil string `json:"ceil,omitempty"`
 }

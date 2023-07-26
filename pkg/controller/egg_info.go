@@ -30,8 +30,10 @@ type CN struct {
 }
 
 type ShapingInfo struct {
-	// Rate in bits per second
+	// Rate in bytes per second
 	Rate uint32
+	// Ceil in bytes per second
+	Ceil uint32
 }
 
 type EggInfo struct {
@@ -90,21 +92,30 @@ func parseBytes(value uint32, unit string) (uint32, error) {
 	}
 }
 
-// ParseShapingInfo parses input ShapingSpec and returns ShapingInfo using parseBytes for rates.
-func ParseShapingInfo(shaping v1alpha1.ShapingSpec) (ShapingInfo, error) {
-	var shapingInfo ShapingInfo
-	if shaping.Rate != "" {
-		value, unit, err := parseValueUnit(shaping.Rate, "bit")
-		if err != nil {
-			return shapingInfo, err
-		}
-		shapingInfo.Rate, err = parseBytes(value, unit)
-		if err != nil {
-			return shapingInfo, err
-		}
+func parseAttribute(attrVal string, unitBase string) (retVal uint32, err error) {
+	var unit string
+	var val uint32
+	if attrVal == "" {
+		return
+	}
+	val, unit, err = parseValueUnit(attrVal, unitBase)
+	if err != nil {
+		return
+	}
+	retVal, err = parseBytes(val, unit)
+	return
+}
+
+// parseShapingInfo parses input ShapingSpec and returns ShapingInfo using parseBytes for rates.
+func parseShapingInfo(shaping v1alpha1.ShapingSpec) (shapingInfo ShapingInfo, err error) {
+	if shapingInfo.Rate, err = parseAttribute(shaping.Rate, "bit"); err != nil {
+		return
+	}
+	if shapingInfo.Ceil, err = parseAttribute(shaping.Rate, "bit"); err != nil {
+		return
 	}
 
-	return shapingInfo, nil
+	return
 }
 
 func NewEggInfo(ceggSpec v1alpha1.ClusterEggSpec) (*EggInfo, error) {
@@ -126,7 +137,7 @@ func NewEggInfo(ceggSpec v1alpha1.ClusterEggSpec) (*EggInfo, error) {
 	safeCIDRs.Append(cidrs...)
 
 	fmt.Printf("((((((((((((((((((((((((((((((((((((((((((((((", ceggSpec.Egress.Shaping)
-	shapingInfo, err := ParseShapingInfo(ceggSpec.Egress.Shaping)
+	shapingInfo, err := parseShapingInfo(ceggSpec.Egress.Shaping)
 	if err != nil {
 		return nil, err
 	}
