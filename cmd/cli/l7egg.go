@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
 	"github.com/MaciekLeks/l7egg/pkg/controller"
-	"github.com/MaciekLeks/l7egg/pkg/tools"
+	"github.com/MaciekLeks/l7egg/pkg/utils"
 	"k8s.io/apimachinery/pkg/types"
 	"os"
 )
@@ -51,7 +51,7 @@ func main() {
 
 	var defaultBoxKey controller.BoxKey
 	defaultBoxKey.Egg = types.NamespacedName{Name: "default"}
-	ctx := tools.SetupSignalHandler()
+	ctx := utils.SetupSignalHandler()
 	manager.BoxStore(ctx, defaultBoxKey, clientegg)
 
 	if err != nil {

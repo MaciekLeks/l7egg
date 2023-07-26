@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
-	"github.com/MaciekLeks/l7egg/pkg/tools"
+	"github.com/MaciekLeks/l7egg/pkg/utils"
 	cgroupsv2 "github.com/containerd/cgroups/v2"
 	"github.com/containerd/containerd"
 	corev1 "k8s.io/api/core/v1"
@@ -236,11 +236,11 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 					logger.Info("More than one egg matched. Choosing the first one.", "eggs", eggKeys)
 				}
 
-				nodeHostname, err := tools.GetHostname()
+				nodeHostname, err := utils.GetHostname()
 				if err != nil {
 					return err
 				}
-				podNodeHostname, err := tools.CleanHostame(pod.Spec.NodeName)
+				podNodeHostname, err := utils.CleanHostame(pod.Spec.NodeName)
 				if err != nil {
 					return err
 				}
@@ -281,7 +281,7 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 			if err != nil {
 				return err
 			}
-			podNodeHostname, err := tools.CleanHostame(pod.Spec.NodeName)
+			podNodeHostname, err := utils.CleanHostame(pod.Spec.NodeName)
 			if err != nil {
 				return err
 			}
@@ -301,7 +301,7 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 					logger.Info("More than one egg matched. Choosing the first one", "eggs", eggKeys)
 				}
 
-				nodeHostname, err := tools.GetHostname()
+				nodeHostname, err := utils.GetHostname()
 				if err != nil {
 					return err
 				}

@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
+	"github.com/MaciekLeks/l7egg/pkg/net"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
-	"github.com/MaciekLeks/l7egg/pkg/tools"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	"sync"
@@ -106,7 +106,7 @@ func (m *eggManager) BoxStore(ctx context.Context, boxKey BoxKey, ceggi *EggInfo
 	logger.Info("Storing box for boxKey%s'\n", boxKey)
 	egg := newEmptyEgg(ceggi)
 	if ceggi.programType == ProgramTypeCgroup { //TODO needed only if shaping
-		cgroup, err := tools.CreateCgroupNetCls(tools.CgroupFsName, tools.TcHandleHtbClass) //TODO classid: 10:10 always?
+		cgroup, err := net.CreateCgroupNetCls(net.CgroupFsName, net.TcHandleHtbClass) //TODO classid: 10:10 always?
 		if err != nil {
 			return err
 		}

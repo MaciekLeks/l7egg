@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
-	"github.com/MaciekLeks/l7egg/pkg/tools"
+	"github.com/MaciekLeks/l7egg/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -262,7 +262,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 					for i := 0; i < podKeys.Len(); i++ {
 						pi, ok := c.podInfoMap.Load(podKeys.Get(i))
 						if ok {
-							nodeHostname, err := tools.GetHostname()
+							nodeHostname, err := utils.GetHostname()
 							if err != nil {
 								return err
 							}

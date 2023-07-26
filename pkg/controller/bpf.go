@@ -15,8 +15,8 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"github.com/MaciekLeks/l7egg/pkg/net"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
-	"github.com/MaciekLeks/l7egg/pkg/tools"
 	bpf "github.com/aquasecurity/libbpfgo"
 	"github.com/containerd/cgroups/v3/cgroup1"
 	"github.com/google/gopacket"
@@ -163,15 +163,15 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, programInfo Program
 		defer func() {
 			if /*len(cgroupPath) == 0*/ programInfo.programType == ProgramTypeTC {
 				//tools.CleanInterfaces(netNsPath, egg.IngressInterface, egg.EgressInterface)
-				if err := tools.CleanIngressTcNetStack(programInfo.netNsPath, egg.IngressInterface); err != nil {
+				if err := net.CleanIngressTcNetStack(programInfo.netNsPath, egg.IngressInterface); err != nil {
 					fmt.Println(err)
 				}
-				if err := tools.CleanEgressTcNetStack(programInfo.netNsPath, egg.EgressInterface); err != nil {
+				if err := net.CleanEgressTcNetStack(programInfo.netNsPath, egg.EgressInterface); err != nil {
 					fmt.Println(err)
 				}
 			} else {
 				// TODO add condition on shaping
-				if err := tools.CleanEgressTcNetStack(programInfo.netNsPath, egg.EgressInterface); err != nil {
+				if err := net.CleanEgressTcNetStack(programInfo.netNsPath, egg.EgressInterface); err != nil {
 					fmt.Println(err)
 				}
 			}
@@ -792,7 +792,7 @@ func attachTcBpfEgressStack(bpfModule *bpf.Module, iface, netNsPath string, shap
 		return err
 	}
 
-	if err := tools.AttachEgressTcBpfNetStack(netNsPath, iface, tcProg.FileDescriptor(), BpfObjectFileName, BpfEgressSection, tools.TcShaping(shaping)); err != nil {
+	if err := net.AttachEgressTcBpfNetStack(netNsPath, iface, tcProg.FileDescriptor(), BpfObjectFileName, BpfEgressSection, net.TcShaping(shaping)); err != nil {
 		return err
 	}
 
@@ -805,7 +805,7 @@ func attachTcBpfIngressStack(bpfModule *bpf.Module, iface, netNsPath string) err
 		return err
 	}
 
-	if err := tools.AttachIngressTcBpfNetStack(netNsPath, iface, tcProg.FileDescriptor(), BpfObjectFileName, BpfIngressSection); err != nil {
+	if err := net.AttachIngressTcBpfNetStack(netNsPath, iface, tcProg.FileDescriptor(), BpfObjectFileName, BpfIngressSection); err != nil {
 		return err
 	}
 
@@ -814,7 +814,7 @@ func attachTcBpfIngressStack(bpfModule *bpf.Module, iface, netNsPath string) err
 
 func attachTcCgroupEgressStack(iface string, cgroupNetCls cgroup1.Cgroup, shaping ShapingInfo, netNsPath string, pids ...uint32) error {
 	fmt.Println("ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ")
-	if err := tools.AttachEgressTcCgroupNetStack(netNsPath, cgroupNetCls, iface, tools.TcShaping(shaping), pids...); err != nil {
+	if err := net.AttachEgressTcCgroupNetStack(netNsPath, cgroupNetCls, iface, net.TcShaping(shaping), pids...); err != nil {
 		return err
 	}
 
