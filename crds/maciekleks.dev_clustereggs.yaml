@@ -103,7 +103,7 @@ spec:
                   shaping:
                     properties:
                       rate:
-                        pattern: ^\d+[k|m]bps$
+                        pattern: ^\d+[k|m]bit$
                         type: string
                     type: object
                     x-kubernetes-validations:

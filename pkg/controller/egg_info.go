@@ -73,15 +73,18 @@ func parseValueUnit(input string, baseUnit string) (value uint32, unit string, e
 	return
 }
 
-// parserBytes parses input value and unit and returns value in bytes.
+// parserBytes parses input bits value and unit and returns value in bytes.
+// 1 bit = 0.125 byte
+// 1mbit = ~125000 bytes = 1 * 0.125 * 1000 * 1000
 func parseBytes(value uint32, unit string) (uint32, error) {
+	fmt.Printf("(((((((((((((((((((((((((((((((((((( value: %d, unit: %s\n", value, unit)
 	switch unit {
-	case "mbps":
-		return value * 1024 * 1024, nil
-	case "kbps":
-		return value * 1024, nil
-	case "bps":
-		return value, nil
+	case "mbit":
+		return value * 125 * 1000, nil
+	case "kbit":
+		return value * 125 * 1000, nil
+	case "bit":
+		return value * 125, nil
 	default:
 		return 0, fmt.Errorf("invalid unit: %s", unit)
 	}
@@ -91,7 +94,7 @@ func parseBytes(value uint32, unit string) (uint32, error) {
 func ParseShapingInfo(shaping v1alpha1.ShapingSpec) (ShapingInfo, error) {
 	var shapingInfo ShapingInfo
 	if shaping.Rate != "" {
-		value, unit, err := parseValueUnit(shaping.Rate, "bps")
+		value, unit, err := parseValueUnit(shaping.Rate, "bit")
 		if err != nil {
 			return shapingInfo, err
 		}

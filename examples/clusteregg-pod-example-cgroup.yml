@@ -6,7 +6,7 @@ spec:
   ingress: {}
   egress:
     shaping:
-      rate: 2mbps
+      rate: 1mbit
     commonNames:
     - www.onet.pl
     - www.interia.pl

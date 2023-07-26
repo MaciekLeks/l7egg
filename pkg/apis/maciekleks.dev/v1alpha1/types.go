@@ -70,6 +70,6 @@ type EgressSpec struct {
 
 type ShapingSpec struct {
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Pattern=`^\d+[k|m]bps$`
+	// +kubebuilder:validation:Pattern=`^\d+[k|m]bit$`
 	Rate string `json:"rate,omitempty"`
 }
