@@ -1,8 +1,9 @@
-package controller
+package core
 
 import (
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
+	"github.com/MaciekLeks/l7egg/pkg/controller/common"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"net"
@@ -38,7 +39,7 @@ type ShapingInfo struct {
 
 type EggInfo struct {
 	sync.RWMutex
-	programType      ProgramType
+	ProgramType      common.ProgramType
 	CNs              *syncx.SafeSlice[CN]
 	CIDRs            *syncx.SafeSlice[CIDR]
 	IngressInterface string
@@ -48,7 +49,7 @@ type EggInfo struct {
 	Shaping          ShapingInfo
 }
 
-func (eggi *EggInfo) set(fn func(v *EggInfo) error) error {
+func (eggi *EggInfo) Set(fn func(v *EggInfo) error) error {
 	eggi.Lock()
 	defer eggi.Unlock()
 	return fn(eggi)
@@ -159,7 +160,7 @@ func NewEggInfo(ceggSpec v1alpha1.ClusterEggSpec) (*EggInfo, error) {
 	}
 
 	var cggi = &EggInfo{ //TODO make a function to wrap this up (parsing, building the object)
-		programType:      ProgramType(ceggSpec.ProgramType),
+		ProgramType:      common.ProgramType(ceggSpec.ProgramType),
 		IngressInterface: iiface,
 		EgressInterface:  eiface,
 		CNs:              &safeCNs,
@@ -208,7 +209,7 @@ func parseCIDRs(cidrsS []string) ([]CIDR, error) {
 func parseCN(cnS string) (CN, error) {
 	//TODO add some validation before returning CN
 	//we are sync - due to we do not have to update kernel side
-	//we can use simple id generator
+	//we can use simple Id generator
 
 	return CN{cnS, syncx.Sequencer().Next(), assetNew}, nil
 }

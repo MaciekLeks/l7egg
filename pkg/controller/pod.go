@@ -3,6 +3,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"github.com/MaciekLeks/l7egg/pkg/controller/common"
+	"github.com/MaciekLeks/l7egg/pkg/controller/core"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	"github.com/MaciekLeks/l7egg/pkg/utils"
 	cgroupsv2 "github.com/containerd/cgroups/v2"
@@ -31,7 +33,7 @@ type PodInfo struct {
 	labels        map[string]string
 	nodeName      string
 	containerIDs  []string
-	matchedKeyBox BoxKey
+	matchedKeyBox core.BoxKey
 }
 
 // set sets in a safe manner PodInfo fields.
@@ -104,7 +106,7 @@ func (c *Controller) enqueuePod(obj interface{}) {
 
 // syncHandler compares the actual state with the desired, and attempts to
 // converge the two. It then updates the Status block of the Foo resource
-// with the current status of the resource.
+// with the current Status of the resource.
 func (c *Controller) syncPodHandler(ctx context.Context, key string) error {
 	// Convert the namespace/name string into a distinct namespace and name
 
@@ -157,7 +159,7 @@ func getContainerdIDs(css []corev1.ContainerStatus) ([]string, error) {
 	var err error
 	const crn = "containerd://"
 	for i := range css {
-		//TODO check status of the container, e.g. status, is init container, ...
+		//TODO check Status of the container, e.g. Status, is init container, ...
 		if !strings.Contains(css[i].ContainerID, crn) {
 			return cids, fmt.Errorf("only containerd supported")
 		}
@@ -176,10 +178,10 @@ func (c *Controller) deletePodInfo(ctx context.Context, pod *corev1.Pod) error {
 
 	key := types.NamespacedName{pod.Namespace, pod.Name}
 	if pi, ok := c.podInfoMap.Load(key); ok {
-		manager := BpfManagerInstance()
+		manager := core.BpfManagerInstance()
 		var err error
-		manager.boxes.Range(func(key BoxKey, value *eggBox) bool {
-			if key.pod.Name == pi.name && key.pod.Namespace == pi.namespace {
+		manager.Boxes.Range(func(key core.BoxKey, value *core.EggBox) bool {
+			if key.Pod.Name == pi.name && key.Pod.Namespace == pi.namespace {
 				logger.Info("Stopping pod info.")
 				// Stop clean up the whole box and deletes the key
 				err = manager.Stop(key)
@@ -206,12 +208,12 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 
 	var found bool
 	var pi *PodInfo
-	manager := BpfManagerInstance()
+	manager := core.BpfManagerInstance()
 	if pi, found = c.podInfoMap.Load(podKey); found {
 		//fmt.Println("***************************Update not add ", podKey.String(), pod.Status.Phase, pod.DeletionTimestamp)
 
 		boxKey, foundBox := c.findPodBox(pod)
-		var zeroBoxKey BoxKey
+		var zeroBoxKey core.BoxKey
 		fmt.Printf("pi.matchedBoxKey:%+vboxKey:%+v, foundBox: %t \n", pi.matchedKeyBox, boxKey, foundBox)
 		if !foundBox && pi.matchedKeyBox != zeroBoxKey {
 			//old-matching->cur-not-matching (e.g. someone changed POD label app:test->app:testBlah)
@@ -249,7 +251,7 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 				if !ok {
 					return fmt.Errorf("egg not found", "egg", eggKey.String())
 				}
-				boxKey := BoxKey{pod: podKey, Egg: eggKey}
+				boxKey := core.BoxKey{Pod: podKey, Egg: eggKey}
 
 				manager.BoxStore(ctx, boxKey, eggi)
 
@@ -292,7 +294,7 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 				nodeName:     podNodeHostname,
 				containerIDs: containerdIDs,
 				//containerCgroupPaths:
-				matchedKeyBox: BoxKey{},
+				matchedKeyBox: core.BoxKey{},
 			}
 
 			c.podInfoMap.Store(podKey, &pi)
@@ -311,7 +313,7 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 				if !ok {
 					return fmt.Errorf("egg not found", "egg", eggKey.String())
 				}
-				boxKey := BoxKey{pod: podKey, Egg: eggKey}
+				boxKey := core.BoxKey{Pod: podKey, Egg: eggKey}
 				pi.set(func(v *PodInfo) {
 					v.matchedKeyBox = boxKey
 				})
@@ -374,16 +376,16 @@ func (c *Controller) forgetPod(ctx context.Context, key string) error {
 //}
 
 // CheckAny searches for first matching between cegg PodSelector and the pod. Returns keyBox name
-func (c *Controller) findPodBox(pod *corev1.Pod) (BoxKey, bool) {
+func (c *Controller) findPodBox(pod *corev1.Pod) (core.BoxKey, bool) {
 	var found bool
-	var boxKey BoxKey
+	var boxKey core.BoxKey
 
-	manager := BpfManagerInstance()
+	manager := core.BpfManagerInstance()
 	podLabels := labels.Set(pod.Labels)
 
 	//fmt.Println("****************** +++++ findPodBox podCacheSynced:%t ceggCacheSynced:%t", c.podCacheSynced(), c.podCacheSynced())
 
-	manager.BoxAny(func(key BoxKey, box IEggBox) bool {
+	manager.BoxAny(func(key core.BoxKey, box core.IEggBox) bool {
 		eggPodLabels := box.Egg().EggInfo.PodLabels
 		fmt.Println("+++++ eggPodLabels:", eggPodLabels)
 		if len(eggPodLabels) > 0 {
@@ -418,7 +420,7 @@ func (c *Controller) checkEggMatch(pod *corev1.Pod) *syncx.SafeSlice[types.Names
 
 	//fmt.Println("****************** +++++ checkEggMach podCacheSynced:%t ceggCacheSynced:%t", c.podCacheSynced(), c.podCacheSynced())
 
-	c.eggInfoMap.Range(func(key types.NamespacedName, eggi *EggInfo) bool {
+	c.eggInfoMap.Range(func(key types.NamespacedName, eggi *core.EggInfo) bool {
 		matchLabels := labels.Set(eggi.PodLabels)
 		selector := matchLabels.AsSelectorPreValidated()
 		if selector.Matches(podLabels) {
@@ -440,7 +442,7 @@ func (c *Controller) checkEggMatch(pod *corev1.Pod) *syncx.SafeSlice[types.Names
 	return &eggKeys
 }
 
-func (pi *PodInfo) runEgg(ctx context.Context, boxKey BoxKey) error {
+func (pi *PodInfo) runEgg(ctx context.Context, boxKey core.BoxKey) error {
 	logger := klog.FromContext(ctx)
 	fmt.Printf("**********************runEgg-0:\n")
 
@@ -484,8 +486,8 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey BoxKey) error {
 	fmt.Printf("**********************runEgg-5:\n")
 	logger.V(2).Info("runEgg-5")
 	// attaching
-	manager := BpfManagerInstance()
-	box, ok := manager.boxes.Load(boxKey)
+	manager := core.BpfManagerInstance()
+	box, ok := manager.Boxes.Load(boxKey)
 	if !ok {
 		utilruntime.HandleError(fmt.Errorf("Box %s not found", boxKey))
 		return fmt.Errorf("Box %s not found", boxKey)
@@ -494,7 +496,7 @@ func (pi *PodInfo) runEgg(ctx context.Context, boxKey BoxKey) error {
 	logger.V(2).Info("runEgg-6")
 	var cgroupPath string
 
-	if box.egg.programType == ProgramTypeCgroup {
+	if box.Egg().ProgramType == common.ProgramTypeCgroup {
 		logger.V(2).Info("runEgg-7-cgroup")
 		cgroupPath, err = getContainerdCgroupPath(pid) //cgroup over tc programs
 		if err != nil {

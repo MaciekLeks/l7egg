@@ -1,9 +1,10 @@
-package controller
+package core
 
 import (
 	"context"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
+	"github.com/MaciekLeks/l7egg/pkg/controller/common"
 	"github.com/MaciekLeks/l7egg/pkg/net"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	"k8s.io/apimachinery/pkg/types"
@@ -19,13 +20,13 @@ type IEggManager interface {
 	Exists(string)
 }
 
-// eggBox holds EggInfo and steering variables (stopFunc to stop it from the controller witout stopping the controller iself).
+// EggBox holds EggInfo and steering variables (stopFunc to stop it from the controller witout stopping the controller iself).
 // waitGroup synchronize bpf main groutine starting from user.run function
-type eggBox struct {
+type EggBox struct {
 	stopFunc    context.CancelFunc
 	waitGroup   *sync.WaitGroup //TODO: only ene goroutine (in run(...)) - changing to channel?
 	egg         *egg
-	programInfo ProgramInfo
+	programInfo common.ProgramInfo
 	//netNsPath string
 	// active if box with bpf is running
 	active bool
@@ -37,16 +38,16 @@ type IEggBox interface {
 
 type BoxKey struct {
 	Egg types.NamespacedName
-	pod types.NamespacedName
+	Pod types.NamespacedName
 }
 
 func (bk BoxKey) String() string {
-	return fmt.Sprintf("%s-%s", bk.Egg.String(), bk.pod.String())
+	return fmt.Sprintf("%s-%s", bk.Egg.String(), bk.Pod.String())
 }
 
 type eggManager struct {
-	//boxes    map[string]eggBox
-	boxes syncx.SafeMap[BoxKey, *eggBox]
+	//boxes    map[string]EggBox
+	Boxes syncx.SafeMap[BoxKey, *EggBox]
 	//seqIdGen syncx.ISeqId[uint16] //tbd: moved to syncx.Sequencer
 }
 
@@ -55,26 +56,22 @@ var (
 	once     sync.Once
 )
 
-func (box *eggBox) Egg() *egg {
+func (box *EggBox) Egg() *egg {
 	return box.egg
 }
 
-func (box *eggBox) Boxes() *egg {
+func (box *EggBox) Boxes() *egg {
 	return box.egg
 }
 
 func BpfManagerInstance() *eggManager {
 	once.Do(func() {
 		instance = &eggManager{
-			boxes: syncx.SafeMap[BoxKey, *eggBox]{},
+			Boxes: syncx.SafeMap[BoxKey, *EggBox]{},
 			//seqIdGen: syncx.New[uint16](),
 		}
 	})
 	return instance
-}
-
-func parseClientEgg(ceggi *EggInfo) {
-
 }
 
 func (m *eggManager) BoxExists(boxKey BoxKey) bool {
@@ -85,11 +82,11 @@ func (m *eggManager) BoxExists(boxKey BoxKey) bool {
 }
 
 // BoxAny returns box that satisfies the f function
-func (m *eggManager) BoxAny(f func(boxKey BoxKey, ibox IEggBox) bool) (*eggBox, bool) {
-	var foundBox *eggBox
+func (m *eggManager) BoxAny(f func(boxKey BoxKey, ibox IEggBox) bool) (*EggBox, bool) {
+	var foundBox *EggBox
 	var found bool
 	//TODO if during this iteration m.boxes changes we will not know it, see sync map Range doc
-	m.boxes.Range(func(boxKey BoxKey, box *eggBox) bool {
+	m.Boxes.Range(func(boxKey BoxKey, box *EggBox) bool {
 		if ok := f(boxKey, box); ok {
 			return false
 		}
@@ -105,16 +102,16 @@ func (m *eggManager) BoxStore(ctx context.Context, boxKey BoxKey, ceggi *EggInfo
 	logger := klog.FromContext(ctx)
 	logger.Info("Storing box for boxKey%s'\n", boxKey)
 	egg := newEmptyEgg(ceggi)
-	if ceggi.programType == ProgramTypeCgroup { //TODO needed only if shaping
+	if ceggi.ProgramType == common.ProgramTypeCgroup { //TODO needed only if shaping
 		cgroup, err := net.CreateCgroupNetCls(net.CgroupFsName, net.TcHandleHtbClass) //TODO classid: 10:10 always?
 		if err != nil {
 			return err
 		}
 		egg.cgroupNetCls = cgroup
 	}
-	var box eggBox
+	var box EggBox
 	box.egg = egg
-	m.boxes.Store(boxKey, &box)
+	m.Boxes.Store(boxKey, &box)
 
 	return nil
 }
@@ -132,15 +129,15 @@ func (m *eggManager) BoxStart(ctx context.Context, boxKey BoxKey, netNsPath stri
 	box.stopFunc = stopFunc
 	box.waitGroup = &subWaitGroup
 	//box.netNsPath = netNsPath
-	box.programInfo = ProgramInfo{
-		box.egg.programType,
+	box.programInfo = common.ProgramInfo{
+		box.egg.ProgramType,
 		netNsPath,
 		cgroupPath,
 	}
 
 	box.active = true
 
-	m.boxes.Store(boxKey, box)
+	m.Boxes.Store(boxKey, box)
 
 	return box.egg.run(subCtx, &subWaitGroup, box.programInfo /*netNsPath, cgroupPath*/, pids...)
 }
@@ -157,7 +154,7 @@ func (m *eggManager) Stop(boxKey BoxKey) error {
 	fmt.Println("$$$>>>deleteEgg: waiting")
 	box.waitGroup.Wait()
 	fmt.Println("$$$>>>deleteEgg: done")
-	m.boxes.Delete(boxKey)
+	m.Boxes.Delete(boxKey)
 
 	return nil
 }
@@ -174,7 +171,7 @@ func (m *eggManager) Wait() {
 	//		box.waitGroup.Wait()
 	//	}()
 	//}
-	m.boxes.Range(func(boxKey BoxKey, box *eggBox) bool {
+	m.Boxes.Range(func(boxKey BoxKey, box *EggBox) bool {
 		stopWaitGroup.Add(1)
 		go func() {
 			defer stopWaitGroup.Done()
@@ -189,8 +186,8 @@ func (m *eggManager) Wait() {
 	stopWaitGroup.Wait()
 }
 
-func (m *eggManager) getBox(boxKey BoxKey) (*eggBox, bool) {
-	return m.boxes.Load(boxKey)
+func (m *eggManager) getBox(boxKey BoxKey) (*EggBox, bool) {
+	return m.Boxes.Load(boxKey)
 }
 
 func (m *eggManager) UpdateCIDRs(boxKey BoxKey, newCIDRsS []string) error {

@@ -1,4 +1,4 @@
-package controller
+package core
 
 /*
    #include <time.h>
@@ -15,6 +15,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"github.com/MaciekLeks/l7egg/pkg/controller/common"
 	"github.com/MaciekLeks/l7egg/pkg/net"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	bpf "github.com/aquasecurity/libbpfgo"
@@ -85,8 +86,8 @@ func newEmptyEgg(eggi *EggInfo) *egg {
 	return &egg
 }
 
-// run runs the egg, and if neither nsNetPath nor cgroupPath is set, it will run the egg in the current network netspace (tc over cgroup
-func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, programInfo ProgramInfo /*netNsPath string, cgroupPath string*/, pids ...uint32) error {
+// run runs the egg, and if neither nsNetPath nor cgroupPath is Set, it will run the egg in the current network netspace (tc over cgroup
+func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, programInfo common.ProgramInfo /*netNsPath string, cgroupPath string*/, pids ...uint32) error {
 	var err error
 
 	egg.bpfModule, err = bpf.NewModuleFromFile(egg.EggInfo.BPFObjectPath)
@@ -102,26 +103,26 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, programInfo Program
 	logger := klog.FromContext(ctx)
 
 	logger.Info("Attaching eBPF program having", "programInfo", programInfo)
-	if /*len(cgroupPath) == 0*/ programInfo.programType == ProgramTypeTC {
+	if /*len(cgroupPath) == 0*/ programInfo.ProgramType == common.ProgramTypeTC {
 		time.Sleep(4 * time.Second)
 		fmt.Printf("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
 
 		//err = attachTcProg(egg.bpfModule, egg.EggInfo.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
-		err = attachTcBpfIngressStack(egg.bpfModule, egg.EggInfo.EgressInterface, programInfo.netNsPath)
+		err = attachTcBpfIngressStack(egg.bpfModule, egg.EggInfo.EgressInterface, programInfo.NetNsPath)
 		must(err, "Can't attach TC hook.")
 		//err = attachTcProg(egg.bpfModule, egg.EggInfo.EgressInterface, bpf.BPFTcEgress, "tc_egress")
-		err = attachTcBpfEgressStack(egg.bpfModule, egg.EggInfo.EgressInterface, programInfo.netNsPath, egg.Shaping)
+		err = attachTcBpfEgressStack(egg.bpfModule, egg.EggInfo.EgressInterface, programInfo.NetNsPath, egg.Shaping)
 		must(err, "Can't attach TC hook.")
 		logger.Info("Attached eBPF program to tc hooks")
 
 		//tools.ShapeEgressInterface(netNsPath, egg.EgressInterface)
 
 	} else {
-		err = attachTcCgroupEgressStack(egg.EgressInterface, egg.cgroupNetCls, egg.Shaping, programInfo.netNsPath, pids...)
+		err = attachTcCgroupEgressStack(egg.EgressInterface, egg.cgroupNetCls, egg.Shaping, programInfo.NetNsPath, pids...)
 		must(err, "can't attach tc cgroup stack")
-		err = attachCgroupProg(egg.bpfModule, "cgroup__skb_egress", bpf.BPFAttachTypeCgroupInetEgress, programInfo.cgroupPath)
+		err = attachCgroupProg(egg.bpfModule, "cgroup__skb_egress", bpf.BPFAttachTypeCgroupInetEgress, programInfo.CgroupPath)
 		must(err, "can't attach cgroup hook")
-		err = attachCgroupProg(egg.bpfModule, "cgroup__skb_ingress", bpf.BPFAttachTypeCgroupInetIngress, programInfo.cgroupPath)
+		err = attachCgroupProg(egg.bpfModule, "cgroup__skb_ingress", bpf.BPFAttachTypeCgroupInetIngress, programInfo.CgroupPath)
 		must(err, "can't attach cgroup hook")
 		logger.Info("Attached eBPF program to cgroup hooks")
 		//err = attachCgroupProg(egg.bpfModule, "cgroup__sock", bpf.BPFAttachTypeCgroupSockOps)
@@ -161,17 +162,17 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, programInfo Program
 		defer wg.Done() //added with new tc filter approach via go-tc
 		defer egg.bpfModule.Close()
 		defer func() {
-			if /*len(cgroupPath) == 0*/ programInfo.programType == ProgramTypeTC {
+			if /*len(cgroupPath) == 0*/ programInfo.ProgramType == common.ProgramTypeTC {
 				//tools.CleanInterfaces(netNsPath, egg.IngressInterface, egg.EgressInterface)
-				if err := net.CleanIngressTcNetStack(programInfo.netNsPath, egg.IngressInterface); err != nil {
+				if err := net.CleanIngressTcNetStack(programInfo.NetNsPath, egg.IngressInterface); err != nil {
 					fmt.Println(err)
 				}
-				if err := net.CleanEgressTcNetStack(programInfo.netNsPath, egg.EgressInterface); err != nil {
+				if err := net.CleanEgressTcNetStack(programInfo.NetNsPath, egg.EgressInterface); err != nil {
 					fmt.Println(err)
 				}
 			} else {
 				// TODO add condition on shaping
-				if err := net.CleanEgressTcNetStack(programInfo.netNsPath, egg.EgressInterface); err != nil {
+				if err := net.CleanEgressTcNetStack(programInfo.NetNsPath, egg.EgressInterface); err != nil {
 					fmt.Println(err)
 				}
 			}
@@ -180,7 +181,7 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, programInfo Program
 		var lwg sync.WaitGroup
 		//runMapLooper(ctx, egg.ipv4ACL, egg.CNs, ipv4, &lwg, netNsPath, cgroupPath)
 		//runMapLooper(ctx, egg.ipv6ACL, egg.CNs, ipv6, &lwg, netNsPath, cgroupPath)
-		egg.runPacketsLooper(ctx, &lwg, programInfo.netNsPath, programInfo.cgroupPath)
+		egg.runPacketsLooper(ctx, &lwg, programInfo.NetNsPath, programInfo.CgroupPath)
 		lwg.Wait()
 
 		fmt.Println("///Stopping recvLoop.")
@@ -246,7 +247,7 @@ func (egg *egg) updateCIDRs(cidrs []CIDR) error {
 		}
 	}
 
-	// ipv4: set stale
+	// ipv4: Set stale
 	i := egg.ipv4ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
 	for i.Next() {
 		fmt.Println("%%%>>>4.2")
@@ -277,7 +278,7 @@ func (egg *egg) updateCIDRs(cidrs []CIDR) error {
 			}
 		}
 	}
-	// ipv6: set stale
+	// ipv6: Set stale
 	i = egg.ipv6ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
 	for i.Next() {
 		fmt.Println("%%%>>>4.2")
@@ -825,7 +826,7 @@ func attachTcCgroupEgressStack(iface string, cgroupNetCls cgroup1.Cgroup, shapin
 //func attachTcProg(bpfModule *bpf.Module, ifaceName string, attachPoint bpf.TcAttachPoint, progName string) error {
 //	hook := bpfModule.TcHookInit()
 //	err := hook.SetInterfaceByName(ifaceName)
-//	must(err, "Failed to set tc hook on interface %s.", ifaceName)
+//	must(err, "Failed to Set tc hook on interface %s.", ifaceName)
 //
 //	fmt.Printf("[attachTcProg]:%s\n", progName)
 //	hook.SetAttachPoint(attachPoint)

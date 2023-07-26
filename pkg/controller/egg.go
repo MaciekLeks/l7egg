@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
+	"github.com/MaciekLeks/l7egg/pkg/controller/core"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	"github.com/MaciekLeks/l7egg/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
@@ -74,7 +75,7 @@ func (c *Controller) enqueueEgg(obj interface{}) {
 
 // syncHandler compares the actual state with the desired, and attempts to
 // converge the two. It then updates the Status block of the Foo resource
-// with the current status of the resource.
+// with the current Status of the resource.
 func (c *Controller) syncEggHandler(ctx context.Context, key string) error {
 	// Convert the namespace/name string into a distinct namespace and name
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "resourceName", key)
@@ -107,7 +108,7 @@ func (c *Controller) syncEggHandler(ctx context.Context, key string) error {
 		return fmt.Errorf("update clusteregg '%s':%s failed", name, err)
 	}
 
-	logger.Info("Update clusteregg status.")
+	logger.Info("Update clusteregg Status.")
 	err = c.updateEggStatus(ctx, cegg)
 	if err != nil {
 		return err
@@ -131,7 +132,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 
 	logger.Info("tbd - 0")
 	fmt.Println("tbd - 0p")
-	manager := BpfManagerInstance()
+	manager := core.BpfManagerInstance()
 	var err error
 
 	logger.Info("tbd - 1")
@@ -140,7 +141,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 	// If the egg already exists, update it
 	eggNamespaceName := types.NamespacedName{Namespace: cegg.Namespace, Name: cegg.Name}
 	if eggi, ok := c.eggInfoMap.Load(eggNamespaceName); ok {
-		err = eggi.set(func(eggi *EggInfo) error {
+		err = eggi.Set(func(eggi *core.EggInfo) error {
 			fmt.Printf("\ntbd -update- eggi p:%p\n", eggi)
 			//egg already exists
 			fmt.Printf("tbd - 2p - update: %+v\n", eggi)
@@ -159,13 +160,13 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 				eggi.PodLabels = curPodLabels //PodSelector's changed
 
 				// egg spec for PodSelector changed
-				manager.boxes.Range(func(key BoxKey, value *eggBox) bool {
+				manager.Boxes.Range(func(key core.BoxKey, value *core.EggBox) bool {
 					// Find all boxes using the same egg specified by the cegg
 
 					if key.Egg.Name == cegg.Name && key.Egg.Namespace == cegg.Namespace {
 
-						if len(key.pod.Namespace) > 0 && len(key.pod.Name) > 0 {
-							podNamespaceName := types.NamespacedName{Namespace: key.pod.Namespace, Name: key.pod.Name}
+						if len(key.Pod.Namespace) > 0 && len(key.Pod.Name) > 0 {
+							podNamespaceName := types.NamespacedName{Namespace: key.Pod.Namespace, Name: key.Pod.Name}
 							pi, _ := c.podInfoMap.Load(podNamespaceName)
 							if matched := c.checkSinglePodMatch(*pi, cegg); !matched {
 								logger.Info("Stopping box", "box", key.String())
@@ -184,13 +185,13 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 				})
 
 				// a new pods may match right now:)
-				var boxKey BoxKey
+				var boxKey core.BoxKey
 				boxKey.Egg = eggNamespaceName
 				if podKeys := c.checkPodMatch(cegg); podKeys.Len() > 0 {
 					for i := 0; i < podKeys.Len(); i++ {
 						pi, ok := c.podInfoMap.Load(podKeys.Get(i))
 						if ok {
-							boxKey.pod = pi.NamespaceName()
+							boxKey.Pod = pi.NamespaceName()
 							err = manager.BoxStore(ctx, boxKey, eggi)
 							if err != nil {
 								return fmt.Errorf("storing box '%s' failed: %s", cegg.Name, err.Error())
@@ -216,7 +217,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 
 			// update CNs, CIDRs,...for remaining boxes
 			logger.Info("Updating egg for CNs, CIDRs....")
-			manager.boxes.Range(func(key BoxKey, value *eggBox) bool {
+			manager.Boxes.Range(func(key core.BoxKey, value *core.EggBox) bool {
 				// Find all boxes using the same egg specified by the cegg
 				if key.Egg.Name == cegg.Name && key.Egg.Namespace == cegg.Namespace {
 					err = manager.UpdateEgg(key, cegg.Spec)
@@ -234,17 +235,17 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 		//new egg
 		logger.Info("Adding egg")
 
-		eggi, err := NewEggInfo(cegg.Spec)
+		eggi, err := core.NewEggInfo(cegg.Spec)
 		if err != nil {
 			return fmt.Errorf("creating egginfo '%s' object failed: %s", cegg.Name, err.Error())
 		}
 
 		// store eggInfo in map
-		err = eggi.set(func(eggi *EggInfo) error {
+		err = eggi.Set(func(eggi *core.EggInfo) error {
 			fmt.Printf("\ntbd -add- eggi p:%p\n", eggi)
 			c.eggInfoMap.Store(eggNamespaceName, eggi)
 			// BoxStart cluster scope egg only if podLabels is empty
-			var boxKey BoxKey
+			var boxKey core.BoxKey
 			boxKey.Egg = eggNamespaceName
 			if len(eggi.PodLabels) == 0 {
 				// cluster scope cegg
@@ -268,7 +269,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 							}
 
 							if nodeHostname == pi.nodeName {
-								boxKey.pod = pi.NamespaceName()
+								boxKey.Pod = pi.NamespaceName()
 								err = manager.BoxStore(ctx, boxKey, eggi)
 								if err != nil {
 									return fmt.Errorf("storing box '%s' failed: %s", cegg.Name, err.Error())
@@ -299,10 +300,10 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 func (c *Controller) deleteEgg(ctx context.Context, eggNamespaceName types.NamespacedName) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "resourceName", eggNamespaceName.Name)
 
-	manager := BpfManagerInstance()
+	manager := core.BpfManagerInstance()
 	logger.Info("Deleting egg's boxes")
 	var err error
-	manager.boxes.Range(func(key BoxKey, value *eggBox) bool {
+	manager.Boxes.Range(func(key core.BoxKey, value *core.EggBox) bool {
 		if key.Egg == eggNamespaceName {
 			logger.Info("Stopping box", "box", key)
 			err = manager.Stop(key)
