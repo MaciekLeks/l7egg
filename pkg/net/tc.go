@@ -529,7 +529,7 @@ func AttachEgressTcCgroupNetStack(netNsPath string, cgroupNetCls cgroup1.Cgroup,
 	}
 	defer netNs.Close()
 
-	fmt.Println("YYYYYYYYYYYYYY - 0")
+	fmt.Println("YYYYYYYYYYYYYY - 0: ", pids)
 	for i := 0; i < len(pids); i++ {
 		fmt.Println("YYYYYYYYYYYYYY - adding pid", pids[i])
 		if err = cgroupNetCls.AddTask(cgroup1.Process{Pid: int(pids[i])}); err != nil {

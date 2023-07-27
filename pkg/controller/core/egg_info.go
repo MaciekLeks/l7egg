@@ -44,9 +44,9 @@ type EggInfo struct {
 	CIDRs            *syncx.SafeSlice[CIDR]
 	IngressInterface string
 	EgressInterface  string
-	BPFObjectPath    string
-	PodLabels        map[string]string
-	Shaping          ShapingInfo
+	//BPFObjectPath    string
+	PodLabels map[string]string
+	Shaping   ShapingInfo
 }
 
 func (eggi *EggInfo) Set(fn func(v *EggInfo) error) error {
@@ -165,9 +165,9 @@ func NewEggInfo(ceggSpec v1alpha1.ClusterEggSpec) (*EggInfo, error) {
 		EgressInterface:  eiface,
 		CNs:              &safeCNs,
 		CIDRs:            &safeCIDRs,
-		BPFObjectPath:    "./l7egg.bpf.o",
-		PodLabels:        podLabels,
-		Shaping:          shapingInfo,
+		//BPFObjectPath:    "./l7egg.bpf.o",
+		PodLabels: podLabels,
+		Shaping:   shapingInfo,
 	}
 	return cggi, nil
 }

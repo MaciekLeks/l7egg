@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/controller/core"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
@@ -184,11 +185,17 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	logger.Info("Update pod info.")
 	podKey := types.NamespacedName{pod.Namespace, pod.Name}
 
+	podJson, err := json.MarshalIndent(pod.Status, "", "    ")
+	if err != nil {
+		fmt.Println("Błąd podczas konwersji na JSON:", err)
+		return err
+	}
+	fmt.Printf("***************************Trying to add or update: %s\n\n", podJson)
 	var found bool
 	var pi *PodInfo
 	manager := core.BpfManagerInstance()
 	if pi, found = c.podInfoMap.Load(podKey); found {
-		//fmt.Println("***************************Update not add ", podKey.String(), pod.Status.Phase, pod.DeletionTimestamp)
+		fmt.Println("***************************Update not add ", podKey.String(), pod.Status.Phase, pod.DeletionTimestamp)
 
 		boxKey, foundBox := c.findPodBox(pod)
 		var zeroBoxKey core.BoxKey
@@ -255,8 +262,9 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 		//fmt.Printf("************************Update Done: %+v\n", pi)
 
 	} else { //ADD
-		//fmt.Println("***************************Trying to add")
+		fmt.Println("***************************Trying to add[0]", pod.Status.Phase)
 		if pod.Status.Phase == corev1.PodRunning {
+			fmt.Println("***************************Trying to add[1]", pod.Status.Phase)
 			containerdIDs, err := getContainerdIDs(pod.Status.ContainerStatuses)
 			if err != nil {
 				return err
