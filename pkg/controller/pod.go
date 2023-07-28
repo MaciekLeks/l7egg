@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/controller/core"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
@@ -148,6 +147,17 @@ func getContainerdIDs(css []corev1.ContainerStatus) ([]string, error) {
 	return cids, err
 }
 
+// extractContainerId extracts containerd id only from fully qualified container id, e.g. containerd://<containerd-id>
+func extractContainerdContainerId(fqcid string) (string, error) {
+	var err error
+	const crn = "containerd://"
+	if !strings.Contains(fqcid, crn) {
+		return fqcid, fmt.Errorf("only containerd supported")
+	}
+	cid := strings.TrimPrefix(fqcid, crn)
+	return cid, err
+}
+
 func getContainerdCgroupPath(pid uint32) (string, error) {
 	return cgroupsv2.PidGroupPath(int(pid))
 }
@@ -180,21 +190,59 @@ func (c *Controller) deletePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	return nil
 }
 
+// isPodInStatus checks if the pod is in the given status, e.g. when podCondType=corev1.PodReady and status is "True" then it returns true.
+func isPodInStatus(pod *corev1.Pod, podCondType corev1.PodConditionType) bool {
+	for _, cond := range pod.Status.Conditions {
+		if cond.Type == podCondType && cond.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
+}
+
+func mapContainerStateInfo(cs corev1.ContainerState) ContainerStateInfo {
+	if cs.Waiting != nil {
+		return ContainerStateWaiting
+	}
+	if cs.Running != nil {
+		return ContainerStateRunning
+	}
+	if cs.Terminated != nil {
+		return ContainerStateTerminated
+	}
+	return ContainerStateUnknown
+}
+
 func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "namespace", pod.Namespace, "name", pod.Name)
 	logger.Info("Update pod info.")
 	podKey := types.NamespacedName{pod.Namespace, pod.Name}
 
-	podJson, err := json.MarshalIndent(pod.Status, "", "    ")
-	if err != nil {
-		fmt.Println("Błąd podczas konwersji na JSON:", err)
-		return err
+	fmt.Printf("******************* pod %s status: \nPodScheduled:%t\nInitialized:%t\nContainersReady:%t\nPodReady:%t\n",
+		pod.Name,
+		isPodInStatus(pod, corev1.PodScheduled),
+		isPodInStatus(pod, corev1.PodInitialized),
+		isPodInStatus(pod, corev1.ContainersReady),
+		isPodInStatus(pod, corev1.PodReady))
+
+	for i := range pod.Status.ContainerStatuses {
+		fmt.Printf("************** POD container statuses: %+v\n", pod.Status.ContainerStatuses[i])
 	}
-	fmt.Printf("***************************Trying to add or update: %s\n\n", podJson)
+
+	//podJson, err := json.MarshalIndent(pod.Status, "", "    ")
+	//if err != nil {
+	//	fmt.Println("Błąd podczas konwersji na JSON:", err)
+	//	return err
+	//}
+	//fmt.Printf("***************************Trying to add or update: %s\n\n", podJson)
 	var found bool
 	var pi *PodInfo
 	manager := core.BpfManagerInstance()
-	if pi, found = c.podInfoMap.Load(podKey); found {
+	if pi, found = c.podInfoMap.Load(podKey); found && isPodInStatus(pod, corev1.PodReady) {
+		for i := range pi.containerStatuses {
+			fmt.Printf("************** PodInfo container statuses: %+v\n", pi.containerStatuses[i])
+		}
+
 		fmt.Println("***************************Update not add ", podKey.String(), pod.Status.Phase, pod.DeletionTimestamp)
 
 		boxKey, foundBox := c.findPodBox(pod)
@@ -251,34 +299,39 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 						return err
 					}
 					logger.Info("Box started for the flow pod->egg", "box", podKey.String(), "node", nodeHostname, "pod node", podNodeHostname)
-				} /*else {
-
+				} else {
 					fmt.Printf("\n****************{ not running in this node\n")
 				}
-				fmt.Println("**********************}")*/
 			}
+		} else { //found
+			fmt.Printf("*******************Update found checking the previous status")
 		}
 
 		//fmt.Printf("************************Update Done: %+v\n", pi)
 
-	} else { //ADD
-		fmt.Println("***************************Trying to add[0]", pod.Status.Phase)
+	} else if isPodInStatus(pod, corev1.PodReady) { //ADD
+		fmt.Println("***************************Trying to add[0]", pod.Status.Phase, pod.Name, pod.Namespace)
 		if pod.Status.Phase == corev1.PodRunning {
 			fmt.Println("***************************Trying to add[1]", pod.Status.Phase)
-			containerdIDs, err := getContainerdIDs(pod.Status.ContainerStatuses)
-			if err != nil {
-				return err
-			}
+			//containerdIDs, err := getContainerdIDs(pod.Status.ContainerStatuses)
+			//if err != nil {
+			//	return err
+			//}
 			podNodeHostname, err := utils.CleanHostame(pod.Spec.NodeName)
 			if err != nil {
 				return err
 			}
+			containerStatuses, err := extractContainerStatuses(pod)
+			if err != nil {
+				logger.Error(err, "can't extract pod container statuses")
+				return err
+			}
 			pi := PodInfo{
-				name:         pod.Name,
-				namespace:    pod.Namespace,
-				labels:       pod.Labels,
-				nodeName:     podNodeHostname,
-				containerIDs: containerdIDs,
+				name:              pod.Name,
+				namespace:         pod.Namespace,
+				labels:            pod.Labels,
+				nodeName:          podNodeHostname,
+				containerStatuses: containerStatuses,
 				//containerCgroupPaths:
 				matchedKeyBox: core.BoxKey{},
 			}
@@ -320,12 +373,12 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 					fmt.Printf("\n****************{ not running in this node\n")
 				}
 				fmt.Println("**********************}")*/
-
 			} else {
-
+				fmt.Println("**************************** - no egg matched")
 			}
 		} else {
 			logger.V(4).Info("Nor update nor add done")
+			fmt.Println("***************************Trying to add, update ??????????????????????????????", pod.Status.Phase)
 		}
 	}
 
@@ -361,7 +414,7 @@ func (c *Controller) forgetPod(ctx context.Context, key string) error {
 //
 //}
 
-// CheckAny searches for first matching between cegg PodSelector and the pod. Returns keyBox name
+// findPodBox searches for first matching between cegg PodSelector and the pod. Returns keyBox name
 func (c *Controller) findPodBox(pod *corev1.Pod) (core.BoxKey, bool) {
 	var found bool
 	var boxKey core.BoxKey
@@ -401,29 +454,26 @@ func (c *Controller) findPodBox(pod *corev1.Pod) (core.BoxKey, bool) {
 // checkPodMatch searches for all matchings between cegg PodSelector and pods. Returns TODO ???
 func (c *Controller) checkEggMatch(pod *corev1.Pod) *syncx.SafeSlice[types.NamespacedName] {
 	eggKeys := syncx.SafeSlice[types.NamespacedName]{}
-
 	podLabels := labels.Set(pod.Labels)
-
-	//fmt.Println("****************** +++++ checkEggMach podCacheSynced:%t ceggCacheSynced:%t", c.podCacheSynced(), c.podCacheSynced())
 
 	c.eggInfoMap.Range(func(key types.NamespacedName, eggi *core.EggInfo) bool {
 		matchLabels := labels.Set(eggi.PodLabels)
 		selector := matchLabels.AsSelectorPreValidated()
 		if selector.Matches(podLabels) {
 			eggKeys.Append(key)
-			//fmt.Println("****************** +++++ checkEggMach key:%v added", key)
 			return true
 		}
 		return true
 	})
 
-	/*
-		if eggKeys.Len() > 0 {
-			fmt.Println("+++++ checkPodMatch found no matching pod to egg")
-		} else {
+	//{to be commented:
+	/*if eggKeys.Len() > 0 {
+		fmt.Println("+++++ checkPodMatch found matching pod to egg(policy)")
+	} else {
 
-			fmt.Println("+++++ checkPodMatch found matching pod to policy")
-		}*/
+		fmt.Println("+++++ checkPodMatch NOT found matching pod to egg(policy)")
+	}*/
+	//}
 
 	return &eggKeys
 }

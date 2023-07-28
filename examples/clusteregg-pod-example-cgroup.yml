@@ -1,7 +1,7 @@
 apiVersion: maciekleks.dev/v1alpha1
 kind: ClusterEgg
 metadata:
-  name: clusteregg-pod-example
+  name: clusteregg-pod-example-cgroup
 spec:
   ingress: {}
   egress:
