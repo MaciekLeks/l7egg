@@ -86,10 +86,12 @@ TODO:
 # When (Status)
 I'll definitely right down here _when_... Not now ;)
 
-# "Big" TODOs
+# "Big" TODOs (priority)
+- [ ] code refactoring
+- [ ] multi container pod support
 - [x] ipv6 support
 - [x] applying Egg policy into selected PODs (in progress)
-- [ ] traffic shaping
+- [x] traffic shaping mechanism
+- [x] CRD refactoring
 - [ ] tests needed :)
-- [ ] CRD refactoring
 - [ ] ingress policies
