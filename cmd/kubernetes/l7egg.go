@@ -4,7 +4,7 @@ import (
 	"context"
 	"flag"
 	ceggclientset "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned"
-	"github.com/MaciekLeks/l7egg/pkg/tools"
+	"github.com/MaciekLeks/l7egg/pkg/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -31,7 +31,7 @@ func main() {
 	klog.InitFlags(nil)
 	flag.Parse()
 
-	ctx := tools.SetupSignalHandler()
+	ctx := utils.SetupSignalHandler()
 	logger := klog.FromContext(ctx)
 
 	config, err := rest.InClusterConfig()

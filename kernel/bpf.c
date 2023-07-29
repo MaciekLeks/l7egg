@@ -30,6 +30,8 @@
 #define TC_ACT_RECLASSIFY 1  //will terminate the packet processing pipeline and start classification from the beginning
 #define TC_MOVE_ONE -3 //local code to move further
 
+#define TC_H_MAKE(maj, min) ((maj) << 16 | (min))
+
 #ifdef asm_inline
 #undef asm_inline
 #define asm_inline asm
@@ -270,6 +272,7 @@ static __always_inline int ipv6_check_and_update(struct ipv6hdr *ipv6) {
     return TC_MOVE_ONE; //process further inside bpf
 }
 
+
 // depreciated - use process_relative instead
 static __always_inline int process(struct __sk_buff *skb, bool is_egress) {
     void *data = (void *) (long) skb->data;
@@ -277,6 +280,9 @@ static __always_inline int process(struct __sk_buff *skb, bool is_egress) {
     int off;
     bool is_ipv6 = false;
     __u8 protocol;
+
+    //implement TC_H_MAKE
+    //skb->tc_classid = TC_H_MAKE(10, 3); //set classid to 1:0
 
     //L2
     if (data + ETH_HLEN > data_end)
@@ -493,6 +499,10 @@ process_relative(struct __sk_buff *skb, enum bpf_hdr_start_off hdr_start_off, bo
     int off = 0;
     bool is_ipv6 = false;
     __u8 protocol;
+
+    // specific class for the
+    //skb->tc_classid = TC_H_MAKE(10,10);
+    //skb->tc_classid = 0xA000A;
 
     //L2
     bpf_printk("[process] /1");
@@ -721,15 +731,35 @@ process_relative(struct __sk_buff *skb, enum bpf_hdr_start_off hdr_start_off, bo
 SEC("tc")
 int tc_ingress(struct __sk_buff *skb) {
     //return process(skb, false);
+    //return process_relative(skb, BPF_HDR_START_MAC, false);
+    //int ret;
     return process_relative(skb, BPF_HDR_START_MAC, false);
+    //return (ret == TC_ACT_OK) ? TC_ACT_UNSPEC : ret;
 }
 
-SEC("tc")
+SEC("classifier")
 int tc_egress(struct __sk_buff *skb) {
-    //return firewall(skb);
-    //return process(skb, true);
+    //skb->tc_classid = TC_H_MAKE(1,10);
+    skb->tc_classid = 0x10010; //hex classid handle: 1:10
     return process_relative(skb, BPF_HDR_START_MAC, true);
 }
+
+//test only for go-tc
+//SEC(".mlk_ingress")
+//int tc_ingress2(struct __sk_buff *skb) {
+//    //return process(skb, false);
+//    return process_relative(skb, BPF_HDR_START_MAC, false);
+//}
+//
+////test only for go-tc
+//SEC(".mlk_egress")
+//int tc_egress2(struct __sk_buff *skb) {
+//    //return firewall(skb);
+//    //return process(skb, true);
+//    int ret;
+//    ret = process_relative(skb, BPF_HDR_START_MAC, true);
+//    return (ret == 0) ? -1 : ret;
+//}
 
 // depreciated - use process_relative instead
 static __always_inline int cgroup_process(struct __sk_buff *skb, bool is_egress) {

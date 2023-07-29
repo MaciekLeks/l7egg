@@ -1,4 +1,4 @@
-package controller
+package core
 
 /*
    #include <time.h>
@@ -15,16 +15,17 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"github.com/MaciekLeks/l7egg/pkg/controller/common"
+	"github.com/MaciekLeks/l7egg/pkg/net"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
-	"github.com/MaciekLeks/l7egg/pkg/tools"
 	bpf "github.com/aquasecurity/libbpfgo"
+	"github.com/containerd/cgroups/v3/cgroup1"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"k8s.io/klog/v2"
 	"os"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 	"unsafe"
 )
@@ -32,55 +33,26 @@ import (
 // egg holds EggInfo (extracted from ClusterEggSpec) and ebpf related structures, e.g. maps, channels operating on that maps
 type egg struct {
 	// Depreciated: should all part of egg struct
-	EggInfo   //TOOD remove from here
-	bpfModule *bpf.Module
-	ipv4ACL   *bpf.BPFMap
-	ipv6ACL   *bpf.BPFMap
-	packets   chan []byte
+	EggInfo      //TOOD remove from here
+	bpfModule    *bpf.Module
+	ipv4ACL      *bpf.BPFMap
+	ipv6ACL      *bpf.BPFMap
+	packets      chan []byte
+	cgroupNetCls cgroup1.Cgroup //cgroup net_cls for cgroup programs
 	//aclLoock  sync.RWMutex
-}
-
-// depreciated
-func newEgg(eggi *EggInfo) *egg {
-	var egg egg
-	var err error
-
-	egg.EggInfo = *eggi //TOOD no needed
-	egg.bpfModule, err = bpf.NewModuleFromFile(eggi.BPFObjectPath)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(-1)
-	}
-
-	err = egg.bpfModule.BPFLoadObject()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(-1)
-	}
-
-	err = attachProg(egg.bpfModule, eggi.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
-	must(err, "Can't attach TC hook.")
-	err = attachProg(egg.bpfModule, eggi.EgressInterface, bpf.BPFTcEgress, "tc_egress")
-	must(err, "Can't attach TC hook.")
-
-	egg.packets = make(chan []byte) //TODO need Close() on this channel
-
-	return &egg
 }
 
 func newEmptyEgg(eggi *EggInfo) *egg {
 	var egg egg
-
 	egg.EggInfo = *eggi
-
 	return &egg
 }
 
-// run runs the egg, and if neither nsNetPath nor cgroupPath is set, it will run the egg in the current network netspace (tc over cgroup
-func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, netNSPath string, cgroupPath string) error {
+// run runs the egg, and if neither nsNetPath nor cgroupPath is Set, it will run the egg in the current network netspace (tc over cgroup
+func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, programInfo common.ProgramInfo /*netNsPath string, cgroupPath string*/, pids ...uint32) error {
 	var err error
 
-	egg.bpfModule, err = bpf.NewModuleFromFile(egg.EggInfo.BPFObjectPath)
+	egg.bpfModule, err = bpf.NewModuleFromFile(BpfObjectFileName)
 	if err != nil {
 		return err
 	}
@@ -92,21 +64,32 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, netNSPath string, c
 
 	logger := klog.FromContext(ctx)
 
-	logger.Info("Attaching eBPF program having", "netNSPath", netNSPath, "cgroupPath", cgroupPath)
-	if len(cgroupPath) == 0 {
-		err = attachProg(egg.bpfModule, egg.EggInfo.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
+	logger.Info("Attaching eBPF program having", "programInfo", programInfo)
+	if /*len(cgroupPath) == 0*/ programInfo.ProgramType == common.ProgramTypeTC {
+		time.Sleep(4 * time.Second)
+		fmt.Printf("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
+
+		//err = attachTcProg(egg.bpfModule, egg.EggInfo.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
+		err = attachTcBpfIngressStack(egg.bpfModule, egg.EggInfo.EgressInterface, programInfo.NetNsPath)
 		must(err, "Can't attach TC hook.")
-		err = attachProg(egg.bpfModule, egg.EggInfo.EgressInterface, bpf.BPFTcEgress, "tc_egress")
+		//err = attachTcProg(egg.bpfModule, egg.EggInfo.EgressInterface, bpf.BPFTcEgress, "tc_egress")
+		err = attachTcBpfEgressStack(egg.bpfModule, egg.EggInfo.EgressInterface, programInfo.NetNsPath, egg.Shaping)
 		must(err, "Can't attach TC hook.")
 		logger.Info("Attached eBPF program to tc hooks")
+
+		//tools.ShapeEgressInterface(netNsPath, egg.EgressInterface)
+
 	} else {
-		err = attachCgroupProg(egg.bpfModule, "cgroup__skb_egress", bpf.BPFAttachTypeCgroupInetEgress, cgroupPath)
+		err = attachTcCgroupEgressStack(egg.EgressInterface, egg.cgroupNetCls, egg.Shaping, programInfo.NetNsPath, pids...)
+		must(err, "can't attach tc cgroup stack")
+		err = attachCgroupProg(egg.bpfModule, "cgroup__skb_egress", bpf.BPFAttachTypeCgroupInetEgress, programInfo.CgroupPath)
 		must(err, "can't attach cgroup hook")
-		err = attachCgroupProg(egg.bpfModule, "cgroup__skb_ingress", bpf.BPFAttachTypeCgroupInetIngress, cgroupPath)
+		err = attachCgroupProg(egg.bpfModule, "cgroup__skb_ingress", bpf.BPFAttachTypeCgroupInetIngress, programInfo.CgroupPath)
 		must(err, "can't attach cgroup hook")
 		logger.Info("Attached eBPF program to cgroup hooks")
 		//err = attachCgroupProg(egg.bpfModule, "cgroup__sock", bpf.BPFAttachTypeCgroupSockOps)
 		//must(err, "can't attach cgroup hook")
+
 	}
 
 	egg.packets = make(chan []byte) //TODO need Close() on this channel
@@ -138,24 +121,35 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, netNSPath string, c
 	wg.Add(1)
 	go func() {
 		//LIFO
-		defer wg.Done()
+		defer wg.Done() //added with new tc filter approach via go-tc
+		defer egg.bpfModule.Close()
 		defer func() {
-			if len(cgroupPath) == 0 {
-				tools.CleanInterfaces(netNSPath, egg.IngressInterface, egg.EgressInterface)
+			if /*len(cgroupPath) == 0*/ programInfo.ProgramType == common.ProgramTypeTC {
+				//tools.CleanInterfaces(netNsPath, egg.IngressInterface, egg.EgressInterface)
+				if err := net.CleanIngressTcNetStack(programInfo.NetNsPath, egg.IngressInterface); err != nil {
+					fmt.Println(err)
+				}
+				if err := net.CleanEgressTcNetStack(programInfo.NetNsPath, egg.EgressInterface); err != nil {
+					fmt.Println(err)
+				}
+			} else {
+				// TODO add condition on shaping
+				if err := net.CleanEgressTcNetStack(programInfo.NetNsPath, egg.EgressInterface); err != nil {
+					fmt.Println(err)
+				}
 			}
 		}()
-		//only egress needed
-		defer egg.bpfModule.Close()
 
 		var lwg sync.WaitGroup
-		//runMapLooper(ctx, egg.ipv4ACL, egg.CNs, ipv4, &lwg, netNSPath, cgroupPath)
-		//runMapLooper(ctx, egg.ipv6ACL, egg.CNs, ipv6, &lwg, netNSPath, cgroupPath)
-		egg.runPacketsLooper(ctx, &lwg, netNSPath, cgroupPath)
+		//runMapLooper(ctx, egg.ipv4ACL, egg.CNs, ipv4, &lwg, netNsPath, cgroupPath)
+		//runMapLooper(ctx, egg.ipv6ACL, egg.CNs, ipv6, &lwg, netNsPath, cgroupPath)
+		egg.runPacketsLooper(ctx, &lwg, programInfo.NetNsPath, programInfo.CgroupPath)
 		lwg.Wait()
 
 		fmt.Println("///Stopping recvLoop.")
 		rb.Stop()
 		rb.Close()
+		fmt.Println("recvLoop stopped.")
 	}()
 
 	return nil
@@ -169,8 +163,8 @@ func (egg *egg) initCIDRs() {
 		val := ipLPMVal{
 			ttl:     0,
 			counter: 0,
-			id:      cidr.id,
-			status:  uint8(assetSynced),
+			//id:      cidr.id, //test
+			status: uint8(assetSynced),
 		}
 
 		var err error
@@ -215,7 +209,7 @@ func (egg *egg) updateCIDRs(cidrs []CIDR) error {
 		}
 	}
 
-	// ipv4: set stale
+	// ipv4: Set stale
 	i := egg.ipv4ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
 	for i.Next() {
 		fmt.Println("%%%>>>4.2")
@@ -246,7 +240,7 @@ func (egg *egg) updateCIDRs(cidrs []CIDR) error {
 			}
 		}
 	}
-	// ipv6: set stale
+	// ipv6: Set stale
 	i = egg.ipv6ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
 	for i.Next() {
 		fmt.Println("%%%>>>4.2")
@@ -639,85 +633,7 @@ func unmarshalValue(bytes []byte) ipLPMVal {
 	}
 }
 
-//func updateACLValue(acl *bpf.BPFMap, key ipv4LPMKey, val ipLPMVal) error {
-//	//alyternative way
-//	//aclKeyEnc := bytes.NewBuffer(encodeUint32(32))
-//	//aclKeyEnc.Write(encodeUint32(ip2Uint32(ip)))
-//	//aclValEnc := encodeUint32(1)
-//	//fmt.Printf("IP:%s val:%d, hex:%x\n", ip, ip2Uint32(ip), ip2Uint32(ip))
-//	//fmt.Printf("Key:%s val:%s\n", insertNth(hex.EncodeToString(aclKeyEnc.Bytes()), 2), insertNth(hex.EncodeToString(aclValEnc), 2))
-//	//ipv4ACL.UpdateEgg(&aclKeyEnc.Bytes, &aclValEnc)
-//
-//	upKey := unsafe.Pointer(&key)
-//	//check if not exists first
-//	oldValBytes, err := acl.GetValue(upKey)
-//	var oldVal ipLPMVal
-//	if err == nil { //update in any cases
-//		fmt.Println("Key/Value exists.", key, oldValBytes)
-//		oldVal = unmarshalValue(oldValBytes)
-//		val.counter += oldVal.counter
-//		fmt.Println("Counters:", oldVal.counter, val.counter)
-//	}
-//
-//	upVal := unsafe.Pointer(&val)
-//
-//	err = acl.Update(upKey, upVal)
-//	if err != nil {
-//		fmt.Println("[updatACL] Can't upate ACLP, err:", err)
-//		return err
-//	} else {
-//		fmt.Printf("[updateACLValue] ACL updated for, key:%v, val:%v\n", key, val)
-//	}
-//	//!!} else {
-//	//!!	fmt.Printf("[updateACLValue] Key already exists in ACL, key:%v val:%v\n", key, binary.LittleEndian.Uint64(v))
-//	//!!}
-//	return nil
-//}
-
-//func updateACLValue2(acl *bpf.BPFMap, key ipv6LPMKey, val ipLPMVal) error {
-//	//alyternative way
-//	//aclKeyEnc := bytes.NewBuffer(encodeUint32(32))
-//	//aclKeyEnc.Write(encodeUint32(ip2Uint32(ip)))
-//	//aclValEnc := encodeUint32(1)
-//	//fmt.Printf("IP:%s val:%d, hex:%x\n", ip, ip2Uint32(ip), ip2Uint32(ip))
-//	//fmt.Printf("Key:%s val:%s\n", insertNth(hex.EncodeToString(aclKeyEnc.Bytes()), 2), insertNth(hex.EncodeToString(aclValEnc), 2))
-//	//ipv4ACL.UpdateEgg(&aclKeyEnc.Bytes, &aclValEnc)
-//
-//	upKey := unsafe.Pointer(&key)
-//	//check if not exists first
-//	oldValBytes, err := acl.GetValue(upKey)
-//	var oldVal ipLPMVal
-//	if err == nil { //update in any cases
-//		fmt.Println("Key/Value exists.", key, oldValBytes)
-//		oldVal = unmarshalValue(oldValBytes)
-//		val.counter += oldVal.counter
-//		fmt.Println("Counters:", oldVal.counter, val.counter)
-//	}
-//
-//	upVal := unsafe.Pointer(&val)
-//
-//	err = acl.Update(upKey, upVal)
-//	if err != nil {
-//		fmt.Println("[updatACL] Can't upate ACLP, err:", err)
-//		return err
-//	} else {
-//		fmt.Printf("[updateACLValue] ACL updated for, key:%v, val:%v\n", key, val)
-//	}
-//	//!!} else {
-//	//!!	fmt.Printf("[updateACLValue] Key already exists in ACL, key:%v val:%v\n", key, binary.LittleEndian.Uint64(v))
-//	//!!}
-//	return nil
-//}
-
 func updateACLValueNew(acl *bpf.BPFMap, ikey ILPMKey, val ipLPMVal) error {
-	//alyternative way
-	//aclKeyEnc := bytes.NewBuffer(encodeUint32(32))
-	//aclKeyEnc.Write(encodeUint32(ip2Uint32(ip)))
-	//aclValEnc := encodeUint32(1)
-	//fmt.Printf("IP:%s val:%d, hex:%x\n", ip, ip2Uint32(ip), ip2Uint32(ip))
-	//fmt.Printf("Key:%s val:%s\n", insertNth(hex.EncodeToString(aclKeyEnc.Bytes()), 2), insertNth(hex.EncodeToString(aclValEnc), 2))
-	//ipv4ACL.UpdateEgg(&aclKeyEnc.Bytes, &aclValEnc)
-
 	//check if not exists first
 	upKey := ikey.GetPointer()
 	oldValBytes, err := acl.GetValue(upKey)
@@ -755,34 +671,38 @@ func removeACLKey(acl *bpf.BPFMap, key ipv4LPMKey) error {
 	return nil
 }
 
-func attachProg(bpfModule *bpf.Module, ifaceName string, attachPoint bpf.TcAttachPoint, progName string) error {
-	hook := bpfModule.TcHookInit()
-	err := hook.SetInterfaceByName(ifaceName)
-	must(err, "Failed to set tc hook on interface %s.", ifaceName)
-
-	fmt.Printf("[attachProg]:%s\n", progName)
-	hook.SetAttachPoint(attachPoint)
-	err = hook.Create()
+func attachTcBpfEgressStack(bpfModule *bpf.Module, iface, netNsPath string, shaping ShapingInfo) error {
+	tcProg, err := bpfModule.GetProgram(BpfEgressProgram)
 	if err != nil {
-		if errno, ok := err.(syscall.Errno); ok && errno != syscall.EEXIST {
-			_, _ = fmt.Fprintf(os.Stderr, "TC hook create: %v.\n", err)
-		}
+		return err
 	}
 
-	tcProg, err := bpfModule.GetProgram(progName)
-	if tcProg == nil {
-		_, _ = fmt.Fprintln(os.Stderr, err)
-		os.Exit(-1)
+	if err := net.AttachEgressTcBpfNetStack(netNsPath, iface, tcProg.FileDescriptor(), "./"+BpfObjectFileName, BpfEgressSection, net.TcShaping(shaping)); err != nil {
+
+		return err
 	}
 
-	var tcOpts bpf.TcOpts
-	tcOpts.ProgFd = int(tcProg.GetFd())
-	err = hook.Attach(&tcOpts)
+	return nil
+}
+
+func attachTcBpfIngressStack(bpfModule *bpf.Module, iface, netNsPath string) error {
+	tcProg, err := bpfModule.GetProgram(BpfIngressProgram)
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err)
-		os.Exit(-1)
+		return err
 	}
-	return err
+
+	if err := net.AttachIngressTcBpfNetStack(netNsPath, iface, tcProg.FileDescriptor(), BpfObjectFileName, BpfIngressSection); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func attachTcCgroupEgressStack(iface string, cgroupNetCls cgroup1.Cgroup, shaping ShapingInfo, netNsPath string, pids ...uint32) error {
+	if err := net.AttachEgressTcCgroupNetStack(netNsPath, cgroupNetCls, iface, net.TcShaping(shaping), pids...); err != nil {
+		return err
+	}
+	return nil
 }
 
 func must(err error, format string, args ...interface{}) {
@@ -798,30 +718,6 @@ func fatal(format string, args ...interface{}) {
 	panic(err)
 }
 
-//
-//func insertNth(s string, n int) string {
-//	var buffer bytes.Buffer
-//	var n_1 = n - 1
-//	var l_1 = len(s) - 1
-//	for i, rune := range s {
-//		buffer.WriteRune(rune)
-//		if i%n == n_1 && i != l_1 {
-//			buffer.WriteRune(' ')
-//		}
-//	}
-//	return buffer.String()
-//}
-//
-//func containsStr(s []string, str string) bool {
-//	for _, v := range s {
-//		if strings.Contains(str, v) { //e.g. DNS returns str="abc.example.com" and v=".example.com"
-//			return true
-//		}
-//	}
-//
-//	return false
-//}
-
 func containsCN(cns *syncx.SafeSlice[CN], cnS string) (CN, bool) {
 	var current CN
 	for i := 0; i < cns.Len(); i++ {
@@ -835,42 +731,3 @@ func containsCN(cns *syncx.SafeSlice[CN], cnS string) (CN, bool) {
 	fmt.Printf(" ^ not-found\n")
 	return current, false
 }
-
-//func ip2Uint32(ip net.IP) uint32 {
-//	//fmt.Println("ip len=", len(ip))
-//	if len(ip) == 16 {
-//		fatal("no sane way to convert ipv6 into uint32")
-//	}
-//	return binary.LittleEndian.Uint32(ip) //skb buff work on host endian, not network endian
-//}
-
-//func encodeUint32(val uint32) []byte {
-//	b := make([]byte, 4)
-//	binary.LittleEndian.PutUint32(b, val)
-//	return b
-//}
-
-//func bytes2ip(bb []byte) net.IP {
-//	ip := make(net.IP, 4)
-//	binary.LittleEndian.PutUint32(ip, binary.LittleEndian.Uint32(bb[0:4]))
-//	return ip
-//}
-
-//func bytes2ipv6(bb []byte) net.IP {
-//	ip := make(net.IP, 16)
-//	copy(ip, bb[0:16])
-//	//binary.LittleEndian.PutUint32(ip, binary.LittleEndian.Uint32(bb[0:16]))
-//	return ip
-//}
-//
-//func determineHostByteOrder() binary.ByteOrder {
-//	var i int32 = 0x01020304
-//	u := unsafe.Pointer(&i)
-//	pb := (*byte)(u)
-//	b := *pb
-//	if b == 0x04 {
-//		return binary.LittleEndian
-//	}
-//
-//	return binary.BigEndian
-//}

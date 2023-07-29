@@ -15,7 +15,7 @@ type ClusterEgg struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// +kubebuilder:validation:XValidation:rule="(self.programType == 'tc' && has(self.egress.interfaceName)) || (self.programType == 'cgroup' && !has(self.egress.interfaceName))",message="Egress interfaceName is needed if attachType is 'tc'"
-	// +kubebuilder:validation:XValidation:rule="(self.programType == 'tc' && has(self.ingress.interfaceName)) || (self.programType =='cgroup' && !has(self.ingress.interfaceName))",message="Ingress interfaceName is needed only if attachType is 'tc'"
+	// +kubebuilder:validation:XValidation:rule="(self.programType == 'tc' && has(self.ingress.interfaceName)) || (self.programType =='cgroup' && !has(self.ingress.interfaceName))",message="Ingress interfaceName is needed if attachType is 'tc'"
 	Spec   ClusterEggSpec   `json:"spec,omitempty"`
 	Status ClusterEggStatus `json:"status,omitempty"`
 }
@@ -61,6 +61,18 @@ type EgressSpec struct {
 
 	CIDRs []string `json:"cidrs,omitempty"`
 
-	// +optionalm
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="shaping is immutable in this version"
+	Shaping ShapingSpec `json:"shaping,omitempty"`
+
+	// +optional
 	PodSelector *metav1.LabelSelector `json:"podSelector,omitempty"`
+}
+
+type ShapingSpec struct {
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^\d+[k|m]bit$`
+	Rate string `json:"rate,omitempty"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^\d+[k|m]bit$`
+	Ceil string `json:"ceil,omitempty"`
 }
