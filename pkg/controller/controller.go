@@ -59,8 +59,9 @@ type Controller struct {
 
 	recorder record.EventRecorder
 
-	podInfoMap syncx.SafeMap[types.NamespacedName, *PodInfo]
-	eggInfoMap syncx.SafeMap[types.NamespacedName, *core.EggInfo] //namespace not used
+	podInfoMap       syncx.SafeMap[types.NamespacedName, *PodInfo]
+	containerInfoMap syncx.SafeMap[ContainerName, *ContainerStatusInfo]
+	eggInfoMap       syncx.SafeMap[types.NamespacedName, *core.EggInfo] //namespace not used
 }
 
 const (

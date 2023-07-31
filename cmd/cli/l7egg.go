@@ -37,7 +37,7 @@ func main() {
 	}
 
 	manager := core.BpfManagerInstance()
-	clientegg, err := core.NewEggInfo(
+	clientegg, err := common.NewEggInfo(
 		v1alpha1.ClusterEggSpec{
 			string(common.ProgramTypeTC),
 			v1alpha1.EgressSpec{
