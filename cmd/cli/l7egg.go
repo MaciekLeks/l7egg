@@ -7,6 +7,7 @@ import (
 	"github.com/MaciekLeks/l7egg/pkg/controller/common"
 	"github.com/MaciekLeks/l7egg/pkg/controller/core"
 	"github.com/MaciekLeks/l7egg/pkg/utils"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"os"
 )
@@ -37,20 +38,28 @@ func main() {
 	}
 
 	manager := core.BpfManagerInstance()
-	clientegg, err := common.NewEggInfo(
-		v1alpha1.ClusterEggSpec{
-			string(common.ProgramTypeTC),
-			v1alpha1.EgressSpec{
-				InterfaceName: *eface,
-				CommonNames:   cnList,
-				CIDRs:         cidrList,
-				Shaping:       v1alpha1.ShapingSpec{},
-				PodSelector:   nil,
+	clientegg, err := core.NewEggInfo(
+		v1alpha1.ClusterEgg{
+			TypeMeta: metav1.TypeMeta{},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "default",
 			},
-			v1alpha1.IngressSpec{*iface},
+			Spec: v1alpha1.ClusterEggSpec{
+				ProgramType: string(common.ProgramTypeTC),
+				Egress: v1alpha1.EgressSpec{
+					InterfaceName: *eface,
+					CommonNames:   cnList,
+					CIDRs:         cidrList,
+					Shaping:       v1alpha1.ShapingSpec{},
+					PodSelector:   nil,
+				},
+				Ingress: v1alpha1.IngressSpec{
+					InterfaceName: *iface,
+				},
+			},
 		})
 
-	var defaultBoxKey core.BoxKey
+	var defaultBoxKey common.BoxKey
 	defaultBoxKey.Egg = types.NamespacedName{Name: "default"}
 	ctx := utils.SetupSignalHandler()
 	manager.BoxStore(ctx, defaultBoxKey, clientegg)
@@ -60,7 +69,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	manager.BoxStart(ctx, defaultBoxKey, "", "")
+	manager.BoxStart(ctx, defaultBoxKey, "", "", 0)
 	manager.Wait()
 
 }

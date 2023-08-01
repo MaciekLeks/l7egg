@@ -1,5 +1,10 @@
 package common
 
+import (
+	"fmt"
+	"k8s.io/apimachinery/pkg/types"
+)
+
 type ProgramType string
 
 const (
@@ -13,4 +18,14 @@ type ProgramInfo struct {
 	ProgramType ProgramType
 	NetNsPath   string
 	CgroupPath  string
+}
+
+type BoxKey struct {
+	Egg         types.NamespacedName
+	Pod         types.NamespacedName
+	ContainerId string
+}
+
+func (bk BoxKey) String() string {
+	return fmt.Sprintf("%s|%s|%s", bk.Egg.String(), bk.Pod.String(), bk.ContainerId)
 }

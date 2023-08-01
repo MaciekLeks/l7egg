@@ -522,21 +522,19 @@ func AttachEgressTcBpfNetStack(netNsPath string, iface string, bpfFd int, bpfFil
 }
 
 // AttachEgressTcCgroupNetStack attaches a tc egress stack to the given interface, htb qdisc, htb class and bpf filter
-func AttachEgressTcCgroupNetStack(netNsPath string, cgroupNetCls cgroup1.Cgroup, iface string, shaping TcShaping, pids ...uint32) error {
+func AttachEgressTcCgroupNetStack(netNsPath string, cgroupNetCls cgroup1.Cgroup, iface string, shaping TcShaping, pid uint32) error {
 	netNs, err := NetNamespace(netNsPath)
 	if err != nil {
 		return err
 	}
 	defer netNs.Close()
 
-	fmt.Println("YYYYYYYYYYYYYY - 0: ", pids)
-	for i := 0; i < len(pids); i++ {
-		fmt.Println("YYYYYYYYYYYYYY - adding pid", pids[i])
-		if err = cgroupNetCls.AddTask(cgroup1.Process{Pid: int(pids[i])}); err != nil {
-			return err
-		}
-		fmt.Println("YYYYYYYYYYYYYY - adding pid", pids[i])
+	fmt.Println("YYYYYYYYYYYYYY - 0: ", pid)
+	if err = cgroupNetCls.AddTask(cgroup1.Process{Pid: int(pid)}); err != nil {
+		return err
 	}
+	fmt.Println("YYYYYYYYYYYYYY - adding pid", pid)
+	//}
 	if err != nil {
 		return err
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	ceggscheme "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned/scheme"
+	"github.com/MaciekLeks/l7egg/pkg/controller/common"
 	"github.com/MaciekLeks/l7egg/pkg/controller/core"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	corev1 "k8s.io/api/core/v1"
@@ -59,8 +60,8 @@ type Controller struct {
 
 	recorder record.EventRecorder
 
-	podInfoMap       syncx.SafeMap[types.NamespacedName, *PodInfo]
-	containerInfoMap syncx.SafeMap[ContainerName, *ContainerStatusInfo]
+	podInfoMap       syncx.SafeMap[types.NamespacedName, *common.PodInfo]
+	containerInfoMap syncx.SafeMap[ContainerName, *common.ContainerInfo]
 	eggInfoMap       syncx.SafeMap[types.NamespacedName, *core.EggInfo] //namespace not used
 }
 
@@ -102,7 +103,7 @@ func NewController(ctx context.Context,
 		recorder: recorder,
 
 		//podInfoMap: PodInfoMap{},
-		podInfoMap: syncx.SafeMap[types.NamespacedName, *PodInfo]{},
+		podInfoMap: syncx.SafeMap[types.NamespacedName, *common.PodInfo]{},
 		eggInfoMap: syncx.SafeMap[types.NamespacedName, *core.EggInfo]{},
 	}
 

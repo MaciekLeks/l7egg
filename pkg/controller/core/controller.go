@@ -1,7 +1,7 @@
 package core
 
 import (
-	"github.com/MaciekLeks/l7egg/pkg/controller"
+	"github.com/MaciekLeks/l7egg/pkg/controller/common"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/workqueue"
 	"time"
@@ -13,7 +13,7 @@ type CoreController struct {
 }
 
 type CoreMsg struct {
-	PodInfo *controller.PodInfo
+	PodInfo *common.PodInfo
 	EggInfo *EggInfo
 }
 
@@ -31,7 +31,7 @@ func NewCoreController() *CoreController {
 	}
 }
 
-func (cc *CoreController) RegisterNewPodInfoEvent(podInfo *controller.PodInfo) {
+func (cc *CoreController) RegisterNewPodInfoEvent(podInfo *common.PodInfo) {
 	cc.podInfoQueue.Add(CoreEvent{
 		MsgType: "newPodInfo",
 		Data: CoreMsg{

@@ -7,7 +7,8 @@ import (
 	"github.com/MaciekLeks/l7egg/pkg/controller/common"
 	"github.com/MaciekLeks/l7egg/pkg/net"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
-	"k8s.io/apimachinery/pkg/types"
+	cgroupsv2 "github.com/containerd/cgroups/v2"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog/v2"
 	"sync"
 )
@@ -36,18 +37,9 @@ type IEggBox interface {
 	Egg() *egg
 }
 
-type BoxKey struct {
-	Egg types.NamespacedName
-	Pod types.NamespacedName
-}
-
-func (bk BoxKey) String() string {
-	return fmt.Sprintf("%s-%s", bk.Egg.String(), bk.Pod.String())
-}
-
 type eggManager struct {
 	//boxes    map[string]EggBox
-	Boxes syncx.SafeMap[BoxKey, *EggBox]
+	Boxes syncx.SafeMap[common.BoxKey, *EggBox]
 	//seqIdGen syncx.ISeqId[uint16] //tbd: moved to syncx.Sequencer
 }
 
@@ -67,14 +59,14 @@ func (box *EggBox) Boxes() *egg {
 func BpfManagerInstance() *eggManager {
 	once.Do(func() {
 		instance = &eggManager{
-			Boxes: syncx.SafeMap[BoxKey, *EggBox]{},
+			Boxes: syncx.SafeMap[common.BoxKey, *EggBox]{},
 			//seqIdGen: syncx.New[uint16](),
 		}
 	})
 	return instance
 }
 
-func (m *eggManager) BoxExists(boxKey BoxKey) bool {
+func (m *eggManager) BoxExists(boxKey common.BoxKey) bool {
 	if _, found := m.getBox(boxKey); found {
 		return true
 	}
@@ -82,11 +74,11 @@ func (m *eggManager) BoxExists(boxKey BoxKey) bool {
 }
 
 // BoxAny returns box that satisfies the f function
-func (m *eggManager) BoxAny(f func(boxKey BoxKey, ibox IEggBox) bool) (*EggBox, bool) {
+func (m *eggManager) BoxAny(f func(boxKey common.BoxKey, ibox IEggBox) bool) (*EggBox, bool) {
 	var foundBox *EggBox
 	var found bool
 	//TODO if during this iteration m.boxes changes we will not know it, see sync map Range doc
-	m.Boxes.Range(func(boxKey BoxKey, box *EggBox) bool {
+	m.Boxes.Range(func(boxKey common.BoxKey, box *EggBox) bool {
 		if ok := f(boxKey, box); ok {
 			return false
 		}
@@ -98,7 +90,7 @@ func (m *eggManager) BoxAny(f func(boxKey BoxKey, ibox IEggBox) bool) (*EggBox, 
 }
 
 // BoxStore stores a box but not run it
-func (m *eggManager) BoxStore(ctx context.Context, boxKey BoxKey, ceggi *EggInfo) error {
+func (m *eggManager) BoxStore(ctx context.Context, boxKey common.BoxKey, ceggi *EggInfo) error {
 	logger := klog.FromContext(ctx)
 	logger.Info("Storing box for boxKey%s'\n", boxKey)
 	egg := newEmptyEgg(ceggi)
@@ -117,7 +109,7 @@ func (m *eggManager) BoxStore(ctx context.Context, boxKey BoxKey, ceggi *EggInfo
 }
 
 // BoxStart box
-func (m *eggManager) BoxStart(ctx context.Context, boxKey BoxKey, netNsPath string, cgroupPath string, pids ...uint32) error {
+func (m *eggManager) BoxStart(ctx context.Context, boxKey common.BoxKey, netNsPath string, cgroupPath string, pid uint32) error {
 
 	box, found := m.getBox(boxKey)
 	if !found {
@@ -130,7 +122,7 @@ func (m *eggManager) BoxStart(ctx context.Context, boxKey BoxKey, netNsPath stri
 	box.waitGroup = &subWaitGroup
 	//box.netNsPath = netNsPath
 	box.programInfo = common.ProgramInfo{
-		box.egg.ProgramType,
+		box.egg.EggInfo.ProgramType,
 		netNsPath,
 		cgroupPath,
 	}
@@ -139,11 +131,11 @@ func (m *eggManager) BoxStart(ctx context.Context, boxKey BoxKey, netNsPath stri
 
 	m.Boxes.Store(boxKey, box)
 
-	return box.egg.run(subCtx, &subWaitGroup, box.programInfo /*netNsPath, cgroupPath*/, pids...)
+	return box.egg.run(subCtx, &subWaitGroup, box.programInfo /*netNsPath, cgroupPath*/, pid)
 }
 
 // Stop Stops one box
-func (m *eggManager) Stop(boxKey BoxKey) error {
+func (m *eggManager) Stop(boxKey common.BoxKey) error {
 	box, found := m.getBox(boxKey)
 	if !found {
 		return fmt.Errorf("box '%s' not found\n", boxKey)
@@ -171,7 +163,7 @@ func (m *eggManager) Wait() {
 	//		box.waitGroup.Wait()
 	//	}()
 	//}
-	m.Boxes.Range(func(boxKey BoxKey, box *EggBox) bool {
+	m.Boxes.Range(func(boxKey common.BoxKey, box *EggBox) bool {
 		stopWaitGroup.Add(1)
 		go func() {
 			defer stopWaitGroup.Done()
@@ -186,11 +178,76 @@ func (m *eggManager) Wait() {
 	stopWaitGroup.Wait()
 }
 
-func (m *eggManager) getBox(boxKey BoxKey) (*EggBox, bool) {
+func (m *eggManager) getBox(boxKey common.BoxKey) (*EggBox, bool) {
 	return m.Boxes.Load(boxKey)
 }
 
-func (m *eggManager) UpdateCIDRs(boxKey BoxKey, newCIDRsS []string) error {
+func getContainerdCgroupPath(pid uint32) (string, error) {
+	return cgroupsv2.PidGroupPath(int(pid))
+}
+
+func (m *eggManager) RunBoxWithContainer(ctx context.Context, boxKey common.BoxKey, containerId string) error {
+	logger := klog.FromContext(ctx)
+
+	pid, err := common.GetContainerPid(ctx, containerId)
+	if err != nil {
+		utilruntime.HandleError(fmt.Errorf("can't get container pid: %v", err))
+		return fmt.Errorf("can't get container pid: %v", err)
+	}
+
+	logger.V(2).Info("runEgg-5")
+
+	box, ok := m.Boxes.Load(boxKey)
+	if !ok {
+		utilruntime.HandleError(fmt.Errorf("Box %s not found", boxKey))
+		return fmt.Errorf("Box %s not found", boxKey)
+	}
+	logger.V(2).Info("runEgg-6")
+
+	var cgroupPath string
+	netNsPath := fmt.Sprintf("/proc/%d/ns/net", pid)
+
+	if box.Egg().EggInfo.ProgramType == common.ProgramTypeCgroup {
+		logger.V(2).Info("runEgg-7-cgroup")
+		cgroupPath, err = getContainerdCgroupPath(pid)
+		if err != nil {
+			return fmt.Errorf("cgroup path error: %v", err)
+		}
+	} else {
+		logger.V(2).Info("runEgg-7-tc")
+	}
+
+	return m.BoxStart(ctx, boxKey, netNsPath, cgroupPath, pid)
+}
+
+func (m *eggManager) RunBoxWithPid(ctx context.Context, boxKey common.BoxKey, pid uint32) error {
+	logger := klog.FromContext(ctx)
+	var err error
+
+	box, ok := m.Boxes.Load(boxKey)
+	if !ok {
+		utilruntime.HandleError(fmt.Errorf("Box %s not found", boxKey))
+		return fmt.Errorf("Box %s not found", boxKey)
+	}
+	logger.V(2).Info("runEgg-6")
+
+	var cgroupPath string
+	netNsPath := fmt.Sprintf("/proc/%d/ns/net", pid)
+
+	if box.Egg().EggInfo.ProgramType == common.ProgramTypeCgroup {
+		logger.V(2).Info("runEgg-7-cgroup")
+		cgroupPath, err = getContainerdCgroupPath(pid)
+		if err != nil {
+			return fmt.Errorf("cgroup path error: %v", err)
+		}
+	} else {
+		logger.V(2).Info("runEgg-7-tc")
+	}
+
+	return m.BoxStart(ctx, boxKey, netNsPath, cgroupPath, pid)
+}
+
+func (m *eggManager) UpdateCIDRs(boxKey common.BoxKey, newCIDRsS []string) error {
 
 	cidrs, err := parseCIDRs(newCIDRsS)
 	if err != nil {
@@ -210,7 +267,7 @@ func (m *eggManager) UpdateCIDRs(boxKey BoxKey, newCIDRsS []string) error {
 	return nil
 }
 
-func (m *eggManager) UpdateCNs(boxKey BoxKey, newCNsS []string) error {
+func (m *eggManager) UpdateCNs(boxKey common.BoxKey, newCNsS []string) error {
 	cns, err := parseCNs(newCNsS)
 	if err != nil {
 		return fmt.Errorf("Parsing input data %#v", err)
@@ -229,7 +286,7 @@ func (m *eggManager) UpdateCNs(boxKey BoxKey, newCNsS []string) error {
 	return nil
 }
 
-func (m *eggManager) UpdateEgg(boxKey BoxKey, newSpec v1alpha1.ClusterEggSpec) error {
+func (m *eggManager) UpdateEgg(boxKey common.BoxKey, newSpec v1alpha1.ClusterEggSpec) error {
 	fmt.Printf("+++++++++++++++ 1")
 	err := m.UpdateCIDRs(boxKey, newSpec.Egress.CIDRs)
 	if err != nil {
@@ -243,5 +300,49 @@ func (m *eggManager) UpdateEgg(boxKey BoxKey, newSpec v1alpha1.ClusterEggSpec) e
 	}
 
 	fmt.Printf("+++++++++++++++ 3")
+	return nil
+}
+
+func (m *eggManager) StoreBoxKeys(ctx context.Context, eggi *EggInfo, pi *common.PodInfo) ([]common.BoxKey, error) {
+	var matchedKeyBoxes []common.BoxKey
+	var err error
+	if eggi.ProgramType == common.ProgramTypeCgroup {
+		matchedKeyBoxes = make([]common.BoxKey, len(pi.Containers))
+		for i := 0; i < len(pi.Containers); i++ {
+			boxKey := common.BoxKey{Pod: pi.NamespaceName(), Egg: eggi.NamespaceName(), ContainerId: pi.Containers[i].ContainerID}
+			err = m.BoxStore(ctx, boxKey, eggi)
+			if err != nil {
+				break
+			}
+			matchedKeyBoxes[i] = boxKey
+		}
+	} else {
+		matchedKeyBoxes = make([]common.BoxKey, 1)
+		boxKey := common.BoxKey{Pod: pi.NamespaceName(), Egg: eggi.NamespaceName(), ContainerId: "*"}
+		err = m.BoxStore(ctx, boxKey, eggi)
+		if err != nil {
+			return matchedKeyBoxes, err
+		}
+		matchedKeyBoxes[0] = boxKey
+	}
+
+	return matchedKeyBoxes, err
+}
+
+func (m *eggManager) RunBoxes(ctx context.Context, eggi *EggInfo, pi *common.PodInfo) (err error) {
+	if eggi.ProgramType == common.ProgramTypeCgroup {
+		for i := 0; i < len(pi.Containers); i++ {
+			err = m.RunBoxWithPid(ctx, pi.MatchedKeyBoxes[i], pi.Containers[i].Pid)
+		}
+		if err != nil {
+			return err
+		}
+	} else {
+		err = m.RunBoxWithPid(ctx, pi.MatchedKeyBoxes[0], pi.Containers[0].Pid) //TODO: could be initial - test it
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }

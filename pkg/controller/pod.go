@@ -3,10 +3,10 @@ package controller
 import (
 	"context"
 	"fmt"
+	"github.com/MaciekLeks/l7egg/pkg/controller/common"
 	"github.com/MaciekLeks/l7egg/pkg/controller/core"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	"github.com/MaciekLeks/l7egg/pkg/utils"
-	cgroupsv2 "github.com/containerd/cgroups/v2"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -147,21 +147,6 @@ func getContainerdIDs(css []corev1.ContainerStatus) ([]string, error) {
 	return cids, err
 }
 
-// extractContainerId extracts containerd id only from fully qualified container id, e.g. containerd://<containerd-id>
-func extractContainerdContainerId(fqcid string) (string, error) {
-	var err error
-	const crn = "containerd://"
-	if !strings.Contains(fqcid, crn) {
-		return fqcid, fmt.Errorf("only containerd supported")
-	}
-	cid := strings.TrimPrefix(fqcid, crn)
-	return cid, err
-}
-
-func getContainerdCgroupPath(pid uint32) (string, error) {
-	return cgroupsv2.PidGroupPath(int(pid))
-}
-
 func (c *Controller) deletePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "namespace", pod.Namespace, "name", pod.Name)
 
@@ -169,8 +154,8 @@ func (c *Controller) deletePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	if pi, ok := c.podInfoMap.Load(key); ok {
 		manager := core.BpfManagerInstance()
 		var err error
-		manager.Boxes.Range(func(key core.BoxKey, value *core.EggBox) bool {
-			if key.Pod.Name == pi.name && key.Pod.Namespace == pi.namespace {
+		manager.Boxes.Range(func(key common.BoxKey, value *core.EggBox) bool {
+			if key.Pod.Name == pi.Name && key.Pod.Namespace == pi.Namespace {
 				logger.Info("Stopping pod info.")
 				// Stop clean up the whole box and deletes the key
 				err = manager.Stop(key)
@@ -200,19 +185,6 @@ func isPodInStatus(pod *corev1.Pod, podCondType corev1.PodConditionType) bool {
 	return false
 }
 
-func mapContainerStateInfo(cs corev1.ContainerState) ContainerStateInfo {
-	if cs.Waiting != nil {
-		return ContainerStateWaiting
-	}
-	if cs.Running != nil {
-		return ContainerStateRunning
-	}
-	if cs.Terminated != nil {
-		return ContainerStateTerminated
-	}
-	return ContainerStateUnknown
-}
-
 func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "namespace", pod.Namespace, "name", pod.Name)
 	logger.Info("Update pod info.")
@@ -235,153 +207,105 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	//	return err
 	//}
 	//fmt.Printf("***************************Trying to add or update: %s\n\n", podJson)
-	var found bool
-	var pi *PodInfo
-	manager := core.BpfManagerInstance()
-	if pi, found = c.podInfoMap.Load(podKey); found && isPodInStatus(pod, corev1.PodReady) {
-		for i := range pi.containerStatuses {
-			fmt.Printf("************** PodInfo container statuses: %+v\n", pi.containerStatuses[i])
-		}
+	if pi, found := c.podInfoMap.Load(podKey); found && isPodInStatus(pod, corev1.PodReady) {
 
-		fmt.Println("***************************Update not add ", podKey.String(), pod.Status.Phase, pod.DeletionTimestamp)
+		fmt.Println("***************************Update not add ", podKey.String(), pod.Status.Phase, pod.DeletionTimestamp, pi)
 
-		boxKey, foundBox := c.findPodBox(pod)
-		var zeroBoxKey core.BoxKey
-		fmt.Printf("pi.matchedBoxKey:%+vboxKey:%+v, foundBox: %t \n", pi.matchedKeyBox, boxKey, foundBox)
-		if !foundBox && pi.matchedKeyBox != zeroBoxKey {
-			//old-matching->cur-not-matching (e.g. someone changed POD label app:test->app:testBlah)
-
-			logger.Info("Stopping box", "box", podKey.String())
-			err := manager.Stop(pi.matchedKeyBox)
-			if err != nil {
-				logger.Error(err, "Can't stop box", "box", podKey.String())
-				//TODO are we sure we want to return here?
-				return err
-			}
-			pi.set(func(v *PodInfo) {
-				v.matchedKeyBox = zeroBoxKey
-			})
-			logger.Info("Box stopped", "box", podKey.String())
-		}
-
-		if !foundBox {
-			if eggKeys := c.checkEggMatch(pod); eggKeys.Len() > 0 {
-				//old-not-matching->cur-matching (e.g. someone changed POD label app:testBlah->app:test)
-				if eggKeys.Len() > 1 {
-					logger.Info("More than one egg matched. Choosing the first one.", "eggs", eggKeys)
-				}
-
-				nodeHostname, err := utils.GetHostname()
-				if err != nil {
-					return err
-				}
-				podNodeHostname, err := utils.CleanHostame(pod.Spec.NodeName)
-				if err != nil {
-					return err
-				}
-				eggKey := eggKeys.Get(0)
-				eggi, ok := c.eggInfoMap.Load(eggKey)
-				if !ok {
-					return fmt.Errorf("egg not found", "egg", eggKey.String())
-				}
-				boxKey := core.BoxKey{Pod: podKey, Egg: eggKey}
-
-				manager.BoxStore(ctx, boxKey, eggi)
-
-				// only different code against code for ADD
-				pi.set(func(v *PodInfo) {
-					v.matchedKeyBox = boxKey
-				})
-				logger.Info("Starting box for the flow pod->egg", "box", podKey.String(), "node", nodeHostname, "pod node", podNodeHostname)
-				if nodeHostname == podNodeHostname {
-					err = pi.runEgg(ctx, boxKey)
-					if err != nil {
-						return err
-					}
-					logger.Info("Box started for the flow pod->egg", "box", podKey.String(), "node", nodeHostname, "pod node", podNodeHostname)
-				} else {
-					fmt.Printf("\n****************{ not running in this node\n")
-				}
-			}
-		} else { //found
-			fmt.Printf("*******************Update found checking the previous status")
-		}
+		//boxKey, foundBox := c.findPodBox(pod)
+		//var zeroBoxKey core.BoxKey
+		//fmt.Printf("*i.matchedBoxKey:%+vboxKey:%+v, foundBox: %t \n", pi.matchedKeyBox, boxKey, foundBox)
+		//if !foundBox && pi.matchedKeyBox != zeroBoxKey {
+		//	//old-matching->cur-not-matching (e.g. someone changed POD label app:test->app:testBlah)
+		//
+		//	logger.Info("Stopping box", "box", podKey.String())
+		//	err := manager.Stop(pi.matchedKeyBox)
+		//	if err != nil {
+		//		logger.Error(err, "Can't stop box", "box", podKey.String())
+		//		//TODO are we sure we want to return here?
+		//		return err
+		//	}
+		//	_ = pi.set(func(v *PodInfo) error {
+		//		v.matchedKeyBoxes  zeroBoxKey
+		//		return nil
+		//	})
+		//	logger.Info("Box stopped", "box", podKey.String())
+		//}
+		//
+		//if !foundBox {
+		//	c.addPodInfo(ctx, pod)
+		//
+		//} else { //found
+		//	fmt.Printf("*******************Update found checking the previous status")
+		//}
 
 		//fmt.Printf("************************Update Done: %+v\n", pi)
 
 	} else if isPodInStatus(pod, corev1.PodReady) { //ADD
-		fmt.Println("***************************Trying to add[0]", pod.Status.Phase, pod.Name, pod.Namespace)
-		if pod.Status.Phase == corev1.PodRunning {
-			fmt.Println("***************************Trying to add[1]", pod.Status.Phase)
-			//containerdIDs, err := getContainerdIDs(pod.Status.ContainerStatuses)
-			//if err != nil {
-			//	return err
-			//}
-			podNodeHostname, err := utils.CleanHostame(pod.Spec.NodeName)
+		return c.addPodInfo(ctx, pod)
+	}
+
+	return nil
+}
+
+func (c *Controller) addPodInfo(ctx context.Context, pod *corev1.Pod) error {
+	logger := klog.LoggerWithValues(klog.FromContext(ctx), "namespace", pod.Namespace, "name", pod.Name)
+	podKey := types.NamespacedName{Namespace: pod.Namespace, Name: pod.Name}
+
+	fmt.Println("***************************Trying to add[0]", pod.Status.Phase, pod.Name, pod.Namespace)
+	if pod.Status.Phase == corev1.PodRunning {
+		fmt.Println("***************************Trying to add[1]", pod.Status.Phase)
+		pi, err := common.NewPodInfo(pod)
+		if err != nil {
+			return err
+		}
+
+		c.podInfoMap.Store(podKey, pi)
+		if eggKeys := c.checkEggMatch(pod); eggKeys.Len() > 0 {
+			if eggKeys.Len() > 1 {
+				logger.Info("More than one egg matched. Choosing the first one", "eggs", eggKeys)
+			}
+
+			nodeHostname, err := utils.GetHostname()
 			if err != nil {
 				return err
 			}
-			containerStatuses, err := extractContainerStatuses(pod)
+
+			eggKey := eggKeys.Get(0)
+			eggi, ok := c.eggInfoMap.Load(eggKey)
+			if !ok {
+				return fmt.Errorf("egg not found", "egg", eggKey.String())
+			}
+
+			manager := core.BpfManagerInstance()
+			matchedKeyBoxes, err := manager.StoreBoxKeys(ctx, eggi, pi)
 			if err != nil {
-				logger.Error(err, "can't extract pod container statuses")
 				return err
 			}
-			pi := PodInfo{
-				name:              pod.Name,
-				namespace:         pod.Namespace,
-				labels:            pod.Labels,
-				nodeName:          podNodeHostname,
-				containerStatuses: containerStatuses,
-				//containerCgroupPaths:
-				matchedKeyBox: core.BoxKey{},
-			}
 
-			c.podInfoMap.Store(podKey, &pi)
-			if eggKeys := c.checkEggMatch(pod); eggKeys.Len() > 0 {
-				if eggKeys.Len() > 1 {
-					logger.Info("More than one egg matched. Choosing the first one", "eggs", eggKeys)
-				}
+			_ = pi.Set(func(v *common.PodInfo) error {
+				v.MatchedKeyBoxes = matchedKeyBoxes
+				return nil
+			})
+			logger.Info("Starting box for the flow pod->egg", "box", podKey.String(), "node", nodeHostname, "pod node", pi.NodeName)
+			if nodeHostname == pi.NodeName {
+				err = manager.RunBoxes(ctx, eggi, pi)
 
-				nodeHostname, err := utils.GetHostname()
 				if err != nil {
 					return err
 				}
+				logger.Info("Box started for the flow pod->egg", "box", podKey.String(), "node", nodeHostname, "pod node", pi.NodeName)
+			} /*else {
 
-				eggKey := eggKeys.Get(0)
-				eggi, ok := c.eggInfoMap.Load(eggKey)
-				if !ok {
-					return fmt.Errorf("egg not found", "egg", eggKey.String())
-				}
-				boxKey := core.BoxKey{Pod: podKey, Egg: eggKey}
-				pi.set(func(v *PodInfo) {
-					v.matchedKeyBox = boxKey
-				})
-				manager.BoxStore(ctx, boxKey, eggi)
-
-				//fmt.Printf("********************Add Done: %+v\n", pi)
-
-				//fmt.Printf("\n*******************{  ..Startin egg - hostname:%s, pod node:%s\n\n", nodeHostname, podNodeHostname)
-				logger.Info("Starting box for the flow pod->egg", "box", podKey.String(), "node", nodeHostname, "pod node", podNodeHostname)
-				if nodeHostname == podNodeHostname {
-					err = pi.runEgg(ctx, boxKey)
-					if err != nil {
-						return err
-					}
-					logger.Info("Box started for the flow pod->egg", "box", podKey.String(), "node", nodeHostname, "pod node", podNodeHostname)
-				} /*else {
-
-					fmt.Printf("\n****************{ not running in this node\n")
-				}
-				fmt.Println("**********************}")*/
-			} else {
-				fmt.Println("**************************** - no egg matched")
+				fmt.Printf("\n****************{ not running in this node\n")
 			}
+			fmt.Println("**********************}")*/
 		} else {
-			logger.V(4).Info("Nor update nor add done")
-			fmt.Println("***************************Trying to add, update ??????????????????????????????", pod.Status.Phase)
+			fmt.Println("**************************** - no egg matched")
 		}
+	} else {
+		logger.V(4).Info("Nor update nor add done")
+		fmt.Println("***************************Trying to add, update ??????????????????????????????", pod.Status.Phase)
 	}
-
 	return nil
 }
 
@@ -391,65 +315,42 @@ func (c *Controller) forgetPod(ctx context.Context, key string) error {
 	return nil
 }
 
-//--
-
-//func (c *Controller) handleObject(obj interface{}) {
-//	pod, ok := obj.(*corev1.Pod)
-//	if !ok {
-//		utilruntime.HandleError(fmt.Errorf("unexpected object type: %v", obj))
-//		return
-//	}
-//
-//	logger := klog.FromContext(context.Background())
-//
-//	logger.Info("POD", "name", pod.Name, "namespace", pod.Namespace)
-//	for i := range pod.Status.ContainerStatuses {
-//		logger.Info("Container", "containerID", pod.Status.ContainerStatuses[i].ContainerID)
-//	}
-//
-//	//Check if egg should be applied
-//	fmt.Println("+++++ before checking ")
-//	keyBox, ok := c.checkEggMatch(pod)
-//	fmt.Println("+++++ after checking ", ok, keyBox)
-//
-//}
-
 // findPodBox searches for first matching between cegg PodSelector and the pod. Returns keyBox name
-func (c *Controller) findPodBox(pod *corev1.Pod) (core.BoxKey, bool) {
-	var found bool
-	var boxKey core.BoxKey
-
-	manager := core.BpfManagerInstance()
-	podLabels := labels.Set(pod.Labels)
-
-	//fmt.Println("****************** +++++ findPodBox podCacheSynced:%t ceggCacheSynced:%t", c.podCacheSynced(), c.podCacheSynced())
-
-	manager.BoxAny(func(key core.BoxKey, box core.IEggBox) bool {
-		eggPodLabels := box.Egg().EggInfo.PodLabels
-		fmt.Println("+++++ eggPodLabels:", eggPodLabels)
-		if len(eggPodLabels) > 0 {
-			selector := labels.Set(eggPodLabels).AsSelectorPreValidated()
-			//fmt.Printf("\n\nSelector: %s; podLabels:%s\n\n", selector, podLabels)
-
-			if selector.Matches(podLabels) {
-				found = true
-				boxKey = key
-				return false //true
-			}
-		}
-		return true //false
-	})
-
-	/*
-		if !found {
-			fmt.Println("+++++ findPodBox found no matching pod to egg ")
-		} else {
-
-			fmt.Println("+++++  findPodBox found matching pod to policy ")
-		}*/
-
-	return boxKey, found
-}
+//func (c *Controller) findPodBoxes(pod *corev1.Pod) ([]core.BoxKey, bool) {
+//	var found bool
+//	var boxKey core.BoxKey
+//
+//	manager := core.BpfManagerInstance()
+//	podLabels := labels.Set(pod.Labels)
+//
+//	//fmt.Println("****************** +++++ findPodBox podCacheSynced:%t ceggCacheSynced:%t", c.podCacheSynced(), c.podCacheSynced())
+//
+//	manager.BoxAny(func(key core.BoxKey, box core.IEggBox) bool {
+//		eggPodLabels := box.Egg().EggInfo.PodLabels
+//		fmt.Println("+++++ eggPodLabels:", eggPodLabels)
+//		if len(eggPodLabels) > 0 {
+//			selector := labels.Set(eggPodLabels).AsSelectorPreValidated()
+//			//fmt.Printf("\n\nSelector: %s; podLabels:%s\n\n", selector, podLabels)
+//
+//			if selector.Matches(podLabels) {
+//				found = true
+//				boxKey = key
+//				return false //true
+//			}
+//		}
+//		return true //false
+//	})
+//
+//	/*
+//		if !found {
+//			fmt.Println("+++++ findPodBox found no matching pod to egg ")
+//		} else {
+//
+//			fmt.Println("+++++  findPodBox found matching pod to policy ")
+//		}*/
+//
+//	return boxKey, found
+//}
 
 // checkPodMatch searches for all matchings between cegg PodSelector and pods. Returns TODO ???
 func (c *Controller) checkEggMatch(pod *corev1.Pod) *syncx.SafeSlice[types.NamespacedName] {

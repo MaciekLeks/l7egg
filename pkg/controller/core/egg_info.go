@@ -6,6 +6,7 @@ import (
 	"github.com/MaciekLeks/l7egg/pkg/controller/common"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"net"
 	"regexp"
 	"strconv"
@@ -39,6 +40,7 @@ type ShapingInfo struct {
 
 type EggInfo struct {
 	sync.RWMutex
+	Name             string
 	ProgramType      common.ProgramType
 	CNs              *syncx.SafeSlice[CN]
 	CIDRs            *syncx.SafeSlice[CIDR]
@@ -53,6 +55,10 @@ func (eggi *EggInfo) Set(fn func(v *EggInfo) error) error {
 	eggi.Lock()
 	defer eggi.Unlock()
 	return fn(eggi)
+}
+
+func (eggi *EggInfo) NamespaceName() types.NamespacedName {
+	return types.NamespacedName{Namespace: "", Name: eggi.Name}
 }
 
 // parseValueUnit parses input string and returns value and unit.
@@ -119,14 +125,14 @@ func parseShapingInfo(shaping v1alpha1.ShapingSpec) (shapingInfo ShapingInfo, er
 	return
 }
 
-func NewEggInfo(ceggSpec v1alpha1.ClusterEggSpec) (*EggInfo, error) {
-	cidrs, err := parseCIDRs(ceggSpec.Egress.CIDRs)
+func NewEggInfo(cegg v1alpha1.ClusterEgg) (*EggInfo, error) {
+	cidrs, err := parseCIDRs(cegg.Spec.Egress.CIDRs)
 	if err != nil {
 		fmt.Errorf("Parsing input data %#v", err)
 		return nil, err
 	}
 
-	cns, err := parseCNs(ceggSpec.Egress.CommonNames)
+	cns, err := parseCNs(cegg.Spec.Egress.CommonNames)
 	if err != nil {
 		fmt.Errorf("Parsing input data %#v", err)
 		return nil, err
@@ -137,30 +143,31 @@ func NewEggInfo(ceggSpec v1alpha1.ClusterEggSpec) (*EggInfo, error) {
 	safeCIDRs := syncx.SafeSlice[CIDR]{}
 	safeCIDRs.Append(cidrs...)
 
-	fmt.Printf("((((((((((((((((((((((((((((((((((((((((((((((", ceggSpec.Egress.Shaping)
-	shapingInfo, err := parseShapingInfo(ceggSpec.Egress.Shaping)
+	fmt.Printf("((((((((((((((((((((((((((((((((((((((((((((((", cegg.Spec.Egress.Shaping)
+	shapingInfo, err := parseShapingInfo(cegg.Spec.Egress.Shaping)
 	if err != nil {
 		return nil, err
 	}
 	fmt.Printf("))))))))))))))))))))))))))))))))))))))))))))))), ", shapingInfo)
 
 	var podLabels map[string]string
-	if ceggSpec.Egress.PodSelector.Size() != 0 {
-		podLabels, err = metav1.LabelSelectorAsMap(ceggSpec.Egress.PodSelector)
+	if cegg.Spec.Egress.PodSelector.Size() != 0 {
+		podLabels, err = metav1.LabelSelectorAsMap(cegg.Spec.Egress.PodSelector)
 		if err != nil {
-			return nil, fmt.Errorf("bad label selector for cegg [%+v]: %w", ceggSpec, err)
+			return nil, fmt.Errorf("bad label selector for cegg [%+v]: %w", cegg.Spec, err)
 		}
 	}
 
-	iiface := ceggSpec.Ingress.InterfaceName
-	eiface := ceggSpec.Egress.InterfaceName
+	iiface := cegg.Spec.Ingress.InterfaceName
+	eiface := cegg.Spec.Egress.InterfaceName
 	if len(podLabels) != 0 {
 		iiface = "eth0"
 		eiface = "eth0"
 	}
 
 	var cggi = &EggInfo{ //TODO make a function to wrap this up (parsing, building the object)
-		ProgramType:      common.ProgramType(ceggSpec.ProgramType),
+		Name:             cegg.Name,
+		ProgramType:      common.ProgramType(cegg.Spec.ProgramType),
 		IngressInterface: iiface,
 		EgressInterface:  eiface,
 		CNs:              &safeCNs,

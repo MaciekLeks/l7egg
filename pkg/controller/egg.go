@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
+	"github.com/MaciekLeks/l7egg/pkg/controller/common"
 	"github.com/MaciekLeks/l7egg/pkg/controller/core"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	"github.com/MaciekLeks/l7egg/pkg/utils"
@@ -160,7 +161,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 				eggi.PodLabels = curPodLabels //PodSelector's changed
 
 				// egg spec for PodSelector changed
-				manager.Boxes.Range(func(key core.BoxKey, value *core.EggBox) bool {
+				manager.Boxes.Range(func(key common.BoxKey, value *core.EggBox) bool {
 					// Find all boxes using the same egg specified by the cegg
 
 					if key.Egg.Name == cegg.Name && key.Egg.Namespace == cegg.Namespace {
@@ -185,28 +186,37 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 				})
 
 				// a new pods may match right now:)
-				var boxKey core.BoxKey
-				boxKey.Egg = eggNamespaceName
+
 				if podKeys := c.checkPodMatch(cegg); podKeys.Len() > 0 {
 					for i := 0; i < podKeys.Len(); i++ {
+						//TODO: {refactor to one method
 						pi, ok := c.podInfoMap.Load(podKeys.Get(i))
 						if ok {
-							boxKey.Pod = pi.NamespaceName()
-							err = manager.BoxStore(ctx, boxKey, eggi)
-							if err != nil {
-								return fmt.Errorf("storing box '%s' failed: %s", cegg.Name, err.Error())
-							}
-
-							logger.Info("Starting egg for the flow egg->pod", "box", boxKey)
-							pi.set(func(v *PodInfo) {
-								v.matchedKeyBox = boxKey
-							})
-							err = pi.runEgg(ctx, boxKey)
+							nodeHostname, err := utils.GetHostname()
 							if err != nil {
 								return err
 							}
-							logger.Info("Box started for the flow egg->pod", "box", boxKey)
+
+							if nodeHostname == pi.NodeName {
+								matchedKeyBoxes, err := manager.StoreBoxKeys(ctx, eggi, pi)
+								if err != nil {
+									return err
+								}
+
+								_ = pi.Set(func(v *common.PodInfo) error {
+									v.MatchedKeyBoxes = matchedKeyBoxes
+									return nil
+								})
+
+								logger.Info("Starting box for the flow egg->pod", "box", matchedKeyBoxes)
+								err = manager.RunBoxes(ctx, eggi, pi)
+								if err != nil {
+									return err
+								}
+								logger.Info("Box started for the flow egg->pod", "box", matchedKeyBoxes)
+							}
 						}
+						//}
 					}
 				}
 			}
@@ -217,7 +227,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 
 			// update CNs, CIDRs,...for remaining boxes
 			logger.Info("Updating egg for CNs, CIDRs....")
-			manager.Boxes.Range(func(key core.BoxKey, value *core.EggBox) bool {
+			manager.Boxes.Range(func(key common.BoxKey, value *core.EggBox) bool {
 				// Find all boxes using the same egg specified by the cegg
 				if key.Egg.Name == cegg.Name && key.Egg.Namespace == cegg.Namespace {
 					err = manager.UpdateEgg(key, cegg.Spec)
@@ -235,7 +245,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 		//new egg
 		logger.Info("Adding egg")
 
-		eggi, err := core.NewEggInfo(cegg.Spec)
+		eggi, err := core.NewEggInfo(cegg)
 		if err != nil {
 			return fmt.Errorf("creating egginfo '%s' object failed: %s", cegg.Name, err.Error())
 		}
@@ -245,7 +255,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 			fmt.Printf("\ntbd -add- eggi p:%p\n", eggi)
 			c.eggInfoMap.Store(eggNamespaceName, eggi)
 			// BoxStart cluster scope egg only if podLabels is empty
-			var boxKey core.BoxKey
+			var boxKey common.BoxKey
 			boxKey.Egg = eggNamespaceName
 			if len(eggi.PodLabels) == 0 {
 				// cluster scope cegg
@@ -254,13 +264,14 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 					return fmt.Errorf("storing box '%s' failed: %s", cegg.Name, err.Error())
 				}
 				logger.Info("Staring box with cegg.", "box", boxKey)
-				err = manager.BoxStart(ctx, boxKey, "", "")
+				err = manager.BoxStart(ctx, boxKey, "", "", 0)
 				if err != nil {
 					return fmt.Errorf("starting clusteregg '%s': %s", cegg.Name, err.Error())
 				}
 			} else {
 				if podKeys := c.checkPodMatch(cegg); podKeys.Len() > 0 {
 					for i := 0; i < podKeys.Len(); i++ {
+						//TODO: {refactor to one method
 						pi, ok := c.podInfoMap.Load(podKeys.Get(i))
 						if ok {
 							nodeHostname, err := utils.GetHostname()
@@ -268,24 +279,26 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 								return err
 							}
 
-							if nodeHostname == pi.nodeName {
-								boxKey.Pod = pi.NamespaceName()
-								err = manager.BoxStore(ctx, boxKey, eggi)
+							if nodeHostname == pi.NodeName {
+								matchedKeyBoxes, err := manager.StoreBoxKeys(ctx, eggi, pi)
 								if err != nil {
-									return fmt.Errorf("storing box '%s' failed: %s", cegg.Name, err.Error())
+									return err
 								}
 
-								logger.Info("Starting box for the flow egg->pod", "box", boxKey)
-								pi.set(func(v *PodInfo) {
-									v.matchedKeyBox = boxKey
+								_ = pi.Set(func(v *common.PodInfo) error {
+									v.MatchedKeyBoxes = matchedKeyBoxes
+									return nil
 								})
-								err = pi.runEgg(ctx, boxKey)
+
+								logger.Info("Starting box for the flow egg->pod", "box", boxKey)
+								err = manager.RunBoxes(ctx, eggi, pi)
 								if err != nil {
 									return err
 								}
 								logger.Info("Box started for the flow egg->pod", "box", boxKey)
 							}
 						}
+						//
 					}
 				}
 			}
@@ -303,7 +316,7 @@ func (c *Controller) deleteEgg(ctx context.Context, eggNamespaceName types.Names
 	manager := core.BpfManagerInstance()
 	logger.Info("Deleting egg's boxes")
 	var err error
-	manager.Boxes.Range(func(key core.BoxKey, value *core.EggBox) bool {
+	manager.Boxes.Range(func(key common.BoxKey, value *core.EggBox) bool {
 		if key.Egg == eggNamespaceName {
 			logger.Info("Stopping box", "box", key)
 			err = manager.Stop(key)
@@ -347,9 +360,9 @@ func (c *Controller) checkPodMatch(cegg v1alpha1.ClusterEgg) *syncx.SafeSlice[ty
 
 	//fmt.Println("****************** +++++ checkPodMach podCacheSynced:%t ceggCacheSynced:%t", c.podCacheSynced(), c.podCacheSynced())
 
-	c.podInfoMap.Range(func(key types.NamespacedName, pi *PodInfo) bool {
+	c.podInfoMap.Range(func(key types.NamespacedName, pi *common.PodInfo) bool {
 		selector := matchLabels.AsSelectorPreValidated()
-		if selector.Matches(labels.Set(pi.labels)) {
+		if selector.Matches(labels.Set(pi.Labels)) {
 			podKeys.Append(key)
 			//fmt.Println("****************** +++++ checkPodMach key:%v added", key)
 			return true
@@ -369,7 +382,7 @@ func (c *Controller) checkPodMatch(cegg v1alpha1.ClusterEgg) *syncx.SafeSlice[ty
 }
 
 // checkSinglePodMatch matches pod info with cegg PdoSelector and returns true if matches
-func (c *Controller) checkSinglePodMatch(pi PodInfo, cegg v1alpha1.ClusterEgg) bool {
+func (c *Controller) checkSinglePodMatch(pi common.PodInfo, cegg v1alpha1.ClusterEgg) bool {
 	var matchLabels labels.Set
 	var err error
 
@@ -382,7 +395,7 @@ func (c *Controller) checkSinglePodMatch(pi PodInfo, cegg v1alpha1.ClusterEgg) b
 	}
 
 	selector := matchLabels.AsSelectorPreValidated()
-	if selector.Matches(labels.Set(pi.labels)) {
+	if selector.Matches(labels.Set(pi.Labels)) {
 		return true
 	}
 
