@@ -22,13 +22,13 @@ type CIDR struct {
 	cidr   string
 	id     uint16 //test
 	lpmKey ILPMKey
-	status assetStatus
+	status common.AssetStatus
 }
 
 type CN struct {
 	cn     string
 	id     uint16 //test
-	status assetStatus
+	status common.AssetStatus
 }
 
 type ShapingInfo struct {
@@ -190,9 +190,9 @@ func parseCIDR(cidrS string) (CIDR, error) {
 
 	prefix, _ := ipNet.Mask.Size()
 	if ipv4 := ip.To4(); ipv4 != nil {
-		return CIDR{cidrS, syncx.Sequencer().Next(), ipv4LPMKey{uint32(prefix), [4]uint8(ipv4)}, assetNew}, nil
+		return CIDR{cidrS, syncx.Sequencer().Next(), ipv4LPMKey{uint32(prefix), [4]uint8(ipv4)}, common.AssetNew}, nil
 	} else if ipv6 := ip.To16(); ipv6 != nil {
-		return CIDR{cidrS, syncx.Sequencer().Next(), ipv6LPMKey{uint32(prefix), [16]uint8(ipv6)}, assetNew}, nil
+		return CIDR{cidrS, syncx.Sequencer().Next(), ipv6LPMKey{uint32(prefix), [16]uint8(ipv6)}, common.AssetNew}, nil
 	}
 
 	return CIDR{}, fmt.Errorf("can't converts CIDR to IPv4/IPv6 %s", cidrS)
@@ -218,7 +218,7 @@ func parseCN(cnS string) (CN, error) {
 	//we are sync - due to we do not have to update kernel side
 	//we can use simple Id generator
 
-	return CN{cnS, syncx.Sequencer().Next(), assetNew}, nil
+	return CN{cnS, syncx.Sequencer().Next(), common.AssetNew}, nil
 }
 
 func parseCNs(cnsS []string) ([]CN, error) {

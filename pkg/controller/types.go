@@ -1,12 +1,12 @@
 package controller
 
-import "k8s.io/apimachinery/pkg/types"
-
-type ctxAssetType string
-type ctxAssetValue int8
+import (
+	"github.com/MaciekLeks/l7egg/pkg/controller/common"
+	"k8s.io/apimachinery/pkg/types"
+)
 
 const (
-	ctxCeggValue ctxAssetValue = iota + 1
+	ctxCeggValue common.CtxAssetValue = iota + 1
 	ctxPodValue
 )
 

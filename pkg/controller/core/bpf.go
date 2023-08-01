@@ -164,7 +164,7 @@ func (egg *egg) initCIDRs() {
 			ttl:     0,
 			counter: 0,
 			//id:      cidr.id, //test
-			status: uint8(assetSynced),
+			status: uint8(common.AssetSynced),
 		}
 
 		var err error
@@ -176,7 +176,7 @@ func (egg *egg) initCIDRs() {
 		}
 		must(err, "Can't update ACL.")
 		egg.EggInfo.CIDRs.Update(i, func(current *CIDR) {
-			current.status = assetSynced
+			current.status = common.AssetSynced
 		})
 	}
 }
@@ -186,7 +186,7 @@ func (egg *egg) initCNs() {
 	for i := 0; i < egg.EggInfo.CNs.Len(); i++ {
 		egg.EggInfo.CNs.Update(i, func(current *CN) {
 			//to have simmilar approach only with CIDRs
-			current.status = assetSynced
+			current.status = common.AssetSynced
 		})
 	}
 }
@@ -195,16 +195,16 @@ func (egg *egg) updateCIDRs(cidrs []CIDR) error {
 
 	for i := 0; i < egg.EggInfo.CIDRs.Len(); i++ {
 		egg.EggInfo.CIDRs.Update(i, func(current *CIDR) {
-			current.status = assetStale
+			current.status = common.AssetStale
 		})
 
 		current := egg.EggInfo.CIDRs.Get(i)
 		for _, newone := range cidrs {
 			if current.cidr == newone.cidr {
 				egg.EggInfo.CIDRs.Update(i, func(current *CIDR) {
-					current.status = assetSynced
+					current.status = common.AssetSynced
 				})
-				newone.status = assetSynced
+				newone.status = common.AssetSynced
 			}
 		}
 	}
@@ -228,8 +228,8 @@ func (egg *egg) updateCIDRs(cidrs []CIDR) error {
 				ipv4Key, ok := cidr.lpmKey.(ipv4LPMKey)
 				if ok {
 					if key.prefixLen == ipv4Key.prefixLen && key.data == ipv4Key.data {
-						if cidr.status == assetStale {
-							val.status = uint8(assetStale)
+						if cidr.status == common.AssetStale {
+							val.status = uint8(common.AssetStale)
 							err := updateACLValueNew(egg.ipv4ACL, key, val)
 							if err != nil {
 								return fmt.Errorf("Updating value status", egg)
@@ -259,9 +259,9 @@ func (egg *egg) updateCIDRs(cidrs []CIDR) error {
 				ipv6Key, ok := cidr.lpmKey.(ipv6LPMKey)
 				if ok {
 					if key.prefixLen == ipv6Key.prefixLen && key.data == ipv6Key.data {
-						if cidr.status == assetStale {
+						if cidr.status == common.AssetStale {
 
-							val.status = uint8(assetStale)
+							val.status = uint8(common.AssetStale)
 							err := updateACLValueNew(egg.ipv6ACL, key, val)
 							if err != nil {
 								return fmt.Errorf("Updating value status", egg)
@@ -275,25 +275,25 @@ func (egg *egg) updateCIDRs(cidrs []CIDR) error {
 
 	//add
 	for _, cidr := range cidrs {
-		if cidr.status == assetNew {
+		if cidr.status == common.AssetNew {
 			val := ipLPMVal{
 				ttl:     0,
 				counter: 0,
-				status:  uint8(assetSynced),
+				status:  uint8(common.AssetSynced),
 			}
 
 			err := updateACLValueNew(egg.ipv4ACL, cidr.lpmKey, val)
 			if err != nil {
 				return fmt.Errorf("Can't update ACL %#v", err)
 			}
-			cidr.status = assetSynced
+			cidr.status = common.AssetSynced
 			egg.EggInfo.CIDRs.Append(cidr)
 		}
 	}
 
 	for i := 0; i < egg.EggInfo.CIDRs.Len(); i++ {
 		cidr := egg.EggInfo.CIDRs.Get(i)
-		if cidr.status != assetSynced {
+		if cidr.status != common.AssetSynced {
 			fmt.Printf("Stale keys %#v\n", cidr)
 
 		}
@@ -305,7 +305,7 @@ func (egg *egg) updateCIDRs(cidrs []CIDR) error {
 func (egg *egg) updateCNs(cns []CN) error {
 	for i := 0; i < egg.EggInfo.CNs.Len(); i++ {
 		egg.EggInfo.CNs.Update(i, func(current *CN) {
-			current.status = assetStale
+			current.status = common.AssetStale
 		})
 
 		current := egg.EggInfo.CNs.Get(i)
@@ -313,9 +313,9 @@ func (egg *egg) updateCNs(cns []CN) error {
 			if current.cn == newone.cn {
 				egg.EggInfo.CNs.Update(i, func(current *CN) {
 					fmt.Println("%%%>>> egg.CNs.UpdateEgg")
-					current.status = assetSynced
+					current.status = common.AssetSynced
 				})
-				newone.status = assetSynced
+				newone.status = common.AssetSynced
 			}
 		}
 	}
@@ -337,9 +337,9 @@ func (egg *egg) updateCNs(cns []CN) error {
 			for i := 0; i < egg.EggInfo.CNs.Len(); i++ {
 				current := egg.EggInfo.CNs.Get(i)
 				if val.id == current.id {
-					if current.status == assetStale {
+					if current.status == common.AssetStale {
 						fmt.Println("%%%>>> current.Status is Stale")
-						val.status = uint8(assetStale)
+						val.status = uint8(common.AssetStale)
 						err := updateACLValueNew(egg.ipv4ACL, key, val) //invalidate all IPs for stale CNs
 						if err != nil {
 							return fmt.Errorf("Updating value status", egg)
@@ -355,9 +355,9 @@ func (egg *egg) updateCNs(cns []CN) error {
 			for i := 0; i < egg.EggInfo.CNs.Len(); i++ {
 				current := egg.EggInfo.CNs.Get(i)
 				if val.id == current.id {
-					if current.status == assetStale {
+					if current.status == common.AssetStale {
 						fmt.Println("%%%>>> current.Status is Stale")
-						val.status = uint8(assetStale)
+						val.status = uint8(common.AssetStale)
 						err := updateACLValueNew(egg.ipv4ACL, key, val) //invalidate all IPs for stale CNs
 						if err != nil {
 							return fmt.Errorf("Updating value status", egg)
@@ -370,15 +370,15 @@ func (egg *egg) updateCNs(cns []CN) error {
 	//add
 	for _, cn := range cns {
 		fmt.Println("%%%>>> adding new cn %v", cn)
-		if cn.status == assetNew {
-			cn.status = assetSynced
+		if cn.status == common.AssetNew {
+			cn.status = common.AssetSynced
 			egg.EggInfo.CNs.Append(cn)
 		}
 	}
 
 	for i := 0; i < egg.EggInfo.CNs.Len(); i++ {
 		current := egg.EggInfo.CNs.Get(i)
-		if current.status != assetSynced {
+		if current.status != common.AssetSynced {
 			fmt.Printf("CN: Stale key %#v\n", current)
 		}
 	}
@@ -478,7 +478,7 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, netNs
 									ttl:     bootTtlNs,
 									counter: 0, //zero existsing elements :/ //TODO why 0?
 									id:      cn.id,
-									status:  uint8(assetSynced),
+									status:  uint8(common.AssetSynced),
 								}
 								var err error
 								if a.Type == layers.DNSTypeA {
@@ -723,7 +723,7 @@ func containsCN(cns *syncx.SafeSlice[CN], cnS string) (CN, bool) {
 	for i := 0; i < cns.Len(); i++ {
 		current = cns.Get(i)
 		fmt.Printf("))) current=%#v cnS=%s\n", current, cnS)
-		if current.status == assetSynced && strings.Contains(cnS, current.cn) { //e.g. DNS returns cnS="abc.example.com" and current.cn=".example.com"
+		if current.status == common.AssetSynced && strings.Contains(cnS, current.cn) { //e.g. DNS returns cnS="abc.example.com" and current.cn=".example.com"
 			fmt.Printf(" ^ found\n")
 			return current, true
 		}

@@ -210,40 +210,111 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	if pi, found := c.podInfoMap.Load(podKey); found && isPodInStatus(pod, corev1.PodReady) {
 
 		fmt.Println("***************************Update not add ", podKey.String(), pod.Status.Phase, pod.DeletionTimestamp, pi)
+		cpi, err := common.NewPodInfo(pod)
 
-		//boxKey, foundBox := c.findPodBox(pod)
-		//var zeroBoxKey core.BoxKey
-		//fmt.Printf("*i.matchedBoxKey:%+vboxKey:%+v, foundBox: %t \n", pi.matchedKeyBox, boxKey, foundBox)
-		//if !foundBox && pi.matchedKeyBox != zeroBoxKey {
-		//	//old-matching->cur-not-matching (e.g. someone changed POD label app:test->app:testBlah)
-		//
-		//	logger.Info("Stopping box", "box", podKey.String())
-		//	err := manager.Stop(pi.matchedKeyBox)
-		//	if err != nil {
-		//		logger.Error(err, "Can't stop box", "box", podKey.String())
-		//		//TODO are we sure we want to return here?
-		//		return err
-		//	}
-		//	_ = pi.set(func(v *PodInfo) error {
-		//		v.matchedKeyBoxes  zeroBoxKey
-		//		return nil
-		//	})
-		//	logger.Info("Box stopped", "box", podKey.String())
-		//}
-		//
-		//if !foundBox {
-		//	c.addPodInfo(ctx, pod)
-		//
-		//} else { //found
-		//	fmt.Printf("*******************Update found checking the previous status")
-		//}
+		if err != nil {
+			return err
+		}
 
-		//fmt.Printf("************************Update Done: %+v\n", pi)
+		wasMatched := pi.MatchedKeyBoxes != nil
+
+		//stil matches
+		var stillMatchedTheSame, isMatched bool
+		var eggi *core.EggInfo
+		if eggKeys := c.checkEggMatch(pod); eggKeys.Len() > 0 {
+			if eggKeys.Len() > 1 {
+				logger.Info("More than one egg matched. Choosing the first one", "eggs", eggKeys)
+			}
+			eggKey := eggKeys.Get(0)
+			var ok bool
+			eggi, ok = c.eggInfoMap.Load(eggKey)
+			if !ok {
+				return fmt.Errorf("egg not found", "egg", eggKey.String())
+			}
+
+			isMatched = true
+			// all MatchedKeyBoxes must have the same Egg
+			if eggi.NamespaceName() == pi.MatchedKeyBoxes[0].Egg {
+				stillMatchedTheSame = true
+			}
+		}
+
+		if wasMatched && !stillMatchedTheSame {
+			// Stop old boxes
+			for i := range pi.MatchedKeyBoxes {
+				err = core.BpfManagerInstance().Stop(pi.MatchedKeyBoxes[i])
+				if err != nil {
+					return err
+				}
+			}
+			pi.MatchedKeyBoxes = nil
+		}
+
+		if isMatched && !stillMatchedTheSame {
+			// Run new boxes
+			err2 := StoreAndRunBoxes(ctx, eggi, pi)
+			if err2 != nil {
+				return err2
+			}
+		}
+
+		if isMatched && stillMatchedTheSame {
+			// Check: Check containers changes
+			changes := pi.Containers.GetChangedContainers(cpi.Containers)
+			if len(changes) > 0 {
+				_ = pi.Set(func(v *common.PodInfo) error {
+					v.Containers = cpi.Containers
+					return nil
+				})
+				err2 := StoreAndRunBoxes(ctx, eggi, pi)
+				if err2 != nil {
+					return err2
+				}
+
+			}
+		}
 
 	} else if isPodInStatus(pod, corev1.PodReady) { //ADD
 		return c.addPodInfo(ctx, pod)
 	}
 
+	return nil
+}
+
+func StoreAndRunBoxes(ctx context.Context, eggi *core.EggInfo, pi *common.PodInfo) error {
+	manager := core.BpfManagerInstance()
+	matchedKeyBoxes, err := manager.StoreBoxKeys(ctx, eggi, pi)
+	if err != nil {
+		return err
+	}
+	_ = pi.Set(func(v *common.PodInfo) error {
+		v.MatchedKeyBoxes = matchedKeyBoxes
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	err = RunBoxesOnHost(ctx, eggi, pi)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func RunBoxesOnHost(ctx context.Context, eggi *core.EggInfo, pi *common.PodInfo) error {
+	nodeHostname, err := utils.GetHostname()
+	if err != nil {
+		return err
+	}
+
+	if nodeHostname == pi.NodeName {
+		err = core.BpfManagerInstance().RunBoxes(ctx, eggi, pi)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -265,40 +336,17 @@ func (c *Controller) addPodInfo(ctx context.Context, pod *corev1.Pod) error {
 				logger.Info("More than one egg matched. Choosing the first one", "eggs", eggKeys)
 			}
 
-			nodeHostname, err := utils.GetHostname()
-			if err != nil {
-				return err
-			}
-
 			eggKey := eggKeys.Get(0)
 			eggi, ok := c.eggInfoMap.Load(eggKey)
 			if !ok {
 				return fmt.Errorf("egg not found", "egg", eggKey.String())
 			}
 
-			manager := core.BpfManagerInstance()
-			matchedKeyBoxes, err := manager.StoreBoxKeys(ctx, eggi, pi)
+			err = StoreAndRunBoxes(ctx, eggi, pi)
 			if err != nil {
 				return err
 			}
 
-			_ = pi.Set(func(v *common.PodInfo) error {
-				v.MatchedKeyBoxes = matchedKeyBoxes
-				return nil
-			})
-			logger.Info("Starting box for the flow pod->egg", "box", podKey.String(), "node", nodeHostname, "pod node", pi.NodeName)
-			if nodeHostname == pi.NodeName {
-				err = manager.RunBoxes(ctx, eggi, pi)
-
-				if err != nil {
-					return err
-				}
-				logger.Info("Box started for the flow pod->egg", "box", podKey.String(), "node", nodeHostname, "pod node", pi.NodeName)
-			} /*else {
-
-				fmt.Printf("\n****************{ not running in this node\n")
-			}
-			fmt.Println("**********************}")*/
 		} else {
 			fmt.Println("**************************** - no egg matched")
 		}
@@ -314,43 +362,6 @@ func (c *Controller) forgetPod(ctx context.Context, key string) error {
 	logger.Info("Delete pod info.")
 	return nil
 }
-
-// findPodBox searches for first matching between cegg PodSelector and the pod. Returns keyBox name
-//func (c *Controller) findPodBoxes(pod *corev1.Pod) ([]core.BoxKey, bool) {
-//	var found bool
-//	var boxKey core.BoxKey
-//
-//	manager := core.BpfManagerInstance()
-//	podLabels := labels.Set(pod.Labels)
-//
-//	//fmt.Println("****************** +++++ findPodBox podCacheSynced:%t ceggCacheSynced:%t", c.podCacheSynced(), c.podCacheSynced())
-//
-//	manager.BoxAny(func(key core.BoxKey, box core.IEggBox) bool {
-//		eggPodLabels := box.Egg().EggInfo.PodLabels
-//		fmt.Println("+++++ eggPodLabels:", eggPodLabels)
-//		if len(eggPodLabels) > 0 {
-//			selector := labels.Set(eggPodLabels).AsSelectorPreValidated()
-//			//fmt.Printf("\n\nSelector: %s; podLabels:%s\n\n", selector, podLabels)
-//
-//			if selector.Matches(podLabels) {
-//				found = true
-//				boxKey = key
-//				return false //true
-//			}
-//		}
-//		return true //false
-//	})
-//
-//	/*
-//		if !found {
-//			fmt.Println("+++++ findPodBox found no matching pod to egg ")
-//		} else {
-//
-//			fmt.Println("+++++  findPodBox found matching pod to policy ")
-//		}*/
-//
-//	return boxKey, found
-//}
 
 // checkPodMatch searches for all matchings between cegg PodSelector and pods. Returns TODO ???
 func (c *Controller) checkEggMatch(pod *corev1.Pod) *syncx.SafeSlice[types.NamespacedName] {
@@ -378,13 +389,3 @@ func (c *Controller) checkEggMatch(pod *corev1.Pod) *syncx.SafeSlice[types.Names
 
 	return &eggKeys
 }
-
-//func (pim *PodInfoMap) Load(pod *corev1.Pod) (PodInfo, bool) {
-//	var pi PodInfo
-//	sm := (*sync.Map)(pim)
-//	smv, ok := sm.Load(types.NamespacedName{pod.Namespace, pod.Name})
-//	if !ok {
-//		return pi, false
-//	}
-//	return smv.(PodInfo), true
-//}

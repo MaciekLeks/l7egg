@@ -332,16 +332,25 @@ func (m *eggManager) StoreBoxKeys(ctx context.Context, eggi *EggInfo, pi *common
 func (m *eggManager) RunBoxes(ctx context.Context, eggi *EggInfo, pi *common.PodInfo) (err error) {
 	if eggi.ProgramType == common.ProgramTypeCgroup {
 		for i := 0; i < len(pi.Containers); i++ {
-			err = m.RunBoxWithPid(ctx, pi.MatchedKeyBoxes[i], pi.Containers[i].Pid)
-		}
-		if err != nil {
-			return err
+			if pi.Containers[i].AssetStatus == common.AssetNew {
+				err = m.RunBoxWithPid(ctx, pi.MatchedKeyBoxes[i], pi.Containers[i].Pid)
+				if err != nil {
+					return err
+				}
+			}
 		}
 	} else {
-		err = m.RunBoxWithPid(ctx, pi.MatchedKeyBoxes[0], pi.Containers[0].Pid) //TODO: could be initial - test it
-		if err != nil {
-			return err
+		if pi.Containers[0].AssetStatus == common.AssetNew {
+			err = m.RunBoxWithPid(ctx, pi.MatchedKeyBoxes[0], pi.Containers[0].Pid) //TODO: could be initial - test it
+			if err != nil {
+				return err
+			}
 		}
+	}
+
+	// whatever ProgramType is, we set all containers to synced
+	for i := 0; i < len(pi.Containers); i++ {
+		pi.Containers[i].AssetStatus = common.AssetSynced
 	}
 
 	return nil

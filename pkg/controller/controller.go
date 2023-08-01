@@ -40,7 +40,7 @@ const (
 	// is synced successfully
 	MessageResourceSynced = "ClusterEgg synced successfully"
 
-	ctxAssetKey ctxAssetType = "asset"
+	ctxAssetKey common.CtxAssetType = "asset"
 )
 
 type Controller struct {

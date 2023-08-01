@@ -16,7 +16,7 @@ type PodInfo struct {
 	Namespace       string
 	Labels          map[string]string
 	NodeName        string
-	Containers      []*ContainerInfo
+	Containers      ContainerInfoList
 	MatchedKeyBoxes []BoxKey
 }
 

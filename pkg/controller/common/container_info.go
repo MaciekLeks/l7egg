@@ -26,7 +26,10 @@ type ContainerInfo struct {
 	RestartCount  int32
 	ContainerID   string
 	Pid           uint32
+	AssetStatus   AssetStatus
 }
+
+type ContainerInfoList []*ContainerInfo
 
 func NewContainerInfo(cs *corev1.ContainerStatus) (*ContainerInfo, error) {
 	var cid string
@@ -48,6 +51,7 @@ func NewContainerInfo(cs *corev1.ContainerStatus) (*ContainerInfo, error) {
 		RestartCount:  cs.RestartCount,
 		ContainerID:   cid,
 		Pid:           pid,
+		AssetStatus:   AssetNew,
 	}, nil
 }
 
@@ -60,7 +64,7 @@ func (ci *ContainerInfo) Update(cs *corev1.ContainerStatus) (bool, error) {
 		return changed, err
 	}
 
-	if &ci == &nci {
+	if &ci != &nci {
 		//changed
 		changed = true
 		//copy ci to nci fields
@@ -144,4 +148,38 @@ func GetContainerPid(ctx context.Context, containerId string) (uint32, error) {
 	}
 
 	return pid, nil
+}
+
+func (cil ContainerInfoList) GetContainerInfoByName(containerName string) *ContainerInfo {
+	for _, ci := range cil {
+		if ci.Name == containerName {
+			return ci
+		}
+	}
+	return nil
+}
+
+// GetChangedContainers returns list of containers that have been changed
+func (cil ContainerInfoList) GetChangedContainers(current ContainerInfoList) ContainerInfoList {
+	var changed []*ContainerInfo
+	for i := range current {
+		name := current[i].Name
+		ci := cil.GetContainerInfoByName(name)
+		if ci == nil {
+			// container is not found in previous list
+			changed = append(changed, current[i])
+		} else {
+			// container is found in previous list
+			//TODO add more conditions
+			if ci.ContainerID != current[i].ContainerID {
+				ci.AssetStatus = AssetStale
+				changed = append(changed, current[i])
+			} else {
+				ci.AssetStatus = AssetSynced
+				current[i].AssetStatus = AssetSynced
+			}
+
+		}
+	}
+	return changed
 }

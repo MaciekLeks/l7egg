@@ -6,8 +6,15 @@ import (
 )
 
 type ProgramType string
+type CtxAssetType string
+type CtxAssetValue int8
+type AssetStatus byte
 
 const (
+	AssetSynced AssetStatus = iota
+	AssetStale              //could be removed
+	AssetNew                //new to add to the ebpf map
+
 	ProgramTypeTC     ProgramType = "tc"
 	ProgramTypeCgroup ProgramType = "cgroup"
 )
