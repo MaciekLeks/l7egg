@@ -18,7 +18,7 @@ import (
 	"strings"
 )
 
-// PodInfoMap maps Pod namespace name to PodInfo
+// PodInfoMap maps Pod namespace name to PodBox
 //type PodInfoMap sync.Map
 
 func (c *Controller) handlePodAdd(obj interface{}) {
@@ -157,7 +157,7 @@ func (c *Controller) deletePodInfo(ctx context.Context, pod *corev1.Pod) error {
 		manager.Boxes.Range(func(key common.BoxKey, value *core.EggBox) bool {
 			if key.Pod.Name == pi.Name && key.Pod.Namespace == pi.Namespace {
 				logger.Info("Stopping pod info.")
-				// Stop clean up the whole box and deletes the key
+				// StopBoxes clean up the whole box and deletes the key
 				err = manager.Stop(key)
 				return false
 			}
@@ -207,19 +207,13 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	//	return err
 	//}
 	//fmt.Printf("***************************Trying to add or update: %s\n\n", podJson)
-	if pi, found := c.podInfoMap.Load(podKey); found && isPodInStatus(pod, corev1.PodReady) {
+	if pb, found := c.podInfoMap.Load(podKey); found && isPodInStatus(pod, corev1.PodReady) {
 
-		fmt.Println("***************************Update not add ", podKey.String(), pod.Status.Phase, pod.DeletionTimestamp, pi)
-		cpi, err := common.NewPodInfo(pod)
+		fmt.Println("***************************Update not add ", podKey.String(), pod.Status.Phase, pod.DeletionTimestamp, pb)
 
-		if err != nil {
-			return err
-		}
+		wasPaired := len(pb.PairedWithEgg.Name) > 0
 
-		wasMatched := pi.MatchedKeyBoxes != nil
-
-		//stil matches
-		var stillMatchedTheSame, isMatched bool
+		var stillPaired, isMatched bool
 		var eggi *core.EggInfo
 		if eggKeys := c.checkEggMatch(pod); eggKeys.Len() > 0 {
 			if eggKeys.Len() > 1 {
@@ -234,83 +228,86 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 
 			isMatched = true
 			// all MatchedKeyBoxes must have the same Egg
-			if eggi.NamespaceName() == pi.MatchedKeyBoxes[0].Egg {
-				stillMatchedTheSame = true
+			if eggi.NamespaceName() == *pb.PairedWithEgg {
+				stillPaired = true
 			}
 		}
 
-		if wasMatched && !stillMatchedTheSame {
+		if wasPaired && !stillPaired {
 			// Stop old boxes
-			for i := range pi.MatchedKeyBoxes {
-				err = core.BpfManagerInstance().Stop(pi.MatchedKeyBoxes[i])
+			if err := pb.StopBoxes(); err != nil {
+				return err
+			}
+
+		}
+
+		if isMatched && !stillPaired {
+			// Run new boxes
+			if err := runBoxessOnHost(ctx, eggi, pb); err != nil {
+				return err
+			}
+		}
+
+		if isMatched && stillPaired {
+			cpi, err := NewPodBox(pod)
+			if err != nil {
+				return err
+			}
+			// Check: Check containers changes
+			if newContainerList, err := pb.Containers.UpdateContainers(cpi.Containers); err == nil {
+				err = pb.Set(func(v *PodBox) error {
+					v.Containers = newContainerList
+					return nil
+				})
 				if err != nil {
 					return err
 				}
-			}
-			pi.MatchedKeyBoxes = nil
-		}
-
-		if isMatched && !stillMatchedTheSame {
-			// Run new boxes
-			err2 := StoreAndRunBoxes(ctx, eggi, pi)
-			if err2 != nil {
-				return err2
-			}
-		}
-
-		if isMatched && stillMatchedTheSame {
-			// Check: Check containers changes
-			changes := pi.Containers.GetChangedContainers(cpi.Containers)
-			if len(changes) > 0 {
-				_ = pi.Set(func(v *common.PodInfo) error {
-					v.Containers = cpi.Containers
-					return nil
-				})
-				err2 := StoreAndRunBoxes(ctx, eggi, pi)
-				if err2 != nil {
-					return err2
+				if err := runBoxessOnHost(ctx, eggi, pb); err != nil {
+					return err
 				}
-
+			} else {
+				return err
 			}
 		}
 
 	} else if isPodInStatus(pod, corev1.PodReady) { //ADD
-		return c.addPodInfo(ctx, pod)
+		return c.addPodBox(ctx, pod)
 	}
 
 	return nil
 }
 
-func StoreAndRunBoxes(ctx context.Context, eggi *core.EggInfo, pi *common.PodInfo) error {
-	manager := core.BpfManagerInstance()
-	matchedKeyBoxes, err := manager.StoreBoxKeys(ctx, eggi, pi)
-	if err != nil {
-		return err
-	}
-	_ = pi.Set(func(v *common.PodInfo) error {
-		v.MatchedKeyBoxes = matchedKeyBoxes
-		return nil
-	})
+//func StoreAndRunBoxes(ctx context.Context, eggi *core.EggInfo, pi *PodBox) error {
+//	manager := core.BpfManagerInstance()
+//	matchedKeyBoxes, err := manager.StoreBoxKeys(ctx, eggi, pi)
+//	if err != nil {
+//		return err
+//	}
+//	_ = pi.Set(func(v *PodBox) error {
+//		v.MatchedKeyBoxes = matchedKeyBoxes
+//		return nil
+//	})
+//
+//	if err != nil {
+//		return err
+//	}
+//
+//	err = RunBoxesOnHost(ctx, eggi, pi)
+//	if err != nil {
+//		return err
+//	}
+//	return nil
+//}
 
-	if err != nil {
-		return err
-	}
-
-	err = RunBoxesOnHost(ctx, eggi, pi)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func RunBoxesOnHost(ctx context.Context, eggi *core.EggInfo, pi *common.PodInfo) error {
+// runs one or many Boxy(s) on the host depends on EggInfo.ProgramType and Shaping settings
+func runBoxessOnHost(ctx context.Context, eggi *core.EggInfo, pb *PodBox) error {
 	nodeHostname, err := utils.GetHostname()
 	if err != nil {
 		return err
 	}
 
-	if nodeHostname == pi.NodeName {
-		err = core.BpfManagerInstance().RunBoxes(ctx, eggi, pi)
+	if nodeHostname == pb.NodeName {
+		err = pb.RunBoxes(ctx, eggi)
 		if err != nil {
 			return err
 		}
@@ -318,19 +315,18 @@ func RunBoxesOnHost(ctx context.Context, eggi *core.EggInfo, pi *common.PodInfo)
 	return nil
 }
 
-func (c *Controller) addPodInfo(ctx context.Context, pod *corev1.Pod) error {
+func (c *Controller) addPodBox(ctx context.Context, pod *corev1.Pod) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "namespace", pod.Namespace, "name", pod.Name)
 	podKey := types.NamespacedName{Namespace: pod.Namespace, Name: pod.Name}
 
 	fmt.Println("***************************Trying to add[0]", pod.Status.Phase, pod.Name, pod.Namespace)
 	if pod.Status.Phase == corev1.PodRunning {
 		fmt.Println("***************************Trying to add[1]", pod.Status.Phase)
-		pi, err := common.NewPodInfo(pod)
+		pb, err := NewPodBox(pod)
 		if err != nil {
 			return err
 		}
 
-		c.podInfoMap.Store(podKey, pi)
 		if eggKeys := c.checkEggMatch(pod); eggKeys.Len() > 0 {
 			if eggKeys.Len() > 1 {
 				logger.Info("More than one egg matched. Choosing the first one", "eggs", eggKeys)
@@ -342,14 +338,18 @@ func (c *Controller) addPodInfo(ctx context.Context, pod *corev1.Pod) error {
 				return fmt.Errorf("egg not found", "egg", eggKey.String())
 			}
 
-			err = StoreAndRunBoxes(ctx, eggi, pi)
+			err = runBoxessOnHost(ctx, eggi, pb)
 			if err != nil {
 				return err
 			}
 
+			pb.PairedWithEgg = eggKey
+
 		} else {
 			fmt.Println("**************************** - no egg matched")
 		}
+		// only now add to the list
+		c.podInfoMap.Store(podKey, pb)
 	} else {
 		logger.V(4).Info("Nor update nor add done")
 		fmt.Println("***************************Trying to add, update ??????????????????????????????", pod.Status.Phase)

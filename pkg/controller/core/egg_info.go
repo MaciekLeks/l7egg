@@ -48,7 +48,7 @@ type EggInfo struct {
 	EgressInterface  string
 	//BPFObjectPath    string
 	PodLabels map[string]string
-	Shaping   ShapingInfo
+	Shaping   *ShapingInfo
 }
 
 func (eggi *EggInfo) Set(fn func(v *EggInfo) error) error {
@@ -174,7 +174,7 @@ func NewEggInfo(cegg v1alpha1.ClusterEgg) (*EggInfo, error) {
 		CIDRs:            &safeCIDRs,
 		//BPFObjectPath:    "./l7egg.bpf.o",
 		PodLabels: podLabels,
-		Shaping:   shapingInfo,
+		Shaping:   &shapingInfo,
 	}
 	return cggi, nil
 }

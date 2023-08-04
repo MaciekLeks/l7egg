@@ -1,8 +1,10 @@
-package common
+package controller
 
 import (
 	"context"
 	"fmt"
+	"github.com/MaciekLeks/l7egg/pkg/controller/common"
+	"github.com/MaciekLeks/l7egg/pkg/controller/core"
 	"github.com/containerd/containerd"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
@@ -18,7 +20,7 @@ const (
 	ContainerStateTerminated
 )
 
-type ContainerInfo struct {
+type ContainerBox struct {
 	Name          string
 	LastStateInfo ContainerStateInfo
 	StateInfo     ContainerStateInfo
@@ -26,12 +28,13 @@ type ContainerInfo struct {
 	RestartCount  int32
 	ContainerID   string
 	Pid           uint32
-	AssetStatus   AssetStatus
+	AssetStatus   common.AssetStatus
+	Boxer         core.Boxer
 }
 
-type ContainerInfoList []*ContainerInfo
+type ContainerBoxList []*ContainerBox
 
-func NewContainerInfo(cs *corev1.ContainerStatus) (*ContainerInfo, error) {
+func NewContainerBox(cs *corev1.ContainerStatus) (*ContainerBox, error) {
 	var cid string
 	var pid uint32
 	var err error
@@ -43,7 +46,7 @@ func NewContainerInfo(cs *corev1.ContainerStatus) (*ContainerInfo, error) {
 		return nil, err
 	}
 
-	return &ContainerInfo{
+	return &ContainerBox{
 		Name:          cs.Name,
 		StateInfo:     mapContainerStateInfo(cs.State),
 		LastStateInfo: mapContainerStateInfo(cs.LastTerminationState),
@@ -51,14 +54,14 @@ func NewContainerInfo(cs *corev1.ContainerStatus) (*ContainerInfo, error) {
 		RestartCount:  cs.RestartCount,
 		ContainerID:   cid,
 		Pid:           pid,
-		AssetStatus:   AssetNew,
+		AssetStatus:   common.AssetNew,
 	}, nil
 }
 
-// Update updates ContainerInfo with ContainerStatus based on deep equality of ContainerInfo
-func (ci *ContainerInfo) Update(cs *corev1.ContainerStatus) (bool, error) {
+// Update updates ContainerBox with ContainerStatus based on deep equality of ContainerBox
+func (ci *ContainerBox) Update(cs *corev1.ContainerStatus) (bool, error) {
 	var changed bool
-	nci, err := NewContainerInfo(cs)
+	nci, err := NewContainerBox(cs)
 
 	if err != nil {
 		return changed, err
@@ -79,10 +82,10 @@ func (ci *ContainerInfo) Update(cs *corev1.ContainerStatus) (bool, error) {
 	return changed, nil
 }
 
-func ExtractContainersInfo(pod *corev1.Pod) ([]*ContainerInfo, error) {
-	cis := make([]*ContainerInfo, len(pod.Status.ContainerStatuses))
+func ExtractContainersBox(pod *corev1.Pod) ([]*ContainerBox, error) {
+	cis := make([]*ContainerBox, len(pod.Status.ContainerStatuses))
 	for i := range pod.Status.ContainerStatuses {
-		if ci, err := NewContainerInfo(&pod.Status.ContainerStatuses[i]); err == nil {
+		if ci, err := NewContainerBox(&pod.Status.ContainerStatuses[i]); err == nil {
 			cis[i] = ci
 		} else {
 			return nil, err
@@ -150,7 +153,16 @@ func GetContainerPid(ctx context.Context, containerId string) (uint32, error) {
 	return pid, nil
 }
 
-func (cil ContainerInfoList) GetContainerInfoByName(containerName string) *ContainerInfo {
+func (cil ContainerBoxList) GetContainerInfoByContainerId(containerId string) *ContainerBox {
+	for _, ci := range cil {
+		if ci.ContainerID == containerId {
+			return ci
+		}
+	}
+	return nil
+}
+
+func (cil ContainerBoxList) GetContainerInfoByName(containerName string) *ContainerBox {
 	for _, ci := range cil {
 		if ci.Name == containerName {
 			return ci
@@ -159,27 +171,31 @@ func (cil ContainerInfoList) GetContainerInfoByName(containerName string) *Conta
 	return nil
 }
 
-// GetChangedContainers returns list of containers that have been changed
-func (cil ContainerInfoList) GetChangedContainers(current ContainerInfoList) ContainerInfoList {
-	var changed []*ContainerInfo
+// ChangedContainers returns list of containers that have been changed - added, removed, updated
+func (cil ContainerBoxList) UpdateContainers(current ContainerBoxList) (ContainerBoxList, error) {
+	var newList ContainerBoxList
+	var resErr error
 	for i := range current {
 		name := current[i].Name
-		ci := cil.GetContainerInfoByName(name)
-		if ci == nil {
+		c := cil.GetContainerInfoByName(name)
+		if c == nil {
 			// container is not found in previous list
-			changed = append(changed, current[i])
+			newList = append(newList, current[i])
 		} else {
 			// container is found in previous list
 			//TODO add more conditions
-			if ci.ContainerID != current[i].ContainerID {
-				ci.AssetStatus = AssetStale
-				changed = append(changed, current[i])
+			if c.ContainerID != current[i].ContainerID {
+				c.AssetStatus = common.AssetStale
+				if err := c.Boxer.Stop(); err != nil { //should Stop be here?
+					resErr = fmt.Errorf("%s: %w", err.Error(), resErr)
+				}
+				newList = append(newList, current[i])
 			} else {
-				ci.AssetStatus = AssetSynced
-				current[i].AssetStatus = AssetSynced
+				c.AssetStatus = common.AssetSynced
+				current[i].AssetStatus = common.AssetSynced
+				newList = append(newList, current[i])
 			}
-
 		}
 	}
-	return changed
+	return newList, resErr
 }
