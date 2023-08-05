@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/controller"
 	"github.com/MaciekLeks/l7egg/pkg/controller/common"
+	cgroupsv2 "github.com/containerd/cgroups/v2"
 	"github.com/containerd/cgroups/v3/cgroup1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
@@ -29,6 +30,7 @@ type Boxer interface {
 	Wait()
 	RunWithContainer(ctx context.Context, cb *controller.ContainerBox) error
 	RunWithPid(ctx context.Context, pid uint32) error
+	UpdateRunning(ctx context.Context) error
 	EggNamespaceName() types.NamespacedName
 }
 
@@ -96,16 +98,20 @@ func (b *Boxy) Wait() {
 }
 
 func (b *Boxy) start(ctx context.Context, fn func(ctx context.Context) error) error {
-	ctx, cancel := context.WithCancel(ctx)
-	b.stopFunc = cancel
+	ctxWithCancel, cancelFunc := context.WithCancel(ctx)
+	b.stopFunc = cancelFunc
 	b.waitGroup.Add(1)
 	var err error
 	go func() {
 		defer b.waitGroup.Done()
-		err = fn(ctx)
+		err = fn(ctxWithCancel)
 	}()
 
 	return err
+}
+
+func containerdCgroupPath(pid uint32) (string, error) {
+	return cgroupsv2.PidGroupPath(int(pid))
 }
 
 func (b *CgroupBoxy) RunWithPid(ctx context.Context, pid uint32) error {
@@ -118,7 +124,7 @@ func (b *CgroupBoxy) RunWithPid(ctx context.Context, pid uint32) error {
 	netNsPath := fmt.Sprintf("/proc/%d/ns/net", pid)
 
 	logger.V(2).Info("runBoxWithPid: getting cgroup path")
-	cgroupPath, err = getContainerdCgroupPath(pid)
+	cgroupPath, err = containerdCgroupPath(pid)
 	if err != nil {
 		return fmt.Errorf("cgroup path error: %v", err)
 	}
@@ -177,6 +183,18 @@ func (b *CgroupBoxy) RunWithContainer(ctx context.Context, cb *controller.Contai
 	}
 	// whatever ProgramType is, we set all containers to synced
 	cb.AssetStatus = common.AssetSynced
+
+	return nil
+}
+
+func (b *Boxy) UpdateRunning(ctx context.Context) error {
+	if err := b.egg.updateCIDRs(b.egg.EggInfo.CIDRs); err != nil {
+		return err
+	}
+
+	if err := b.egg.updateCNs(b.egg.EggInfo.CNs); err != nil {
+		return err
+	}
 
 	return nil
 }

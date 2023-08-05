@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"github.com/MaciekLeks/l7egg/pkg/controller/common"
 	"github.com/MaciekLeks/l7egg/pkg/controller/core"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	"github.com/MaciekLeks/l7egg/pkg/utils"
@@ -18,7 +17,7 @@ import (
 	"strings"
 )
 
-// PodInfoMap maps Pod namespace name to PodBox
+// PodInfoMap maps Pod namespace name to Pody
 //type PodInfoMap sync.Map
 
 func (c *Controller) handlePodAdd(obj interface{}) {
@@ -117,7 +116,7 @@ func (c *Controller) syncPodHandler(ctx context.Context, key string) error {
 		// and after such time has passed, the kubelet actually deletes it from the store. We receive an update
 		// for modification of the deletion timestamp, not waituntil the kubelet actually deletes the curPod.
 		// This is different from the Phase of a curPod changing.
-		err = c.deletePodInfo(ctx, pod)
+		err = c.deletePody(ctx, pod)
 		return err
 	}
 
@@ -147,29 +146,17 @@ func getContainerdIDs(css []corev1.ContainerStatus) ([]string, error) {
 	return cids, err
 }
 
-func (c *Controller) deletePodInfo(ctx context.Context, pod *corev1.Pod) error {
+func (c *Controller) deletePody(ctx context.Context, pod *corev1.Pod) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "namespace", pod.Namespace, "name", pod.Name)
 
 	key := types.NamespacedName{pod.Namespace, pod.Name}
-	if pi, ok := c.podInfoMap.Load(key); ok {
-		manager := core.BpfManagerInstance()
-		var err error
-		manager.Boxes.Range(func(key common.BoxKey, value *core.EggBox) bool {
-			if key.Pod.Name == pi.Name && key.Pod.Namespace == pi.Namespace {
-				logger.Info("Stopping pod info.")
-				// StopBoxes clean up the whole box and deletes the key
-				err = manager.Stop(key)
-				return false
-			}
-			return true
-		})
-
-		logger.Info("Delete pod info.")
-		c.podInfoMap.Delete(key)
-		if err != nil {
+	if pb, ok := c.podInfoMap.Load(key); ok {
+		if err := pb.StopBoxes(); err != nil {
 			logger.Error(err, "can't stop box")
 			return err
 		}
+		logger.Info("Delete pod info.")
+		c.podInfoMap.Delete(key)
 	}
 
 	return nil
@@ -255,7 +242,7 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 			}
 			// Check: Check containers changes
 			if newContainerList, err := pb.Containers.UpdateContainers(cpi.Containers); err == nil {
-				err = pb.Set(func(v *PodBox) error {
+				err = pb.Set(func(v *Pody) error {
 					v.Containers = newContainerList
 					return nil
 				})
@@ -277,13 +264,13 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	return nil
 }
 
-//func StoreAndRunBoxes(ctx context.Context, eggi *core.EggInfo, pi *PodBox) error {
+//func StoreAndRunBoxes(ctx context.Context, eggi *core.EggInfo, pi *Pody) error {
 //	manager := core.BpfManagerInstance()
 //	matchedKeyBoxes, err := manager.StoreBoxKeys(ctx, eggi, pi)
 //	if err != nil {
 //		return err
 //	}
-//	_ = pi.Set(func(v *PodBox) error {
+//	_ = pi.Set(func(v *Pody) error {
 //		v.MatchedKeyBoxes = matchedKeyBoxes
 //		return nil
 //	})
@@ -300,7 +287,7 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 //}
 
 // runs one or many Boxy(s) on the host depends on EggInfo.ProgramType and Shaping settings
-func runBoxessOnHost(ctx context.Context, eggi *core.EggInfo, pb *PodBox) error {
+func runBoxessOnHost(ctx context.Context, eggi *core.EggInfo, pb *Pody) error {
 	nodeHostname, err := utils.GetHostname()
 	if err != nil {
 		return err
@@ -343,7 +330,7 @@ func (c *Controller) addPodBox(ctx context.Context, pod *corev1.Pod) error {
 				return err
 			}
 
-			pb.PairedWithEgg = eggKey
+			pb.PairedWithEgg = &eggKey
 
 		} else {
 			fmt.Println("**************************** - no egg matched")

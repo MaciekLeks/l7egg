@@ -21,8 +21,8 @@ type NodeBox struct {
 	Boxer         core.Boxer
 }
 
-// PodBox holds POD crucial metadata.
-type PodBox struct {
+// Pody holds POD crucial metadata.
+type Pody struct {
 	sync.RWMutex
 	//UID       string
 	Name          string
@@ -35,7 +35,7 @@ type PodBox struct {
 }
 
 type ComponentBoxer interface {
-	Set(fn func(v *PodBox) error) error
+	Set(fn func(v *Pody) error) error
 	NamespaceName() types.NamespacedName
 	RunBoxes(ctx context.Context, eggi *core.EggInfo) error
 	StopBoxes() error
@@ -45,7 +45,7 @@ func NewNodeBox() (*NodeBox, error) {
 	return &NodeBox{}, nil
 }
 
-func NewPodBox(pod *corev1.Pod) (*PodBox, error) {
+func NewPodBox(pod *corev1.Pod) (*Pody, error) {
 	containers, err := ExtractContainersBox(pod)
 	if err != nil {
 		return nil, err
@@ -56,7 +56,7 @@ func NewPodBox(pod *corev1.Pod) (*PodBox, error) {
 		return nil, err
 	}
 
-	pi := &PodBox{
+	pi := &Pody{
 		Name:       pod.Name,
 		Namespace:  pod.Namespace,
 		Labels:     pod.Labels,
@@ -67,8 +67,12 @@ func NewPodBox(pod *corev1.Pod) (*PodBox, error) {
 	return pi, nil
 }
 
-// Set sets in a safe manner PodBox fields.
-func (pb *PodBox) Set(fn func(v *PodBox) error) error {
+func (pb *Pody) String() string {
+	return fmt.Sprintf("Pody: %s/%s", pb.Namespace, pb.Name)
+}
+
+// Set sets in a safe manner Pody fields.
+func (pb *Pody) Set(fn func(v *Pody) error) error {
 	pb.Lock()
 	defer pb.Unlock()
 	return fn(pb)
@@ -80,7 +84,7 @@ func (nb *NodeBox) Set(fn func(v *NodeBox) error) error {
 	return fn(nb)
 }
 
-//func (pi *PodBox) Update(pod *corev1.Pod) (bool, error) {
+//func (pi *Pody) Update(pod *corev1.Pod) (bool, error) {
 //	var changed bool
 //	pi.RLock()
 //	defer pi.RUnlock()
@@ -92,7 +96,7 @@ func (nb *NodeBox) Set(fn func(v *NodeBox) error) error {
 //
 //	if reflect.DeepEqual(&pi, &npi) {
 //		changed = true
-//		// Update PodBox fields
+//		// Update Pody fields
 //		v.name = npi.name
 //		v.namespace = npi.namespace
 //		v.labels = npi.labels
@@ -104,7 +108,7 @@ func (nb *NodeBox) Set(fn func(v *NodeBox) error) error {
 //	return changed, nil
 //}
 
-func (pb *PodBox) NamespaceName() types.NamespacedName {
+func (pb *Pody) NamespaceName() types.NamespacedName {
 	return types.NamespacedName{Namespace: pb.Namespace, Name: pb.Name}
 }
 
@@ -112,7 +116,7 @@ func (pb *NodeBox) NamespaceName() types.NamespacedName {
 	return types.NamespacedName{Namespace: "", Name: pb.NodeName}
 }
 
-func (pb *PodBox) RunBoxes(ctx context.Context, eggi *core.EggInfo) error {
+func (pb *Pody) RunBoxes(ctx context.Context, eggi *core.EggInfo) error {
 	pb.Lock()
 	defer pb.Unlock()
 
@@ -168,7 +172,7 @@ func (nb *NodeBox) RunBoxes(ctx context.Context, eggi *core.EggInfo) error {
 	return nil
 }
 
-func (pb *PodBox) StopBoxes() error {
+func (pb *Pody) StopBoxes() error {
 	pb.Lock()
 	defer pb.Unlock()
 
@@ -194,6 +198,60 @@ func (pb *PodBox) StopBoxes() error {
 	}
 
 	return resErr
+}
+
+// WaitBoxes waits for all boxes to finish. Blocking call.
+func (pb *Pody) WaitBoxes() {
+	var podyWaitGroup sync.WaitGroup
+
+	if pb.Boxer != nil {
+		podyWaitGroup.Add(1)
+		go func() {
+			defer podyWaitGroup.Done()
+			pb.Boxer.Wait()
+		}()
+	}
+
+	for i := range pb.Containers {
+		if pb.Containers[i].Boxer != nil {
+			podyWaitGroup.Add(1)
+			go func() {
+				defer podyWaitGroup.Done()
+				pb.Containers[i].Boxer.Wait()
+			}()
+		}
+	}
+
+	podyWaitGroup.Wait()
+}
+
+func (pb *Pody) UpdateBoxes(ctx context.Context) error {
+	pb.Lock()
+	defer pb.Unlock()
+
+	var err error
+	var resErr error
+	if pb.Boxer != nil {
+		err = pb.Boxer.UpdateRunning(ctx)
+		if err != nil {
+			// append err to existing resErr if not nil
+			resErr = fmt.Errorf("%v\n%v", resErr, err)
+
+		}
+	}
+
+	for i := range pb.Containers {
+		if pb.Containers[i].Boxer != nil {
+			err = pb.Containers[i].Boxer.UpdateRunning(ctx)
+			if err != nil {
+				// append err to existing resErr if not nil
+				resErr = fmt.Errorf("%v\n%v", resErr, err)
+			}
+		}
+	}
+
+	return resErr
+
 }
 
 func (nb *NodeBox) StopBoxes() error {

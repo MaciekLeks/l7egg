@@ -15,6 +15,7 @@ import (
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/record"
+	"sync"
 
 	ceggclientset "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned"
 	cegginformer "github.com/MaciekLeks/l7egg/pkg/client/informers/externalversions/maciekleks.dev/v1alpha1"
@@ -60,7 +61,7 @@ type Controller struct {
 
 	recorder record.EventRecorder
 
-	podInfoMap       syncx.SafeMap[types.NamespacedName, *PodBox]
+	podInfoMap       syncx.SafeMap[types.NamespacedName, *Pody]
 	containerInfoMap syncx.SafeMap[ContainerName, *ContainerBox]
 	eggInfoMap       syncx.SafeMap[types.NamespacedName, *core.EggInfo] //namespace not used
 }
@@ -103,7 +104,7 @@ func NewController(ctx context.Context,
 		recorder: recorder,
 
 		//podInfoMap: PodInfoMap{},
-		podInfoMap: syncx.SafeMap[types.NamespacedName, *PodBox]{},
+		podInfoMap: syncx.SafeMap[types.NamespacedName, *Pody]{},
 		eggInfoMap: syncx.SafeMap[types.NamespacedName, *core.EggInfo]{},
 	}
 
@@ -186,7 +187,17 @@ func (c *Controller) Run(ctx context.Context, ceggWorkers int, podWorkers int) e
 }
 
 func (c *Controller) Wait() {
-	core.BpfManagerInstance().Wait()
+	var stopWaitGroup sync.WaitGroup
+
+	c.podInfoMap.Range(func(podNsNm types.NamespacedName, py *Pody) bool {
+		stopWaitGroup.Add(1)
+		go func() {
+			defer stopWaitGroup.Done()
+			fmt.Printf("Waiting - %s\n", podNsNm)
+			py.WaitBoxes()
+		}()
+		return true
+	})
 }
 
 // runWorker is a long-running function that  continually call the

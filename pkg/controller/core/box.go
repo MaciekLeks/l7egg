@@ -1,56 +1,55 @@
 package core
 
-import (
-	"context"
-	"fmt"
-	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
-	"github.com/MaciekLeks/l7egg/pkg/controller/common"
-	cgroupsv2 "github.com/containerd/cgroups/v2"
-	"sync"
-)
-
-type IEggManager interface {
-	Start(context.Context, string, *EggInfo)
-	Stop(string)
-	Wait()
-	UpdateCIDRs([]string)
-	Exists(string)
-}
-
-// EggBox holds EggInfo and steering variables (stopFunc to stop it from the controller witout stopping the controller iself).
-// waitGroup synchronize bpf main groutine starting from user.run function
-type EggBox struct {
-	stopFunc    context.CancelFunc
-	waitGroup   *sync.WaitGroup //TODO: only ene goroutine (in run(...)) - changing to channel?
-	egg         *egg
-	programInfo common.ProgramInfo
-	//netNsPath string
-	// active if box with bpf is running
-	active bool
-}
-
-type IEggBox interface {
-	Egg() *egg
-}
-
-//type eggManager struct {
-//	//boxes    map[string]EggBox
-//	Boxes syncx.SafeMap[common.BoxKey, *EggBox]
-//	//seqIdGen syncx.ISeqId[uint16] //tbd: moved to syncx.Sequencer
+//
+//import (
+//	"context"
+//	"github.com/MaciekLeks/l7egg/pkg/controller/common"
+//	cgroupsv2 "github.com/containerd/cgroups/v2"
+//	"sync"
+//)
+//
+//type IEggManager interface {
+//	Start(context.Context, string, *EggInfo)
+//	Stop(string)
+//	Wait()
+//	UpdateCIDRs([]string)
+//	Exists(string)
 //}
 //
-//var (
-//	instance *eggManager
-//	once     sync.Once
-//)
-
-func (box *EggBox) Egg() *egg {
-	return box.egg
-}
-
-func (box *EggBox) Boxes() *egg {
-	return box.egg
-}
+//// EggBox holds EggInfo and steering variables (stopFunc to stop it from the controller witout stopping the controller iself).
+//// waitGroup synchronize bpf main groutine starting from user.run function
+//type EggBox struct {
+//	stopFunc    context.CancelFunc
+//	waitGroup   *sync.WaitGroup //TODO: only ene goroutine (in run(...)) - changing to channel?
+//	egg         *egg
+//	programInfo common.ProgramInfo
+//	//netNsPath string
+//	// active if box with bpf is running
+//	active bool
+//}
+//
+//type IEggBox interface {
+//	Egg() *egg
+//}
+//
+////type eggManager struct {
+////	//boxes    map[string]EggBox
+////	Boxes syncx.SafeMap[common.BoxKey, *EggBox]
+////	//seqIdGen syncx.ISeqId[uint16] //tbd: moved to syncx.Sequencer
+////}
+////
+////var (
+////	instance *eggManager
+////	once     sync.Once
+////)
+//
+//func (box *EggBox) Egg() *egg {
+//	return box.egg
+//}
+//
+//func (box *EggBox) Boxes() *egg {
+//	return box.egg
+//}
 
 //func BpfManagerInstance() *eggManager {
 //	once.Do(func() {
@@ -178,9 +177,9 @@ func (box *EggBox) Boxes() *egg {
 //	return m.Boxes.Load(boxKey)
 //}
 
-func getContainerdCgroupPath(pid uint32) (string, error) {
-	return cgroupsv2.PidGroupPath(int(pid))
-}
+//func getContainerdCgroupPath(pid uint32) (string, error) {
+//	return cgroupsv2.PidGroupPath(int(pid))
+//}
 
 //	func (m *eggManager) RunBoxWithContainer(ctx context.Context, boxKey common.BoxKey, containerId string) error {
 //		logger := klog.FromContext(ctx)
@@ -242,61 +241,61 @@ func getContainerdCgroupPath(pid uint32) (string, error) {
 //
 //		return m.BoxStart(ctx, boxKey, netNsPath, cgroupPath, pid)
 //	}
-func (m *eggManager) UpdateCIDRs(boxKey common.BoxKey, newCIDRsS []string) error {
-
-	cidrs, err := parseCIDRs(newCIDRsS)
-	if err != nil {
-		return fmt.Errorf("Parsing input data %#v", err)
-	}
-
-	box, found := m.getBox(boxKey)
-	if !found {
-		return fmt.Errorf("can't find box")
-	}
-
-	fmt.Printf("box.egg %#v\n", box.egg)
-	if err := box.egg.updateCIDRs(cidrs); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (m *eggManager) UpdateCNs(boxKey common.BoxKey, newCNsS []string) error {
-	cns, err := parseCNs(newCNsS)
-	if err != nil {
-		return fmt.Errorf("Parsing input data %#v", err)
-	}
-
-	box, found := m.getBox(boxKey)
-	if !found {
-		return fmt.Errorf("can't find box")
-	}
-
-	fmt.Printf("box.egg %#v\n", box.egg)
-	if err := box.egg.updateCNs(cns); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (m *eggManager) UpdateEgg(boxKey common.BoxKey, newSpec v1alpha1.ClusterEggSpec) error {
-	fmt.Printf("+++++++++++++++ 1")
-	err := m.UpdateCIDRs(boxKey, newSpec.Egress.CIDRs)
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("+++++++++++++++ 2")
-	err = m.UpdateCNs(boxKey, newSpec.Egress.CommonNames)
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("+++++++++++++++ 3")
-	return nil
-}
+//func (m *eggManager) UpdateCIDRs(boxKey common.BoxKey, newCIDRsS []string) error {
+//
+//	cidrs, err := parseCIDRs(newCIDRsS)
+//	if err != nil {
+//		return fmt.Errorf("Parsing input data %#v", err)
+//	}
+//
+//	box, found := m.getBox(boxKey)
+//	if !found {
+//		return fmt.Errorf("can't find box")
+//	}
+//
+//	fmt.Printf("box.egg %#v\n", box.egg)
+//	if err := box.egg.updateCIDRs(cidrs); err != nil {
+//		return err
+//	}
+//
+//	return nil
+//}
+//
+//func (m *eggManager) UpdateCNs(boxKey common.BoxKey, newCNsS []string) error {
+//	cns, err := parseCNs(newCNsS)
+//	if err != nil {
+//		return fmt.Errorf("Parsing input data %#v", err)
+//	}
+//
+//	box, found := m.getBox(boxKey)
+//	if !found {
+//		return fmt.Errorf("can't find box")
+//	}
+//
+//	fmt.Printf("box.egg %#v\n", box.egg)
+//	if err := box.egg.updateCNs(cns); err != nil {
+//		return err
+//	}
+//
+//	return nil
+//}
+//
+//func (m *eggManager) UpdateEgg(boxKey common.BoxKey, newSpec v1alpha1.ClusterEggSpec) error {
+//	fmt.Printf("+++++++++++++++ 1")
+//	err := m.UpdateCIDRs(boxKey, newSpec.Egress.CIDRs)
+//	if err != nil {
+//		return err
+//	}
+//
+//	fmt.Printf("+++++++++++++++ 2")
+//	err = m.UpdateCNs(boxKey, newSpec.Egress.CommonNames)
+//	if err != nil {
+//		return err
+//	}
+//
+//	fmt.Printf("+++++++++++++++ 3")
+//	return nil
+//}
 
 //func (m *eggManager) StoreBoxKeys(ctx context.Context, eggi *EggInfo, pi *controller.PodBox) ([]common.BoxKey, error) {
 //	var matchedKeyBoxes []common.BoxKey

@@ -1,10 +1,5 @@
 package common
 
-import (
-	"fmt"
-	"k8s.io/apimachinery/pkg/types"
-)
-
 type ProgramType string
 type CtxAssetType string
 type CtxAssetValue int8
@@ -27,12 +22,12 @@ type ProgramInfo struct {
 	CgroupPath  string
 }
 
-type BoxKey struct {
-	Egg         types.NamespacedName
-	Pod         types.NamespacedName
-	ContainerId string
-}
+//type BoxKey struct {
+//	Egg         types.NamespacedName
+//	Pod         types.NamespacedName
+//	ContainerId string
+//}
 
-func (bk BoxKey) String() string {
-	return fmt.Sprintf("%s|%s|%s", bk.Egg.String(), bk.Pod.String(), bk.ContainerId)
-}
+//func (bk BoxKey) String() string {
+//	return fmt.Sprintf("%s|%s|%s", bk.Egg.String(), bk.Pod.String(), bk.ContainerId)
+//}

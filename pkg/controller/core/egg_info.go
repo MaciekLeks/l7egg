@@ -42,8 +42,8 @@ type EggInfo struct {
 	sync.RWMutex
 	Name             string
 	ProgramType      common.ProgramType
-	CNs              *syncx.SafeSlice[CN]
-	CIDRs            *syncx.SafeSlice[CIDR]
+	CNs              []CN
+	CIDRs            []CIDR
 	IngressInterface string
 	EgressInterface  string
 	//BPFObjectPath    string
@@ -137,11 +137,6 @@ func NewEggInfo(cegg v1alpha1.ClusterEgg) (*EggInfo, error) {
 		fmt.Errorf("Parsing input data %#v", err)
 		return nil, err
 	}
-	safeCNs := syncx.SafeSlice[CN]{}
-	safeCNs.Append(cns...)
-
-	safeCIDRs := syncx.SafeSlice[CIDR]{}
-	safeCIDRs.Append(cidrs...)
 
 	fmt.Printf("((((((((((((((((((((((((((((((((((((((((((((((", cegg.Spec.Egress.Shaping)
 	shapingInfo, err := parseShapingInfo(cegg.Spec.Egress.Shaping)
@@ -170,13 +165,44 @@ func NewEggInfo(cegg v1alpha1.ClusterEgg) (*EggInfo, error) {
 		ProgramType:      common.ProgramType(cegg.Spec.ProgramType),
 		IngressInterface: iiface,
 		EgressInterface:  eiface,
-		CNs:              &safeCNs,
-		CIDRs:            &safeCIDRs,
+		CNs:              cns,
+		CIDRs:            cidrs,
 		//BPFObjectPath:    "./l7egg.bpf.o",
 		PodLabels: podLabels,
 		Shaping:   &shapingInfo,
 	}
 	return cggi, nil
+}
+
+func (eggi *EggInfo) Update(cegg v1alpha1.ClusterEgg) error {
+	eggi.Lock()
+	defer eggi.Unlock()
+
+	cidrs, err := parseCIDRs(cegg.Spec.Egress.CIDRs)
+	if err != nil {
+		fmt.Errorf("Parsing input data %#v", err)
+		return err
+	}
+
+	cns, err := parseCNs(cegg.Spec.Egress.CommonNames)
+	if err != nil {
+		fmt.Errorf("Parsing input data %#v", err)
+		return err
+	}
+
+	var podLabels map[string]string
+	if cegg.Spec.Egress.PodSelector.Size() != 0 {
+		podLabels, err = metav1.LabelSelectorAsMap(cegg.Spec.Egress.PodSelector)
+		if err != nil {
+			return fmt.Errorf("bad label selector for cegg [%+v]: %w", cegg.Spec, err)
+		}
+	}
+
+	eggi.CNs = cns
+	eggi.CIDRs = cidrs
+	eggi.PodLabels = podLabels
+
+	return nil
 }
 
 func parseCIDR(cidrS string) (CIDR, error) {

@@ -13,7 +13,7 @@ type CoreController struct {
 }
 
 type CoreMsg struct {
-	PodInfo *controller.PodBox
+	PodInfo *controller.Pody
 	EggInfo *EggInfo
 }
 
@@ -31,7 +31,7 @@ func NewCoreController() *CoreController {
 	}
 }
 
-func (cc *CoreController) RegisterNewPodInfoEvent(podInfo *controller.PodBox) {
+func (cc *CoreController) RegisterNewPodInfoEvent(podInfo *controller.Pody) {
 	cc.podInfoQueue.Add(CoreEvent{
 		MsgType: "newPodInfo",
 		Data: CoreMsg{
