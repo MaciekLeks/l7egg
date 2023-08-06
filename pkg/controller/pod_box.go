@@ -35,12 +35,12 @@ type Pody struct {
 	Boxer         core.Boxer
 }
 
-type ComponentBoxer interface {
-	Set(fn func(v *Pody) error) error
-	NamespaceName() types.NamespacedName
-	RunBoxes(ctx context.Context, eggi *core.EggInfo) error
-	StopBoxes() error
-}
+//type ComponentBoxer interface {
+//	Set(fn func(v *Pody) error) error
+//	NamespaceName() types.NamespacedName
+//	RunBoxes(ctx context.Context, eggi *core.EggInfo) error
+//	StopBoxes() error
+//}
 
 //func NewNodeBox() (*NodeBox, error) {
 //	return &NodeBox{}, nil
