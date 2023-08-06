@@ -173,10 +173,7 @@ func (py *Pody) RunBoxes(ctx context.Context, eggi *core.EggInfo) error {
 		for i := range py.Containers {
 			container := py.Containers[i]
 			if container.Ready == true && container.AssetStatus == common.AssetNew {
-				// not nil for Node
-				if py.Boxer == nil {
-					container.Boxer = core.NewBoxy(eggi)
-				}
+				container.Boxer = core.NewBoxy(eggi)
 				err := container.Boxer.RunWithPid(ctx, container.Pid)
 				if err != nil {
 					return err

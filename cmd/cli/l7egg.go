@@ -6,6 +6,7 @@ import (
 	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
 	"github.com/MaciekLeks/l7egg/pkg/controller/common"
 	"github.com/MaciekLeks/l7egg/pkg/controller/core"
+	"github.com/MaciekLeks/l7egg/pkg/controller/middle"
 	"github.com/MaciekLeks/l7egg/pkg/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -38,7 +39,7 @@ func main() {
 	}
 
 	manager := core.BpfManagerInstance()
-	clientegg, err := core.NewEggInfo(
+	clientegg, err := middle.NewEggInfo(
 		v1alpha1.ClusterEgg{
 			TypeMeta: metav1.TypeMeta{},
 			ObjectMeta: metav1.ObjectMeta{

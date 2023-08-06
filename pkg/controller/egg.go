@@ -242,12 +242,14 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 				}
 				logger.Info("Staring NODE box with cegg.", "pod", nil)
 				fakeNodePod, err := NewNodePody("fake-node-pod")
+
 				if err != nil {
 					return fmt.Errorf("creating fake node pod failed: %s", err.Error())
 				}
 				if err := fakeNodePod.RunBoxes(ctx, eggi); err != nil {
 					return fmt.Errorf("starting fake node pod box failed: %s", err.Error())
 				}
+				c.podInfoMap.Store(types.NamespacedName{"", ""}, fakeNodePod)
 			} else {
 				if podKeys := c.checkPodMatch(cegg); podKeys.Len() > 0 {
 					for i := 0; i < podKeys.Len(); i++ {

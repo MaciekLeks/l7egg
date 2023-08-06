@@ -62,7 +62,8 @@ type EgressSpec struct {
 	CIDRs []string `json:"cidrs,omitempty"`
 
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="shaping is immutable in this version"
-	Shaping ShapingSpec `json:"shaping,omitempty"`
+	// +optional
+	Shaping *ShapingSpec `json:"shaping,omitempty"`
 
 	// +optional
 	PodSelector *metav1.LabelSelector `json:"podSelector,omitempty"`
