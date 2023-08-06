@@ -153,6 +153,7 @@ func (py *Pody) RunBoxes(ctx context.Context, eggi *core.EggInfo) error {
 		return fmt.Errorf("no containers in pod %s", py.Name)
 	}
 
+	//TODO: it could be the case - container[0] is restarted abut network is the same :/
 	if eggi.ProgramType == common.ProgramTypeTC && py.Boxer == nil {
 		container := py.Containers[0]
 		if container.Ready == true && container.AssetStatus == common.AssetNew {
@@ -160,7 +161,8 @@ func (py *Pody) RunBoxes(ctx context.Context, eggi *core.EggInfo) error {
 			if py.Boxer == nil {
 				py.Boxer = core.NewBoxy(eggi)
 			}
-			err := py.Boxer.RunWithContainer(ctx, container)
+			err := py.Boxer.RunWithPid(ctx, container.Pid)
+			container.AssetStatus = common.AssetSynced
 			if err != nil {
 				return err
 			}
@@ -175,10 +177,11 @@ func (py *Pody) RunBoxes(ctx context.Context, eggi *core.EggInfo) error {
 				if py.Boxer == nil {
 					container.Boxer = core.NewBoxy(eggi)
 				}
-				err := container.Boxer.RunWithContainer(ctx, container)
+				err := container.Boxer.RunWithPid(ctx, container.Pid)
 				if err != nil {
 					return err
 				}
+				container.AssetStatus = common.AssetSynced
 			}
 		}
 	}

@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"fmt"
-	"github.com/MaciekLeks/l7egg/pkg/controller"
 	"github.com/MaciekLeks/l7egg/pkg/controller/common"
 	cgroupsv2 "github.com/containerd/cgroups/v2"
 	"github.com/containerd/cgroups/v3/cgroup1"
@@ -28,7 +27,7 @@ func (b *Boxy) RunBoxWithPid(ctx context.Context, pid uint32) error {
 type Boxer interface {
 	Stop() error
 	Wait()
-	RunWithContainer(ctx context.Context, cb *controller.ContainerBox) error
+	//RunWithContainer(ctx context.Context, cb *controller.ContainerBox) error
 	RunWithPid(ctx context.Context, pid uint32) error
 	UpdateRunning(ctx context.Context) error
 	EggNamespaceName() types.NamespacedName
@@ -157,35 +156,35 @@ func (b *TcBoxy) RunWithPid(ctx context.Context, pid uint32) error {
 	})
 }
 
-func (b *Boxy) RunWithContainer(ctx context.Context, cb *controller.ContainerBox) (err error) {
-	panic("implement me")
-}
+//func (b *Boxy) RunWithContainer(ctx context.Context, cb *controller.ContainerBox) (err error) {
+//	panic("implement me")
+//}
 
-func (b *TcBoxy) RunWithContainer(ctx context.Context, cb *controller.ContainerBox) error {
-	if cb.AssetStatus == common.AssetNew {
-		err := b.RunWithPid(ctx, cb.Pid)
-		if err != nil {
-			return err
-		}
-	}
-	// whatever ProgramType is, we set all containers to synced
-	cb.AssetStatus = common.AssetSynced
-
-	return nil
-}
-
-func (b *CgroupBoxy) RunWithContainer(ctx context.Context, cb *controller.ContainerBox) error {
-	if cb.AssetStatus == common.AssetNew {
-		err := b.RunWithPid(ctx, cb.Pid)
-		if err != nil {
-			return err
-		}
-	}
-	// whatever ProgramType is, we set all containers to synced
-	cb.AssetStatus = common.AssetSynced
-
-	return nil
-}
+//func (b *TcBoxy) RunWithContainer(ctx context.Context, cb *controller.ContainerBox) error {
+//	if cb.AssetStatus == common.AssetNew {
+//		err := b.RunWithPid(ctx, cb.Pid)
+//		if err != nil {
+//			return err
+//		}
+//	}
+//	// whatever ProgramType is, we set all containers to synced
+//	cb.AssetStatus = common.AssetSynced
+//
+//	return nil
+//}
+//
+//func (b *CgroupBoxy) RunWithContainer(ctx context.Context, cb *controller.ContainerBox) error {
+//	if cb.AssetStatus == common.AssetNew {
+//		err := b.RunWithPid(ctx, cb.Pid)
+//		if err != nil {
+//			return err
+//		}
+//	}
+//	// whatever ProgramType is, we set all containers to synced
+//	cb.AssetStatus = common.AssetSynced
+//
+//	return nil
+//}
 
 func (b *Boxy) UpdateRunning(ctx context.Context) error {
 	if err := b.egg.updateCIDRs(b.egg.EggInfo.CIDRs); err != nil {
