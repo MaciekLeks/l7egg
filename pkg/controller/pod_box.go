@@ -68,7 +68,7 @@ func NewPodBox(pod *corev1.Pod) (*Pody, error) {
 	return pi, nil
 }
 
-func NewFakePodBox(name string) (*Pody, error) {
+func NewNodeFakePodBox(name string) (*Pody, error) {
 	// Creates empty Containers list with only one ContainerBox filled with Pid from os.GetPid()
 	hosts := make([]*ContainerBox, 0)
 	pid := uint32(os.Getpid())

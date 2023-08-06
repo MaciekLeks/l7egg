@@ -241,7 +241,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 					return fmt.Errorf("storing box '%s' failed: %s", cegg.Name, err.Error())
 				}
 				logger.Info("Staring NODE box with cegg.", "pod", nil)
-				fakeNodePod, err := NewFakePodBox("fake-node-pod")
+				fakeNodePod, err := NewNodeFakePodBox("fake-node-pod")
 				if err != nil {
 					return fmt.Errorf("creating fake node pod failed: %s", err.Error())
 				}
