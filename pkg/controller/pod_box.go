@@ -14,12 +14,13 @@ import (
 	"sync"
 )
 
-type NodeBox struct {
-	sync.RWMutex
-	NodeName      string
-	PairedWithEgg *types.NamespacedName
-	Boxer         core.Boxer
-}
+//type NodeBox struct {
+//	sync.RWMutex
+//	NodeName      string
+//	PairedWithEgg *types.NamespacedName
+//	Boxer         core.Boxer
+//}
+//
 
 // Pody holds POD crucial metadata.
 type Pody struct {
@@ -41,9 +42,9 @@ type ComponentBoxer interface {
 	StopBoxes() error
 }
 
-func NewNodeBox() (*NodeBox, error) {
-	return &NodeBox{}, nil
-}
+//func NewNodeBox() (*NodeBox, error) {
+//	return &NodeBox{}, nil
+//}
 
 func NewPodBox(pod *corev1.Pod) (*Pody, error) {
 	containers, err := ExtractContainersBox(pod)
@@ -67,6 +68,32 @@ func NewPodBox(pod *corev1.Pod) (*Pody, error) {
 	return pi, nil
 }
 
+func NewFakePodBox(name string) (*Pody, error) {
+	// Creates empty Containers list with only one ContainerBox filled with Pid from os.GetPid()
+	hosts := make([]*ContainerBox, 0)
+	pid := uint32(os.Getpid())
+	hostBox := &ContainerBox{
+		Name: name,
+	}
+	hostBox.Pid = pid
+	hosts = append(hosts, hostBox)
+
+	fakePodNodeHostname, err := utils.GetHostname()
+	if err != nil {
+		return nil, err
+	}
+
+	fakePody := &Pody{
+		Name:       "",
+		Namespace:  "",
+		Labels:     nil,
+		NodeName:   fakePodNodeHostname,
+		Containers: hosts,
+	}
+
+	return fakePody, nil
+}
+
 func (pb *Pody) String() string {
 	return fmt.Sprintf("Pody: %s/%s", pb.Namespace, pb.Name)
 }
@@ -78,11 +105,11 @@ func (pb *Pody) Set(fn func(v *Pody) error) error {
 	return fn(pb)
 }
 
-func (nb *NodeBox) Set(fn func(v *NodeBox) error) error {
-	nb.Lock()
-	defer nb.Unlock()
-	return fn(nb)
-}
+//func (nb *NodeBox) Set(fn func(v *NodeBox) error) error {
+//	nb.Lock()
+//	defer nb.Unlock()
+//	return fn(nb)
+//}
 
 //func (pi *Pody) Update(pod *corev1.Pod) (bool, error) {
 //	var changed bool
@@ -112,9 +139,9 @@ func (pb *Pody) NamespaceName() types.NamespacedName {
 	return types.NamespacedName{Namespace: pb.Namespace, Name: pb.Name}
 }
 
-func (pb *NodeBox) NamespaceName() types.NamespacedName {
-	return types.NamespacedName{Namespace: "", Name: pb.NodeName}
-}
+//func (pb *NodeBox) NamespaceName() types.NamespacedName {
+//	return types.NamespacedName{Namespace: "", Name: ""}
+//}
 
 func (pb *Pody) RunBoxes(ctx context.Context, eggi *core.EggInfo) error {
 	pb.Lock()
@@ -127,26 +154,30 @@ func (pb *Pody) RunBoxes(ctx context.Context, eggi *core.EggInfo) error {
 	if eggi.ProgramType == common.ProgramTypeTC && pb.Boxer == nil {
 		container := pb.Containers[0]
 		if container.Ready == true && container.AssetStatus == common.AssetNew {
-			boxy := core.NewBoxy(eggi)
-			err := boxy.RunWithContainer(ctx, container)
+			// not nil for Node
+			if pb.Boxer == nil {
+				pb.Boxer = core.NewBoxy(eggi)
+			}
+			err := pb.Boxer.RunWithContainer(ctx, container)
 			if err != nil {
 				return err
 			}
 
-			pb.Boxer = boxy
 		}
 		return nil
 	} else {
 		for i := range pb.Containers {
 			container := pb.Containers[i]
 			if container.Ready == true && container.AssetStatus == common.AssetNew {
-				boxy := core.NewBoxy(eggi)
-				err := boxy.RunWithContainer(ctx, container)
+				// not nil for Node
+				if pb.Boxer == nil {
+					container.Boxer = core.NewBoxy(eggi)
+				}
+				err := container.Boxer.RunWithContainer(ctx, container)
 				if err != nil {
 					return err
 				}
 			}
-			container.Boxer = pb.Boxer
 		}
 	}
 
@@ -155,22 +186,22 @@ func (pb *Pody) RunBoxes(ctx context.Context, eggi *core.EggInfo) error {
 	return nil
 }
 
-func (nb *NodeBox) RunBoxes(ctx context.Context, eggi *core.EggInfo) error {
-	nb.Lock()
-	defer nb.Unlock()
-
-	boxy := core.NewBoxy(eggi)
-
-	err := boxy.RunWithPid(ctx, uint32(os.Getpid()))
-	if err != nil {
-		return err
-	}
-
-	nb.Boxer = boxy
-	nb.PairedWithEgg = &types.NamespacedName{Namespace: "", Name: eggi.Name}
-
-	return nil
-}
+//func (nb *NodeBox) RunBoxes(ctx context.Context, eggi *core.EggInfo) error {
+//	nb.Lock()
+//	defer nb.Unlock()
+//
+//	boxy := core.NewBoxy(eggi)
+//
+//	err := boxy.RunWithPid(ctx, uint32(os.Getpid()))
+//	if err != nil {
+//		return err
+//	}
+//
+//	nb.Boxer = boxy
+//	nb.PairedWithEgg = &types.NamespacedName{Namespace: "", Name: eggi.Name}
+//
+//	return nil
+//}
 
 func (pb *Pody) StopBoxes() error {
 	pb.Lock()
@@ -254,19 +285,19 @@ func (pb *Pody) UpdateBoxes(ctx context.Context) error {
 
 }
 
-func (nb *NodeBox) StopBoxes() error {
-	nb.Lock()
-	defer nb.Unlock()
-
-	var err error
-	var resErr error
-	if nb.Boxer != nil {
-		err = nb.Boxer.Stop()
-		if err != nil {
-			return fmt.Errorf("%v\n%v", resErr, err)
-
-		}
-	}
-
-	return nil
-}
+//func (nb *NodeBox) StopBoxes() error {
+//	nb.Lock()
+//	defer nb.Unlock()
+//
+//	var err error
+//	var resErr error
+//	if nb.Boxer != nil {
+//		err = nb.Boxer.Stop()
+//		if err != nil {
+//			return fmt.Errorf("%v\n%v", resErr, err)
+//
+//		}
+//	}
+//
+//	return nil
+//}
