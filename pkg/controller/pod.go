@@ -236,7 +236,7 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 		}
 
 		if isMatched && stillPaired {
-			cpi, err := NewPodBox(pod)
+			cpi, err := NewPody(pod)
 			if err != nil {
 				return err
 			}
@@ -309,7 +309,7 @@ func (c *Controller) addPodBox(ctx context.Context, pod *corev1.Pod) error {
 	fmt.Println("***************************Trying to add[0]", pod.Status.Phase, pod.Name, pod.Namespace)
 	if pod.Status.Phase == corev1.PodRunning {
 		fmt.Println("***************************Trying to add[1]", pod.Status.Phase)
-		pb, err := NewPodBox(pod)
+		pb, err := NewPody(pod)
 		if err != nil {
 			return err
 		}

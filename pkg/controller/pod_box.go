@@ -46,7 +46,7 @@ type ComponentBoxer interface {
 //	return &NodeBox{}, nil
 //}
 
-func NewPodBox(pod *corev1.Pod) (*Pody, error) {
+func NewPody(pod *corev1.Pod) (*Pody, error) {
 	containers, err := ExtractContainersBox(pod)
 	if err != nil {
 		return nil, err
@@ -68,7 +68,9 @@ func NewPodBox(pod *corev1.Pod) (*Pody, error) {
 	return pi, nil
 }
 
-func NewNodeFakePodBox(name string) (*Pody, error) {
+// NewNodePody creates Pody with only one ContainerBox filled with Pid from os.GetPid();
+// It's used to not have to create polimorphic code for nodes (e.g. TC working on a host ifaces).
+func NewNodePody(name string) (*Pody, error) {
 	// Creates empty Containers list with only one ContainerBox filled with Pid from os.GetPid()
 	hosts := make([]*ContainerBox, 0)
 	pid := uint32(os.Getpid())
@@ -94,15 +96,15 @@ func NewNodeFakePodBox(name string) (*Pody, error) {
 	return fakePody, nil
 }
 
-func (pb *Pody) String() string {
-	return fmt.Sprintf("Pody: %s/%s", pb.Namespace, pb.Name)
+func (py *Pody) String() string {
+	return fmt.Sprintf("Pody: %s/%s", py.Namespace, py.Name)
 }
 
 // Set sets in a safe manner Pody fields.
-func (pb *Pody) Set(fn func(v *Pody) error) error {
-	pb.Lock()
-	defer pb.Unlock()
-	return fn(pb)
+func (py *Pody) Set(fn func(v *Pody) error) error {
+	py.Lock()
+	defer py.Unlock()
+	return fn(py)
 }
 
 //func (nb *NodeBox) Set(fn func(v *NodeBox) error) error {
@@ -116,7 +118,7 @@ func (pb *Pody) Set(fn func(v *Pody) error) error {
 //	pi.RLock()
 //	defer pi.RUnlock()
 //
-//	npi, err := NewPodBox(pod)
+//	npi, err := NewPody(pod)
 //	if err != nil {
 //		return changed, err
 //	}
@@ -135,30 +137,30 @@ func (pb *Pody) Set(fn func(v *Pody) error) error {
 //	return changed, nil
 //}
 
-func (pb *Pody) NamespaceName() types.NamespacedName {
-	return types.NamespacedName{Namespace: pb.Namespace, Name: pb.Name}
+func (py *Pody) NamespaceName() types.NamespacedName {
+	return types.NamespacedName{Namespace: py.Namespace, Name: py.Name}
 }
 
 //func (pb *NodeBox) NamespaceName() types.NamespacedName {
 //	return types.NamespacedName{Namespace: "", Name: ""}
 //}
 
-func (pb *Pody) RunBoxes(ctx context.Context, eggi *core.EggInfo) error {
-	pb.Lock()
-	defer pb.Unlock()
+func (py *Pody) RunBoxes(ctx context.Context, eggi *core.EggInfo) error {
+	py.Lock()
+	defer py.Unlock()
 
-	if len(pb.Containers) < 1 {
-		return fmt.Errorf("no containers in pod %s", pb.Name)
+	if len(py.Containers) < 1 {
+		return fmt.Errorf("no containers in pod %s", py.Name)
 	}
 
-	if eggi.ProgramType == common.ProgramTypeTC && pb.Boxer == nil {
-		container := pb.Containers[0]
+	if eggi.ProgramType == common.ProgramTypeTC && py.Boxer == nil {
+		container := py.Containers[0]
 		if container.Ready == true && container.AssetStatus == common.AssetNew {
 			// not nil for Node
-			if pb.Boxer == nil {
-				pb.Boxer = core.NewBoxy(eggi)
+			if py.Boxer == nil {
+				py.Boxer = core.NewBoxy(eggi)
 			}
-			err := pb.Boxer.RunWithContainer(ctx, container)
+			err := py.Boxer.RunWithContainer(ctx, container)
 			if err != nil {
 				return err
 			}
@@ -166,11 +168,11 @@ func (pb *Pody) RunBoxes(ctx context.Context, eggi *core.EggInfo) error {
 		}
 		return nil
 	} else {
-		for i := range pb.Containers {
-			container := pb.Containers[i]
+		for i := range py.Containers {
+			container := py.Containers[i]
 			if container.Ready == true && container.AssetStatus == common.AssetNew {
 				// not nil for Node
-				if pb.Boxer == nil {
+				if py.Boxer == nil {
 					container.Boxer = core.NewBoxy(eggi)
 				}
 				err := container.Boxer.RunWithContainer(ctx, container)
@@ -181,7 +183,7 @@ func (pb *Pody) RunBoxes(ctx context.Context, eggi *core.EggInfo) error {
 		}
 	}
 
-	pb.PairedWithEgg = &types.NamespacedName{Namespace: "", Name: eggi.Name}
+	py.PairedWithEgg = &types.NamespacedName{Namespace: "", Name: eggi.Name}
 
 	return nil
 }
@@ -203,14 +205,14 @@ func (pb *Pody) RunBoxes(ctx context.Context, eggi *core.EggInfo) error {
 //	return nil
 //}
 
-func (pb *Pody) StopBoxes() error {
-	pb.Lock()
-	defer pb.Unlock()
+func (py *Pody) StopBoxes() error {
+	py.Lock()
+	defer py.Unlock()
 
 	var err error
 	var resErr error
-	if pb.Boxer != nil {
-		err = pb.Boxer.Stop()
+	if py.Boxer != nil {
+		err = py.Boxer.Stop()
 		if err != nil {
 			// append err to existing resErr if not nil
 			resErr = fmt.Errorf("%v\n%v", resErr, err)
@@ -218,9 +220,9 @@ func (pb *Pody) StopBoxes() error {
 		}
 	}
 
-	for i := range pb.Containers {
-		if pb.Containers[i].Boxer != nil {
-			err = pb.Containers[i].Boxer.Stop()
+	for i := range py.Containers {
+		if py.Containers[i].Boxer != nil {
+			err = py.Containers[i].Boxer.Stop()
 			if err != nil {
 				// append err to existing resErr if not nil
 				resErr = fmt.Errorf("%v\n%v", resErr, err)
@@ -232,23 +234,23 @@ func (pb *Pody) StopBoxes() error {
 }
 
 // WaitBoxes waits for all boxes to finish. Blocking call.
-func (pb *Pody) WaitBoxes() {
+func (py *Pody) WaitBoxes() {
 	var podyWaitGroup sync.WaitGroup
 
-	if pb.Boxer != nil {
+	if py.Boxer != nil {
 		podyWaitGroup.Add(1)
 		go func() {
 			defer podyWaitGroup.Done()
-			pb.Boxer.Wait()
+			py.Boxer.Wait()
 		}()
 	}
 
-	for i := range pb.Containers {
-		if pb.Containers[i].Boxer != nil {
+	for i := range py.Containers {
+		if py.Containers[i].Boxer != nil {
 			podyWaitGroup.Add(1)
 			go func() {
 				defer podyWaitGroup.Done()
-				pb.Containers[i].Boxer.Wait()
+				py.Containers[i].Boxer.Wait()
 			}()
 		}
 	}
@@ -256,14 +258,14 @@ func (pb *Pody) WaitBoxes() {
 	podyWaitGroup.Wait()
 }
 
-func (pb *Pody) UpdateBoxes(ctx context.Context) error {
-	pb.Lock()
-	defer pb.Unlock()
+func (py *Pody) UpdateBoxes(ctx context.Context) error {
+	py.Lock()
+	defer py.Unlock()
 
 	var err error
 	var resErr error
-	if pb.Boxer != nil {
-		err = pb.Boxer.UpdateRunning(ctx)
+	if py.Boxer != nil {
+		err = py.Boxer.UpdateRunning(ctx)
 		if err != nil {
 			// append err to existing resErr if not nil
 			resErr = fmt.Errorf("%v\n%v", resErr, err)
@@ -271,9 +273,9 @@ func (pb *Pody) UpdateBoxes(ctx context.Context) error {
 		}
 	}
 
-	for i := range pb.Containers {
-		if pb.Containers[i].Boxer != nil {
-			err = pb.Containers[i].Boxer.UpdateRunning(ctx)
+	for i := range py.Containers {
+		if py.Containers[i].Boxer != nil {
+			err = py.Containers[i].Boxer.UpdateRunning(ctx)
 			if err != nil {
 				// append err to existing resErr if not nil
 				resErr = fmt.Errorf("%v\n%v", resErr, err)
