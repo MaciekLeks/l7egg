@@ -62,12 +62,12 @@ func main() {
 	nodePod, err := controller.NewNodePody("fake-node")
 
 	if err != nil {
-		fmt.Errorf("Creating client egg.", err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
 	if err := nodePod.RunBoxySet(ctx, clientegg); err != nil {
-		fmt.Errorf("Running node pod.", err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
