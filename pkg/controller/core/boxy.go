@@ -209,15 +209,16 @@ func (b *CgroupNetClsBoxy) Run(ctx context.Context) error {
 	return b.ebpfy.runNetClsCgroupStack(netNsPath, b.cgroupNetCls, b.options.pid)
 }
 
-func (b *CgroupNetClsBoxy) Stop() {
+func (b *CgroupNetClsBoxy) Stop() error {
 	err := b.ebpfy.stopNetClsCgroupStack(b.netNsPath)
 	if err != nil {
-		klog.Errorf("failed to stop net cls cgroup stack: %v", err)
+		return err
 	}
 	err = b.cgroupNetCls.Delete()
 	if err != nil {
-		klog.Errorf("failed to delete net cls cgroup: %v", err)
+		return fmt.Errorf("failed to delete net cls cgroup: %v", err)
 	}
+	return b.Boxy.Stop()
 }
 
 func (b *Boxy) UpdateRunning(ctx context.Context) error {
