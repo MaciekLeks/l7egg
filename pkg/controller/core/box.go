@@ -21,7 +21,7 @@ package core
 //type EggBox struct {
 //	stopFunc    context.CancelFunc
 //	waitGroup   *sync.WaitGroup //TODO: only ene goroutine (in run(...)) - changing to channel?
-//	egg         *egg
+//	ebpfy         *ebpfy
 //	programInfo common.ProgramInfo
 //	//netNsPath string
 //	// active if box with bpf is running
@@ -29,7 +29,7 @@ package core
 //}
 //
 //type IEggBox interface {
-//	Egg() *egg
+//	Egg() *ebpfy
 //}
 //
 ////type eggManager struct {
@@ -43,12 +43,12 @@ package core
 ////	once     sync.Once
 ////)
 //
-//func (box *EggBox) Egg() *egg {
-//	return box.egg
+//func (box *EggBox) Egg() *ebpfy {
+//	return box.ebpfy
 //}
 //
-//func (box *EggBox) Boxes() *egg {
-//	return box.egg
+//func (box *EggBox) Boxes() *ebpfy {
+//	return box.ebpfy
 //}
 
 //func BpfManagerInstance() *eggManager {
@@ -88,16 +88,16 @@ package core
 //func (m *eggManager) BoxStore(ctx context.Context, boxKey common.BoxKey, ceggi *EggInfo) error {
 //	logger := klog.FromContext(ctx)
 //	logger.Info("Storing box for boxKey%s'\n", boxKey)
-//	egg := newEmptyEgg(ceggi)
+//	ebpfy := newEbpfy(ceggi)
 //	if ceggi.ProgramType == common.ProgramTypeCgroup { //TODO needed only if shaping
 //		cgroup, err := net.CreateCgroupNetCls(net.CgroupFsName, net.TcHandleHtbClass) //TODO classid: 10:10 always?
 //		if err != nil {
 //			return err
 //		}
-//		egg.cgroupNetCls = cgroup
+//		ebpfy.cgroupNetCls = cgroup
 //	}
 //	var box EggBox
-//	box.egg = egg
+//	box.ebpfy = ebpfy
 //	m.Boxes.Store(boxKey, &box)
 //
 //	return nil
@@ -117,7 +117,7 @@ package core
 //	box.waitGroup = &subWaitGroup
 //	//box.netNsPath = netNsPath
 //	box.programInfo = common.ProgramInfo{
-//		box.egg.EggInfo.ProgramType,
+//		box.ebpfy.EggInfo.ProgramType,
 //		netNsPath,
 //		cgroupPath,
 //	}
@@ -126,7 +126,7 @@ package core
 //
 //	m.Boxes.Store(boxKey, box)
 //
-//	return box.egg.run(subCtx, &subWaitGroup, box.programInfo /*netNsPath, cgroupPath*/, pid)
+//	return box.ebpfy.run(subCtx, &subWaitGroup, box.programInfo /*netNsPath, cgroupPath*/, pid)
 //}
 
 // Stop Stops one box
@@ -253,8 +253,8 @@ package core
 //		return fmt.Errorf("can't find box")
 //	}
 //
-//	fmt.Printf("box.egg %#v\n", box.egg)
-//	if err := box.egg.updateCIDRs(cidrs); err != nil {
+//	fmt.Printf("box.ebpfy %#v\n", box.ebpfy)
+//	if err := box.ebpfy.updateCIDRs(cidrs); err != nil {
 //		return err
 //	}
 //
@@ -272,8 +272,8 @@ package core
 //		return fmt.Errorf("can't find box")
 //	}
 //
-//	fmt.Printf("box.egg %#v\n", box.egg)
-//	if err := box.egg.updateCNs(cns); err != nil {
+//	fmt.Printf("box.ebpfy %#v\n", box.ebpfy)
+//	if err := box.ebpfy.updateCNs(cns); err != nil {
 //		return err
 //	}
 //

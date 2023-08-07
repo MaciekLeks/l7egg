@@ -30,9 +30,9 @@ import (
 	"unsafe"
 )
 
-// egg holds EggInfo (extracted from ClusterEggSpec) and ebpf related structures, e.g. maps, channels operating on that maps
-type egg struct {
-	// Depreciated: should all part of egg struct
+// ebpfy holds EggInfo (extracted from ClusterEggSpec) and ebpf related structures, e.g. maps, channels operating on that maps
+type ebpfy struct {
+	// Depreciated: should all part of ebpfy struct
 	EggInfo      *EggInfo //TOOD remove from here
 	bpfModule    *bpf.Module
 	ipv4ACL      *bpf.BPFMap
@@ -42,22 +42,22 @@ type egg struct {
 	//aclLoock  sync.RWMutex
 }
 
-func newEmptyEgg(eggi *EggInfo) *egg {
-	var egg egg
+func newEbpfy(eggi *EggInfo) *ebpfy {
+	var egg ebpfy
 	egg.EggInfo = eggi
 	return &egg
 }
 
-// run runs the egg, and if neither nsNetPath nor cgroupPath is Set, it will run the egg in the current network netspace (tc over cgroup
-func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, programType common.ProgramType, netNsPath string, cgroupPath string, pid uint32) error {
+// run runs the ebpfy, and if neither nsNetPath nor cgroupPath is Set, it will run the ebpfy in the current network netspace (tc over cgroup
+func (ey *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType common.ProgramType, netNsPath string, cgroupPath string, pid uint32) error {
 	var err error
 
-	egg.bpfModule, err = bpf.NewModuleFromFile(BpfObjectFileName)
+	ey.bpfModule, err = bpf.NewModuleFromFile(BpfObjectFileName)
 	if err != nil {
 		return err
 	}
 
-	err = egg.bpfModule.BPFLoadObject()
+	err = ey.bpfModule.BPFLoadObject()
 	if err != nil {
 		return err
 	}
@@ -68,32 +68,32 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, programType common.
 	if /*len(cgroupPath) == 0*/ programType == common.ProgramTypeTC {
 		time.Sleep(4 * time.Second)
 
-		//err = attachTcProg(egg.bpfModule, egg.EggInfo.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
-		err = attachTcBpfIngressStack(egg.bpfModule, egg.EggInfo.EgressInterface, netNsPath)
+		//err = attachTcProg(ebpfy.bpfModule, ebpfy.EggInfo.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
+		err = attachTcBpfIngressStack(ey.bpfModule, ey.EggInfo.EgressInterface, netNsPath)
 		must(err, "Can't attach TC hook.")
-		//err = attachTcProg(egg.bpfModule, egg.EggInfo.EgressInterface, bpf.BPFTcEgress, "tc_egress")
-		err = attachTcBpfEgressStack(egg.bpfModule, egg.EggInfo.EgressInterface, netNsPath, egg.EggInfo.Shaping)
+		//err = attachTcProg(ebpfy.bpfModule, ebpfy.EggInfo.EgressInterface, bpf.BPFTcEgress, "tc_egress")
+		err = attachTcBpfEgressStack(ey.bpfModule, ey.EggInfo.EgressInterface, netNsPath, ey.EggInfo.Shaping)
 		must(err, "Can't attach TC hook.")
 		logger.Info("Attached eBPF program to tc hooks")
 
-		//tools.ShapeEgressInterface(netNsPath, egg.EgressInterface)
+		//tools.ShapeEgressInterface(netNsPath, ebpfy.EgressInterface)
 
 	} else {
-		err = attachTcCgroupEgressStack(egg.EggInfo.EgressInterface, egg.cgroupNetCls, egg.EggInfo.Shaping, netNsPath, pid)
+		err = attachTcCgroupEgressStack(ey.EggInfo.EgressInterface, ey.cgroupNetCls, ey.EggInfo.Shaping, netNsPath, pid)
 		must(err, "can't attach tc cgroup stack")
-		err = attachCgroupProg(egg.bpfModule, "cgroup__skb_egress", bpf.BPFAttachTypeCgroupInetEgress, cgroupPath)
+		err = attachCgroupProg(ey.bpfModule, "cgroup__skb_egress", bpf.BPFAttachTypeCgroupInetEgress, cgroupPath)
 		must(err, "can't attach cgroup hook")
-		err = attachCgroupProg(egg.bpfModule, "cgroup__skb_ingress", bpf.BPFAttachTypeCgroupInetIngress, cgroupPath)
+		err = attachCgroupProg(ey.bpfModule, "cgroup__skb_ingress", bpf.BPFAttachTypeCgroupInetIngress, cgroupPath)
 		must(err, "can't attach cgroup hook")
 		logger.Info("Attached eBPF program to cgroup hooks")
-		//err = attachCgroupProg(egg.bpfModule, "cgroup__sock", bpf.BPFAttachTypeCgroupSockOps)
+		//err = attachCgroupProg(ebpfy.bpfModule, "cgroup__sock", bpf.BPFAttachTypeCgroupSockOps)
 		//must(err, "can't attach cgroup hook")
 
 	}
 
-	egg.packets = make(chan []byte) //TODO need Close() on this channel
+	ey.packets = make(chan []byte) //TODO need Close() on this channel
 
-	rb, err := egg.bpfModule.InitRingBuf("packets", egg.packets)
+	rb, err := ey.bpfModule.InitRingBuf("packets", ey.packets)
 	must(err, "Can't initialize ring buffer map.")
 
 	//rb.Start()
@@ -110,39 +110,39 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, programType common.
 	//	}
 	//}()
 
-	egg.ipv4ACL, err = egg.bpfModule.GetMap("ipv4_lpm_map")
-	egg.ipv6ACL, err = egg.bpfModule.GetMap("ipv6_lpm_map")
+	ey.ipv4ACL, err = ey.bpfModule.GetMap("ipv4_lpm_map")
+	ey.ipv6ACL, err = ey.bpfModule.GetMap("ipv6_lpm_map")
 	must(err, "Can't get map") //TODO remove Must
 
-	egg.initCIDRs()
-	egg.initCNs()
+	ey.initCIDRs()
+	ey.initCNs()
 
 	wg.Add(1)
 	go func() {
 		//LIFO
 		defer wg.Done() //added with new tc filter approach via go-tc
-		defer egg.bpfModule.Close()
+		defer ey.bpfModule.Close()
 		defer func() {
 			if /*len(cgroupPath) == 0*/ programType == common.ProgramTypeTC {
-				//tools.CleanInterfaces(netNsPath, egg.IngressInterface, egg.EgressInterface)
-				if err := net.CleanIngressTcNetStack(netNsPath, egg.EggInfo.IngressInterface); err != nil {
+				//tools.CleanInterfaces(netNsPath, ebpfy.IngressInterface, ebpfy.EgressInterface)
+				if err := net.CleanIngressTcNetStack(netNsPath, ey.EggInfo.IngressInterface); err != nil {
 					fmt.Println(err)
 				}
-				if err := net.CleanEgressTcNetStack(netNsPath, egg.EggInfo.EgressInterface); err != nil {
+				if err := net.CleanEgressTcNetStack(netNsPath, ey.EggInfo.EgressInterface); err != nil {
 					fmt.Println(err)
 				}
 			} else {
 				// TODO add condition on shaping
-				if err := net.CleanEgressTcNetStack(netNsPath, egg.EggInfo.EgressInterface); err != nil {
+				if err := net.CleanEgressTcNetStack(netNsPath, ey.EggInfo.EgressInterface); err != nil {
 					fmt.Println(err)
 				}
 			}
 		}()
 
 		var lwg sync.WaitGroup
-		//runMapLooper(ctx, egg.ipv4ACL, egg.CNs, ipv4, &lwg, netNsPath, cgroupPath)
-		//runMapLooper(ctx, egg.ipv6ACL, egg.CNs, ipv6, &lwg, netNsPath, cgroupPath)
-		egg.runPacketsLooper(ctx, &lwg, netNsPath, cgroupPath)
+		//runMapLooper(ctx, ebpfy.ipv4ACL, ebpfy.CNs, ipv4, &lwg, netNsPath, cgroupPath)
+		//runMapLooper(ctx, ebpfy.ipv6ACL, ebpfy.CNs, ipv6, &lwg, netNsPath, cgroupPath)
+		ey.runPacketsLooper(ctx, &lwg, netNsPath, cgroupPath)
 		lwg.Wait()
 
 		fmt.Println("///Stopping recvLoop.")
@@ -154,11 +154,11 @@ func (egg *egg) run(ctx context.Context, wg *sync.WaitGroup, programType common.
 	return nil
 }
 
-func (egg *egg) initCIDRs() {
+func (ey *ebpfy) initCIDRs() {
 	//{cidrs
 	fmt.Println("[ACL]: Init")
-	for i := 0; i < egg.EggInfo.CIDRs.Len(); i++ {
-		cidr := egg.EggInfo.CIDRs.Get(i)
+	for i := 0; i < ey.EggInfo.CIDRs.Len(); i++ {
+		cidr := ey.EggInfo.CIDRs.Get(i)
 		val := ipLPMVal{
 			ttl:     0,
 			counter: 0,
@@ -169,38 +169,38 @@ func (egg *egg) initCIDRs() {
 		var err error
 		switch ip := cidr.lpmKey.(type) {
 		case ipv4LPMKey:
-			err = updateACLValueNew(egg.ipv4ACL, ip, val)
+			err = updateACLValueNew(ey.ipv4ACL, ip, val)
 		case ipv6LPMKey:
-			err = updateACLValueNew(egg.ipv6ACL, ip, val)
+			err = updateACLValueNew(ey.ipv6ACL, ip, val)
 		}
 		must(err, "Can't update ACL.")
-		egg.EggInfo.CIDRs.Update(i, func(current *CIDR) {
+		ey.EggInfo.CIDRs.Update(i, func(current *CIDR) {
 			current.status = common.AssetSynced
 		})
 	}
 }
 
 // initCNs
-func (egg *egg) initCNs() {
-	for i := 0; i < egg.EggInfo.CNs.Len(); i++ {
-		egg.EggInfo.CNs.Update(i, func(current *CN) {
+func (ey *ebpfy) initCNs() {
+	for i := 0; i < ey.EggInfo.CNs.Len(); i++ {
+		ey.EggInfo.CNs.Update(i, func(current *CN) {
 			//to have simmilar approach only with CIDRs
 			current.status = common.AssetSynced
 		})
 	}
 }
 
-func (egg *egg) updateCIDRs(cidrs []CIDR) error {
+func (ey *ebpfy) updateCIDRs(cidrs []CIDR) error {
 
-	for i := 0; i < egg.EggInfo.CIDRs.Len(); i++ {
-		egg.EggInfo.CIDRs.Update(i, func(current *CIDR) {
+	for i := 0; i < ey.EggInfo.CIDRs.Len(); i++ {
+		ey.EggInfo.CIDRs.Update(i, func(current *CIDR) {
 			current.status = common.AssetStale
 		})
 
-		current := egg.EggInfo.CIDRs.Get(i)
+		current := ey.EggInfo.CIDRs.Get(i)
 		for _, newone := range cidrs {
 			if current.cidr == newone.cidr {
-				egg.EggInfo.CIDRs.Update(i, func(current *CIDR) {
+				ey.EggInfo.CIDRs.Update(i, func(current *CIDR) {
 					current.status = common.AssetSynced
 				})
 				newone.status = common.AssetSynced
@@ -209,7 +209,7 @@ func (egg *egg) updateCIDRs(cidrs []CIDR) error {
 	}
 
 	// ipv4: Set stale
-	i := egg.ipv4ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
+	i := ey.ipv4ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
 	for i.Next() {
 		fmt.Println("%%%>>>4.2")
 		if i.Err() != nil {
@@ -218,20 +218,20 @@ func (egg *egg) updateCIDRs(cidrs []CIDR) error {
 
 		keyBytes := i.Key()
 		key := unmarshalIpv4ACLKey(keyBytes)
-		val := getACLValue(egg.ipv4ACL, key)
+		val := getACLValue(ey.ipv4ACL, key)
 
 		//we control CIDR with ttl=0 only
 		if val.ttl == 0 {
-			for i := 0; i < egg.EggInfo.CIDRs.Len(); i++ {
-				cidr := egg.EggInfo.CIDRs.Get(i)
+			for i := 0; i < ey.EggInfo.CIDRs.Len(); i++ {
+				cidr := ey.EggInfo.CIDRs.Get(i)
 				ipv4Key, ok := cidr.lpmKey.(ipv4LPMKey)
 				if ok {
 					if key.prefixLen == ipv4Key.prefixLen && key.data == ipv4Key.data {
 						if cidr.status == common.AssetStale {
 							val.status = uint8(common.AssetStale)
-							err := updateACLValueNew(egg.ipv4ACL, key, val)
+							err := updateACLValueNew(ey.ipv4ACL, key, val)
 							if err != nil {
-								return fmt.Errorf("Updating value status", egg)
+								return fmt.Errorf("Updating value status", ey)
 							}
 						}
 					}
@@ -240,7 +240,7 @@ func (egg *egg) updateCIDRs(cidrs []CIDR) error {
 		}
 	}
 	// ipv6: Set stale
-	i = egg.ipv6ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
+	i = ey.ipv6ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
 	for i.Next() {
 		fmt.Println("%%%>>>4.2")
 		if i.Err() != nil {
@@ -249,21 +249,21 @@ func (egg *egg) updateCIDRs(cidrs []CIDR) error {
 
 		keyBytes := i.Key()
 		key := unmarshalIpv6ACLKey(keyBytes)
-		val := getACLValue(egg.ipv6ACL, key)
+		val := getACLValue(ey.ipv6ACL, key)
 
 		//we control CIDR with ttl=0 only
 		if val.ttl == 0 {
-			for i := 0; i < egg.EggInfo.CIDRs.Len(); i++ {
-				cidr := egg.EggInfo.CIDRs.Get(i)
+			for i := 0; i < ey.EggInfo.CIDRs.Len(); i++ {
+				cidr := ey.EggInfo.CIDRs.Get(i)
 				ipv6Key, ok := cidr.lpmKey.(ipv6LPMKey)
 				if ok {
 					if key.prefixLen == ipv6Key.prefixLen && key.data == ipv6Key.data {
 						if cidr.status == common.AssetStale {
 
 							val.status = uint8(common.AssetStale)
-							err := updateACLValueNew(egg.ipv6ACL, key, val)
+							err := updateACLValueNew(ey.ipv6ACL, key, val)
 							if err != nil {
-								return fmt.Errorf("Updating value status", egg)
+								return fmt.Errorf("Updating value status", ey)
 							}
 						}
 					}
@@ -281,17 +281,17 @@ func (egg *egg) updateCIDRs(cidrs []CIDR) error {
 				status:  uint8(common.AssetSynced),
 			}
 
-			err := updateACLValueNew(egg.ipv4ACL, cidr.lpmKey, val)
+			err := updateACLValueNew(ey.ipv4ACL, cidr.lpmKey, val)
 			if err != nil {
 				return fmt.Errorf("Can't update ACL %#v", err)
 			}
 			cidr.status = common.AssetSynced
-			egg.EggInfo.CIDRs.Append(cidr)
+			ey.EggInfo.CIDRs.Append(cidr)
 		}
 	}
 
-	for i := 0; i < egg.EggInfo.CIDRs.Len(); i++ {
-		cidr := egg.EggInfo.CIDRs.Get(i)
+	for i := 0; i < ey.EggInfo.CIDRs.Len(); i++ {
+		cidr := ey.EggInfo.CIDRs.Get(i)
 		if cidr.status != common.AssetSynced {
 			fmt.Printf("Stale keys %#v\n", cidr)
 
@@ -301,17 +301,17 @@ func (egg *egg) updateCIDRs(cidrs []CIDR) error {
 	return nil
 }
 
-func (egg *egg) updateCNs(cns []CN) error {
-	for i := 0; i < egg.EggInfo.CNs.Len(); i++ {
-		egg.EggInfo.CNs.Update(i, func(current *CN) {
+func (ey *ebpfy) updateCNs(cns []CN) error {
+	for i := 0; i < ey.EggInfo.CNs.Len(); i++ {
+		ey.EggInfo.CNs.Update(i, func(current *CN) {
 			current.status = common.AssetStale
 		})
 
-		current := egg.EggInfo.CNs.Get(i)
+		current := ey.EggInfo.CNs.Get(i)
 		for _, newone := range cns {
 			if current.cn == newone.cn {
-				egg.EggInfo.CNs.Update(i, func(current *CN) {
-					fmt.Println("%%%>>> egg.CNs.UpdateEgg")
+				ey.EggInfo.CNs.Update(i, func(current *CN) {
+					fmt.Println("%%%>>> ebpfy.CNs.UpdateEgg")
 					current.status = common.AssetSynced
 				})
 				newone.status = common.AssetSynced
@@ -320,7 +320,7 @@ func (egg *egg) updateCNs(cns []CN) error {
 	}
 
 	// delete
-	i := egg.ipv4ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
+	i := ey.ipv4ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
 	for i.Next() {
 		if i.Err() != nil {
 			return fmt.Errorf("BPF Map Iterator error", i.Err())
@@ -328,20 +328,20 @@ func (egg *egg) updateCNs(cns []CN) error {
 
 		keyBytes := i.Key()
 		key := unmarshalIpv4ACLKey(keyBytes)
-		val := getACLValue(egg.ipv4ACL, key)
+		val := getACLValue(ey.ipv4ACL, key)
 
 		//we control CNs with ttl!=0 only
 		if val.ttl != 0 {
 			fmt.Println("%%%>>> Found ttl!=0")
-			for i := 0; i < egg.EggInfo.CNs.Len(); i++ {
-				current := egg.EggInfo.CNs.Get(i)
+			for i := 0; i < ey.EggInfo.CNs.Len(); i++ {
+				current := ey.EggInfo.CNs.Get(i)
 				if val.id == current.id {
 					if current.status == common.AssetStale {
 						fmt.Println("%%%>>> current.Status is Stale")
 						val.status = uint8(common.AssetStale)
-						err := updateACLValueNew(egg.ipv4ACL, key, val) //invalidate all IPs for stale CNs
+						err := updateACLValueNew(ey.ipv4ACL, key, val) //invalidate all IPs for stale CNs
 						if err != nil {
-							return fmt.Errorf("Updating value status", egg)
+							return fmt.Errorf("Updating value status", ey)
 						}
 					}
 				}
@@ -351,15 +351,15 @@ func (egg *egg) updateCNs(cns []CN) error {
 		//we control CNs with ttl!=0 only
 		if val.ttl != 0 {
 			fmt.Println("%%%>>> Found ttl!=0")
-			for i := 0; i < egg.EggInfo.CNs.Len(); i++ {
-				current := egg.EggInfo.CNs.Get(i)
+			for i := 0; i < ey.EggInfo.CNs.Len(); i++ {
+				current := ey.EggInfo.CNs.Get(i)
 				if val.id == current.id {
 					if current.status == common.AssetStale {
 						fmt.Println("%%%>>> current.Status is Stale")
 						val.status = uint8(common.AssetStale)
-						err := updateACLValueNew(egg.ipv4ACL, key, val) //invalidate all IPs for stale CNs
+						err := updateACLValueNew(ey.ipv4ACL, key, val) //invalidate all IPs for stale CNs
 						if err != nil {
-							return fmt.Errorf("Updating value status", egg)
+							return fmt.Errorf("Updating value status", ey)
 						}
 					}
 				}
@@ -371,12 +371,12 @@ func (egg *egg) updateCNs(cns []CN) error {
 		fmt.Println("%%%>>> adding new cn %v", cn)
 		if cn.status == common.AssetNew {
 			cn.status = common.AssetSynced
-			egg.EggInfo.CNs.Append(cn)
+			ey.EggInfo.CNs.Append(cn)
 		}
 	}
 
-	for i := 0; i < egg.EggInfo.CNs.Len(); i++ {
-		current := egg.EggInfo.CNs.Get(i)
+	for i := 0; i < ey.EggInfo.CNs.Len(); i++ {
+		current := ey.EggInfo.CNs.Get(i)
 		if current.status != common.AssetSynced {
 			fmt.Printf("CN: Stale key %#v\n", current)
 		}
@@ -385,7 +385,7 @@ func (egg *egg) updateCNs(cns []CN) error {
 	return nil
 }
 
-func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, netNsPath string, cgroupPath string) {
+func (ey *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, netNsPath string, cgroupPath string) {
 	lwg.Add(1)
 	go func() {
 		defer lwg.Done()
@@ -398,7 +398,7 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, netNs
 			case <-ctx.Done():
 				fmt.Println("[recvLoop]: stopCh closed.")
 				break recvLoop
-			case b, ok := <-egg.packets:
+			case b, ok := <-ey.packets:
 				fmt.Println("??????[2]")
 				if ok == false {
 					fmt.Println("[recvLoop]: Channel not OK!")
@@ -472,7 +472,7 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, netNs
 							//fmt.Println("key size:", unsafe.Sizeof(key))
 							//fmt.Println("key data:", key.data)
 
-							if cn, found := containsCN(egg.EggInfo.CNs, cn); found {
+							if cn, found := containsCN(ey.EggInfo.CNs, cn); found {
 								val := ipLPMVal{
 									ttl:     bootTtlNs,
 									counter: 0, //zero existsing elements :/ //TODO why 0?
@@ -481,12 +481,12 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, netNs
 								}
 								var err error
 								if a.Type == layers.DNSTypeA {
-									err = updateACLValueNew(egg.ipv4ACL, key, val)
+									err = updateACLValueNew(ey.ipv4ACL, key, val)
 								} else {
-									err = updateACLValueNew(egg.ipv6ACL, key, val)
+									err = updateACLValueNew(ey.ipv6ACL, key, val)
 								}
 								must(err, "Can't update ACL.")
-								fmt.Printf("egg-ref: %p, netNsPath: %s cgroupPath: %s - updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", egg, netNsPath, cgroupPath, cn, ip, ttlSec, ttlNs, bootTtlNs)
+								fmt.Printf("ebpfy-ref: %p, netNsPath: %s cgroupPath: %s - updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", ey, netNsPath, cgroupPath, cn, ip, ttlSec, ttlNs, bootTtlNs)
 
 							} else {
 								fmt.Println("DROP")
@@ -505,14 +505,14 @@ func (egg *egg) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, netNs
 						//	//fmt.Println("key size:", unsafe.Sizeof(key))
 						//	//fmt.Println("key data:", key.data)
 						//
-						//	if cn, found := containsCN(egg.CNs, cn); found {
+						//	if cn, found := containsCN(ebpfy.CNs, cn); found {
 						//		val := ipLPMVal{
 						//			ttl:     bootTtlNs,
 						//			counter: 0, //zero existsing elements :/
 						//			id:      cn.id,
 						//			status:  uint8(assetSynced),
 						//		}
-						//		err := updateACLValueNew(egg.ipv6ACL, key, val)
+						//		err := updateACLValueNew(ebpfy.ipv6ACL, key, val)
 						//		must(err, "Can't update ACL.")
 						//		fmt.Printf("Updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", cn, ip, ttlSec, ttlNs, bootTtlNs)
 						//

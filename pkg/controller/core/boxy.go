@@ -11,12 +11,25 @@ import (
 	"sync"
 )
 
+type BoxyOptions struct {
+	//Pid uint32
+	//NetClsCgroup *cgroup1.Cgroup
+	useNetCls bool
+}
+
 type Boxy struct {
 	stopFunc  context.CancelFunc
 	waitGroup *sync.WaitGroup //TODO: only ene goroutine (in run(...)) - changing to channel?
-	egg       *egg
+	ebpfy     *ebpfy
 	//programInfo common.ProgramInfo
 	netNsPath string
+	options   BoxyOptions
+}
+
+func WithNetCls() func(*BoxyOptions) {
+	return func(b *BoxyOptions) {
+		b.useNetCls = true
+	}
 }
 
 func (b *Boxy) RunBoxWithPid(ctx context.Context, pid uint32) error {
@@ -40,21 +53,25 @@ type TcBoxy struct {
 type CgroupBoxy struct {
 	*Boxy
 	cgroupPath   string
-	cgroupNetCls *cgroup1.Cgroup //references to egg cgroup net_cls for cgroup programs
+	cgroupNetCls *cgroup1.Cgroup //references to ebpfy cgroup net_cls for cgroup programs
 }
+
+//type NetClsCgroupBoxy struct {
+//	*Boxy
+//}
 
 //type CgroupNetClsBoxy struct {
 //	*Boxy
 //	cgroupNetCls cgroup1.Cgroup //cgroup net_cls for cgroup programs
 //}
 
-func NewBoxy(eggi *EggInfo) Boxer {
+func NewBoxy(eggi *EggInfo, options ...func(*BoxyOptions)) Boxer {
 	// returns CgroupBoxy or TcBoxy based on EggInfo.ProgramType
 	switch eggi.ProgramType {
 	case common.ProgramTypeTC:
 		return NewTcBoxy(eggi)
 	case common.ProgramTypeCgroup:
-		return NewCgroupBoxy(eggi)
+		return NewCgroupBoxy(eggi, options...)
 	default:
 		klog.Fatalf("unknown program type: %s", eggi.ProgramType)
 	}
@@ -64,17 +81,24 @@ func NewBoxy(eggi *EggInfo) Boxer {
 func NewTcBoxy(eggi *EggInfo) *TcBoxy {
 	return &TcBoxy{
 		Boxy: &Boxy{
-			egg: newEmptyEgg(eggi),
+			ebpfy: newEbpfy(eggi),
 		},
 	}
 }
 
-func NewCgroupBoxy(eggi *EggInfo) *CgroupBoxy {
-	return &CgroupBoxy{
+func NewCgroupBoxy(eggi *EggInfo, options ...func(*BoxyOptions)) *CgroupBoxy {
+	boxy := &CgroupBoxy{
 		Boxy: &Boxy{
-			egg: newEmptyEgg(eggi),
+			ebpfy:   newEbpfy(eggi),
+			options: BoxyOptions{},
 		},
 	}
+
+	for i := range options {
+		options[i](&boxy.options)
+	}
+
+	return boxy
 }
 
 func (b *Boxy) Stop() error {
@@ -84,11 +108,11 @@ func (b *Boxy) Stop() error {
 }
 
 func (b *Boxy) EggNamespaceName() types.NamespacedName {
-	return b.egg.EggInfo.NamespaceName()
+	return b.ebpfy.EggInfo.NamespaceName()
 }
 
 func (b *CgroupBoxy) Stop() error {
-	//_ = b.cgroupNetCls.Delete() //egg should Delete net class cgroup
+	//_ = b.cgroupNetCls.Delete() //ebpfy should Delete net class cgroup
 	return b.Stop()
 }
 
@@ -131,15 +155,15 @@ func (b *CgroupBoxy) RunWithPid(ctx context.Context, pid uint32) error {
 	b.cgroupPath = cgroupPath
 	b.netNsPath = netNsPath
 
-	if b.egg.EggInfo.Shaping != nil && b.egg.cgroupNetCls != nil {
-		//b.egg.addCgroupNetClsProgram(b.egg.cgroupNetCls, b.egg.EggInfo.Shaping)
+	if b.ebpfy.EggInfo.Shaping != nil && b.ebpfy.cgroupNetCls != nil {
+		//b.ebpfy.addCgroupNetClsProgram(b.ebpfy.cgroupNetCls, b.ebpfy.EggInfo.Shaping)
 		// build stack
 		// add filter
-		b.cgroupNetCls = &b.egg.cgroupNetCls
+		b.cgroupNetCls = &b.ebpfy.cgroupNetCls
 	}
 
 	return b.start(ctx, func(ctx context.Context) error {
-		return b.egg.run(ctx, b.waitGroup, common.ProgramTypeCgroup, netNsPath, cgroupPath, pid)
+		return b.ebpfy.run(ctx, b.waitGroup, common.ProgramTypeCgroup, netNsPath, cgroupPath, pid)
 	})
 }
 
@@ -152,7 +176,7 @@ func (b *TcBoxy) RunWithPid(ctx context.Context, pid uint32) error {
 	b.netNsPath = netNsPath
 
 	return b.start(ctx, func(ctx context.Context) error {
-		return b.egg.run(ctx, b.waitGroup, common.ProgramTypeTC, netNsPath, "", pid)
+		return b.ebpfy.run(ctx, b.waitGroup, common.ProgramTypeTC, netNsPath, "", pid)
 	})
 }
 
@@ -187,11 +211,11 @@ func (b *TcBoxy) RunWithPid(ctx context.Context, pid uint32) error {
 //}
 
 func (b *Boxy) UpdateRunning(ctx context.Context) error {
-	if err := b.egg.updateCIDRs(b.egg.EggInfo.CIDRs); err != nil {
+	if err := b.ebpfy.updateCIDRs(b.ebpfy.EggInfo.CIDRs); err != nil {
 		return err
 	}
 
-	if err := b.egg.updateCNs(b.egg.EggInfo.CNs); err != nil {
+	if err := b.ebpfy.updateCNs(b.ebpfy.EggInfo.CNs); err != nil {
 		return err
 	}
 
