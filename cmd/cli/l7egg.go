@@ -4,11 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
+	"github.com/MaciekLeks/l7egg/pkg/controller"
 	"github.com/MaciekLeks/l7egg/pkg/controller/common"
 	"github.com/MaciekLeks/l7egg/pkg/controller/core"
 	"github.com/MaciekLeks/l7egg/pkg/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"os"
 )
 
@@ -37,8 +37,7 @@ func main() {
 		return
 	}
 
-	manager := core.BpfManagerInstance()
-	clientegg, err := middle.NewEggInfo(
+	clientegg, err := core.NewEggInfo(
 		v1alpha1.ClusterEgg{
 			TypeMeta: metav1.TypeMeta{},
 			ObjectMeta: metav1.ObjectMeta{
@@ -50,7 +49,7 @@ func main() {
 					InterfaceName: *eface,
 					CommonNames:   cnList,
 					CIDRs:         cidrList,
-					Shaping:       v1alpha1.ShapingSpec{},
+					Shaping:       &v1alpha1.ShapingSpec{},
 					PodSelector:   nil,
 				},
 				Ingress: v1alpha1.IngressSpec{
@@ -59,17 +58,18 @@ func main() {
 			},
 		})
 
-	var defaultBoxKey common.BoxKey
-	defaultBoxKey.Egg = types.NamespacedName{Name: "default"}
 	ctx := utils.SetupSignalHandler()
-	manager.BoxStore(ctx, defaultBoxKey, clientegg)
+	nodePod, err := controller.NewNodePody("fake-node")
 
 	if err != nil {
 		fmt.Errorf("Creating client egg.", err)
 		os.Exit(1)
 	}
 
-	manager.BoxStart(ctx, defaultBoxKey, "", "", 0)
-	manager.Wait()
+	if err := nodePod.RunBoxySet(ctx, clientegg); err != nil {
+		fmt.Errorf("Running node pod.", err)
+		os.Exit(1)
+	}
 
+	nodePod.WaitBoxes()
 }
