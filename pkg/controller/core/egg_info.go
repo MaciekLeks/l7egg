@@ -114,7 +114,7 @@ func parseAttribute(attrVal string, unitBase string) (retVal uint32, err error) 
 }
 
 // parseShapingInfo parses input ShapingSpec and returns ShapingInfo using parseBytes for rates.
-func parseShapingInfo(shaping v1alpha1.ShapingSpec) (shapingInfo ShapingInfo, err error) {
+func parseShapingInfo(shaping *v1alpha1.ShapingSpec) (shapingInfo ShapingInfo, err error) {
 	if shapingInfo.Rate, err = parseAttribute(shaping.Rate, "bit"); err != nil {
 		return
 	}
