@@ -294,7 +294,7 @@ func runBoxessOnHost(ctx context.Context, eggi *core.EggInfo, pb *Pody) error {
 	}
 
 	if nodeHostname == pb.NodeName {
-		err = pb.RunBoxes(ctx, eggi)
+		err = pb.RunBoxySet(ctx, eggi)
 		if err != nil {
 			return err
 		}

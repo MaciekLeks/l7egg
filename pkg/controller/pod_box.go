@@ -38,7 +38,7 @@ type Pody struct {
 //type ComponentBoxer interface {
 //	Set(fn func(v *Pody) error) error
 //	NamespaceName() types.NamespacedName
-//	RunBoxes(ctx context.Context, eggi *core.EggInfo) error
+//	RunBoxySet(ctx context.Context, eggi *core.EggInfo) error
 //	StopBoxes() error
 //}
 
@@ -145,7 +145,7 @@ func (py *Pody) NamespaceName() types.NamespacedName {
 //	return types.NamespacedName{Namespace: "", Name: ""}
 //}
 
-func (py *Pody) RunBoxes(ctx context.Context, eggi *core.EggInfo) error {
+func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.EggInfo) error {
 	py.Lock()
 	defer py.Unlock()
 
@@ -158,10 +158,15 @@ func (py *Pody) RunBoxes(ctx context.Context, eggi *core.EggInfo) error {
 		container := py.Containers[0]
 		if container.Ready == true && container.AssetStatus == common.AssetNew {
 			// not nil for Node
+
+			var err error
 			if py.Boxer == nil {
-				py.Boxer = core.NewBoxy(eggi)
+				py.Boxer, err = core.NewBoxy(eggi, core.WithPid(container.Pid))
+				if err != nil {
+					return err
+				}
 			}
-			err := py.Boxer.RunWithPid(ctx, container.Pid)
+			err = py.Boxer.Run(ctx)
 			container.AssetStatus = common.AssetSynced
 			if err != nil {
 				return err
@@ -170,15 +175,33 @@ func (py *Pody) RunBoxes(ctx context.Context, eggi *core.EggInfo) error {
 		}
 		return nil
 	} else {
+		var err error
 		for i := range py.Containers {
 			container := py.Containers[i]
 			if container.Ready == true && container.AssetStatus == common.AssetNew {
-				container.Boxer = core.NewBoxy(eggi)
-				err := container.Boxer.RunWithPid(ctx, container.Pid)
+
+				container.Boxer, err = core.NewBoxy(eggi)
+				if err != nil {
+					return err
+				}
+				err := container.Boxer.Run(ctx)
 				if err != nil {
 					return err
 				}
 				container.AssetStatus = common.AssetSynced
+			}
+		}
+
+		// run TC part of the program
+		if eggi.Shaping != nil && py.Boxer == nil {
+			// we need net netspace only for TC
+			py.Boxer, err = core.NewBoxy(eggi, core.WithNetCls(), core.WithPid(py.Containers[0].Pid))
+			if err != nil {
+				return err
+			}
+			err := py.Containers[0].Boxer.Run(ctx)
+			if err != nil {
+				return err
 			}
 		}
 	}
@@ -188,7 +211,7 @@ func (py *Pody) RunBoxes(ctx context.Context, eggi *core.EggInfo) error {
 	return nil
 }
 
-//func (nb *NodeBox) RunBoxes(ctx context.Context, eggi *core.EggInfo) error {
+//func (nb *NodeBox) RunBoxySet(ctx context.Context, eggi *core.EggInfo) error {
 //	nb.Lock()
 //	defer nb.Unlock()
 //

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/controller/common"
+	"github.com/MaciekLeks/l7egg/pkg/net"
 	cgroupsv2 "github.com/containerd/cgroups/v2"
 	"github.com/containerd/cgroups/v3/cgroup1"
 	"k8s.io/apimachinery/pkg/types"
@@ -15,6 +16,7 @@ type BoxyOptions struct {
 	//Pid uint32
 	//NetClsCgroup *cgroup1.Cgroup
 	useNetCls bool
+	pid       uint32
 }
 
 type Boxy struct {
@@ -32,6 +34,12 @@ func WithNetCls() func(*BoxyOptions) {
 	}
 }
 
+func WithPid(pid uint32) func(*BoxyOptions) {
+	return func(b *BoxyOptions) {
+		b.pid = pid
+	}
+}
+
 func (b *Boxy) RunBoxWithPid(ctx context.Context, pid uint32) error {
 	//TODO implement me
 	panic("implement me")
@@ -41,7 +49,7 @@ type Boxer interface {
 	Stop() error
 	Wait()
 	//RunWithContainer(ctx context.Context, cb *controller.ContainerBox) error
-	RunWithPid(ctx context.Context, pid uint32) error
+	Run(ctx context.Context) error
 	UpdateRunning(ctx context.Context) error
 	EggNamespaceName() types.NamespacedName
 }
@@ -52,53 +60,70 @@ type TcBoxy struct {
 
 type CgroupBoxy struct {
 	*Boxy
-	cgroupPath   string
-	cgroupNetCls *cgroup1.Cgroup //references to ebpfy cgroup net_cls for cgroup programs
+	cgroupPath string
+	//cgroupNetCls *cgroup1.Cgroup //references to ebpfy cgroup net_cls for cgroup programs
 }
 
-//type NetClsCgroupBoxy struct {
-//	*Boxy
-//}
+type CgroupNetClsBoxy struct {
+	*Boxy
+	cgroupNetCls cgroup1.Cgroup //cgroup net_cls for cgroup programs
+}
 
-//type CgroupNetClsBoxy struct {
-//	*Boxy
-//	cgroupNetCls cgroup1.Cgroup //cgroup net_cls for cgroup programs
-//}
-
-func NewBoxy(eggi *EggInfo, options ...func(*BoxyOptions)) Boxer {
+func NewBoxy(eggi *EggInfo, options ...func(*BoxyOptions)) (Boxer, error) {
 	// returns CgroupBoxy or TcBoxy based on EggInfo.ProgramType
+
+	opts := BoxyOptions{}
+	for i := range options {
+		options[i](&opts)
+	}
+
+	if opts.pid == 0 {
+		return nil, fmt.Errorf("pid cannot be 0")
+	}
+
+	boxy := &Boxy{
+		ebpfy:   newEbpfy(eggi),
+		options: opts,
+	}
+
 	switch eggi.ProgramType {
 	case common.ProgramTypeTC:
-		return NewTcBoxy(eggi)
+		return newTcBoxy(boxy), nil
 	case common.ProgramTypeCgroup:
-		return NewCgroupBoxy(eggi, options...)
+		if opts.useNetCls {
+			return newCgroupNetClsBoxy(boxy)
+		} else {
+			return newCgroupBoxy(boxy), nil
+		}
 	default:
 		klog.Fatalf("unknown program type: %s", eggi.ProgramType)
 	}
-	return nil
+
+	return nil, nil
 }
 
-func NewTcBoxy(eggi *EggInfo) *TcBoxy {
+func newTcBoxy(boxy *Boxy) *TcBoxy {
 	return &TcBoxy{
-		Boxy: &Boxy{
-			ebpfy: newEbpfy(eggi),
-		},
+		Boxy: boxy,
 	}
 }
 
-func NewCgroupBoxy(eggi *EggInfo, options ...func(*BoxyOptions)) *CgroupBoxy {
-	boxy := &CgroupBoxy{
-		Boxy: &Boxy{
-			ebpfy:   newEbpfy(eggi),
-			options: BoxyOptions{},
-		},
+func newCgroupBoxy(boxy *Boxy) *CgroupBoxy {
+	return &CgroupBoxy{
+		Boxy: boxy,
 	}
+}
 
-	for i := range options {
-		options[i](&boxy.options)
+func newCgroupNetClsBoxy(boxy *Boxy) (*CgroupNetClsBoxy, error) {
+	var b *CgroupNetClsBoxy
+	cgroupNetCls, err := net.CreateCgroupNetCls(net.CgroupFsName, net.TcHandleHtbClass) //TODO classid: 10:10 always?
+	if err != nil {
+		return b, fmt.Errorf("failed to create cgroup net_cls: %v", err)
 	}
-
-	return boxy
+	return &CgroupNetClsBoxy{
+		Boxy:         boxy,
+		cgroupNetCls: cgroupNetCls,
+	}, nil
 }
 
 func (b *Boxy) Stop() error {
@@ -137,17 +162,17 @@ func containerdCgroupPath(pid uint32) (string, error) {
 	return cgroupsv2.PidGroupPath(int(pid))
 }
 
-func (b *CgroupBoxy) RunWithPid(ctx context.Context, pid uint32) error {
+func (b *CgroupBoxy) Run(ctx context.Context) error {
 	logger := klog.FromContext(ctx)
 	var err error
 	fmt.Println("CgroupBoxy:runBoxWithPid")
 
 	var cgroupPath string
 	logger.V(2).Info("runBoxWithPid: getting network space path")
-	netNsPath := fmt.Sprintf("/proc/%d/ns/net", pid)
+	netNsPath := fmt.Sprintf("/proc/%d/ns/net", b.options.pid)
 
 	logger.V(2).Info("runBoxWithPid: getting cgroup path")
-	cgroupPath, err = containerdCgroupPath(pid)
+	cgroupPath, err = containerdCgroupPath(b.options.pid)
 	if err != nil {
 		return fmt.Errorf("cgroup path error: %v", err)
 	}
@@ -155,60 +180,45 @@ func (b *CgroupBoxy) RunWithPid(ctx context.Context, pid uint32) error {
 	b.cgroupPath = cgroupPath
 	b.netNsPath = netNsPath
 
-	if b.ebpfy.EggInfo.Shaping != nil && b.ebpfy.cgroupNetCls != nil {
-		//b.ebpfy.addCgroupNetClsProgram(b.ebpfy.cgroupNetCls, b.ebpfy.EggInfo.Shaping)
-		// build stack
-		// add filter
-		b.cgroupNetCls = &b.ebpfy.cgroupNetCls
-	}
-
 	return b.start(ctx, func(ctx context.Context) error {
-		return b.ebpfy.run(ctx, b.waitGroup, common.ProgramTypeCgroup, netNsPath, cgroupPath, pid)
+		return b.ebpfy.run(ctx, b.waitGroup, common.ProgramTypeCgroup, netNsPath, cgroupPath, b.options.pid)
 	})
 }
 
-func (b *TcBoxy) RunWithPid(ctx context.Context, pid uint32) error {
+func (b *TcBoxy) Run(ctx context.Context) error {
 	logger := klog.FromContext(ctx)
 	fmt.Println("TcBoxy:runBoxWithPid")
 
 	logger.V(2).Info("runBoxWithPid: getting network space path")
-	netNsPath := fmt.Sprintf("/proc/%d/ns/net", pid)
+	netNsPath := fmt.Sprintf("/proc/%d/ns/net", b.options.pid)
 	b.netNsPath = netNsPath
 
 	return b.start(ctx, func(ctx context.Context) error {
-		return b.ebpfy.run(ctx, b.waitGroup, common.ProgramTypeTC, netNsPath, "", pid)
+		return b.ebpfy.run(ctx, b.waitGroup, common.ProgramTypeTC, netNsPath, "", b.options.pid)
 	})
 }
 
-//func (b *Boxy) RunWithContainer(ctx context.Context, cb *controller.ContainerBox) (err error) {
-//	panic("implement me")
-//}
+func (b *CgroupNetClsBoxy) Run(ctx context.Context) error {
+	logger := klog.FromContext(ctx)
+	fmt.Println("CgroupNetClsBoxy:runBoxWithPid")
 
-//func (b *TcBoxy) RunWithContainer(ctx context.Context, cb *controller.ContainerBox) error {
-//	if cb.AssetStatus == common.AssetNew {
-//		err := b.RunWithPid(ctx, cb.Pid)
-//		if err != nil {
-//			return err
-//		}
-//	}
-//	// whatever ProgramType is, we set all containers to synced
-//	cb.AssetStatus = common.AssetSynced
-//
-//	return nil
-//}
-//
-//func (b *CgroupBoxy) RunWithContainer(ctx context.Context, cb *controller.ContainerBox) error {
-//	if cb.AssetStatus == common.AssetNew {
-//		err := b.RunWithPid(ctx, cb.Pid)
-//		if err != nil {
-//			return err
-//		}
-//	}
-//	// whatever ProgramType is, we set all containers to synced
-//	cb.AssetStatus = common.AssetSynced
-//
-//	return nil
-//}
+	logger.V(2).Info("runBoxWithPid: getting network space path")
+	netNsPath := fmt.Sprintf("/proc/%d/ns/net", b.options.pid)
+	b.netNsPath = netNsPath
+
+	return b.ebpfy.runNetClsCgroupStack(netNsPath, b.cgroupNetCls, b.options.pid)
+}
+
+func (b *CgroupNetClsBoxy) Stop() {
+	err := b.ebpfy.stopNetClsCgroupStack(b.netNsPath)
+	if err != nil {
+		klog.Errorf("failed to stop net cls cgroup stack: %v", err)
+	}
+	err = b.cgroupNetCls.Delete()
+	if err != nil {
+		klog.Errorf("failed to delete net cls cgroup: %v", err)
+	}
+}
 
 func (b *Boxy) UpdateRunning(ctx context.Context) error {
 	if err := b.ebpfy.updateCIDRs(b.ebpfy.EggInfo.CIDRs); err != nil {

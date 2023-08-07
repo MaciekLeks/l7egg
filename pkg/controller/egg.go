@@ -186,7 +186,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 						}
 
 						logger.Info("Starting box for the flow egg->pod", "pb", pb)
-						return pb.RunBoxes(ctx, eggi)
+						return pb.RunBoxySet(ctx, eggi)
 
 					}
 					//}
@@ -246,7 +246,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 				if err != nil {
 					return fmt.Errorf("creating fake node pod failed: %s", err.Error())
 				}
-				if err := fakeNodePod.RunBoxes(ctx, eggi); err != nil {
+				if err := fakeNodePod.RunBoxySet(ctx, eggi); err != nil {
 					return fmt.Errorf("starting fake node pod box failed: %s", err.Error())
 				}
 				c.podInfoMap.Store(types.NamespacedName{"", ""}, fakeNodePod)
@@ -260,7 +260,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 							}
 
 							logger.Info("Starting box for the flow egg->pod", "pod", pb)
-							return pb.RunBoxes(ctx, eggi)
+							return pb.RunBoxySet(ctx, eggi)
 						}
 						//
 					}

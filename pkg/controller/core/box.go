@@ -323,7 +323,7 @@ package core
 //	return matchedKeyBoxes, err
 //}
 //
-//func (m *eggManager) RunBoxes(ctx context.Context, eggi *EggInfo, pi *controller.PodBox) (err error) {
+//func (m *eggManager) RunBoxySet(ctx context.Context, eggi *EggInfo, pi *controller.PodBox) (err error) {
 //	if eggi.ProgramType == common.ProgramTypeCgroup {
 //		for i := 0; i < len(pi.Containers); i++ {
 //			if pi.Containers[i].AssetStatus == common.AssetNew {

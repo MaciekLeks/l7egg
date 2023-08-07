@@ -19,7 +19,6 @@ import (
 	"github.com/MaciekLeks/l7egg/pkg/net"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	bpf "github.com/aquasecurity/libbpfgo"
-	"github.com/containerd/cgroups/v3/cgroup1"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"k8s.io/klog/v2"
@@ -33,12 +32,12 @@ import (
 // ebpfy holds EggInfo (extracted from ClusterEggSpec) and ebpf related structures, e.g. maps, channels operating on that maps
 type ebpfy struct {
 	// Depreciated: should all part of ebpfy struct
-	EggInfo      *EggInfo //TOOD remove from here
-	bpfModule    *bpf.Module
-	ipv4ACL      *bpf.BPFMap
-	ipv6ACL      *bpf.BPFMap
-	packets      chan []byte
-	cgroupNetCls cgroup1.Cgroup //cgroup net_cls for cgroup programs
+	EggInfo   *EggInfo //TOOD remove from here
+	bpfModule *bpf.Module
+	ipv4ACL   *bpf.BPFMap
+	ipv6ACL   *bpf.BPFMap
+	packets   chan []byte
+	//cgroupNetCls cgroup1.Cgroup //cgroup net_cls for cgroup programs
 	//aclLoock  sync.RWMutex
 }
 
@@ -79,8 +78,8 @@ func (ey *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType common
 		//tools.ShapeEgressInterface(netNsPath, ebpfy.EgressInterface)
 
 	} else {
-		err = attachTcCgroupEgressStack(ey.EggInfo.EgressInterface, ey.cgroupNetCls, ey.EggInfo.Shaping, netNsPath, pid)
-		must(err, "can't attach tc cgroup stack")
+		//err = attachTcCgroupEgressStack(ey.EggInfo.EgressInterface, ey.cgroupNetCls, ey.EggInfo.Shaping, netNsPath, pid)
+		//must(err, "can't attach tc cgroup stack")
 		err = attachCgroupProg(ey.bpfModule, "cgroup__skb_egress", bpf.BPFAttachTypeCgroupInetEgress, cgroupPath)
 		must(err, "can't attach cgroup hook")
 		err = attachCgroupProg(ey.bpfModule, "cgroup__skb_ingress", bpf.BPFAttachTypeCgroupInetIngress, cgroupPath)
@@ -694,13 +693,6 @@ func attachTcBpfIngressStack(bpfModule *bpf.Module, iface, netNsPath string) err
 		return err
 	}
 
-	return nil
-}
-
-func attachTcCgroupEgressStack(iface string, cgroupNetCls cgroup1.Cgroup, shaping *ShapingInfo, netNsPath string, pid uint32) error {
-	if err := net.AttachEgressTcCgroupNetStack(netNsPath, cgroupNetCls, iface, net.TcShaping(*shaping), pid); err != nil {
-		return err
-	}
 	return nil
 }
 
