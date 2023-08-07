@@ -42,8 +42,8 @@ type EggInfo struct {
 	sync.RWMutex
 	Name             string
 	ProgramType      common.ProgramType
-	CNs              []CN
-	CIDRs            []CIDR
+	CNs              []*CN
+	CIDRs            []*CIDR
 	IngressInterface string
 	EgressInterface  string
 	//BPFObjectPath    string
@@ -225,14 +225,14 @@ func parseCIDR(cidrS string) (CIDR, error) {
 }
 
 // ParseCIDRs TODO: only ipv4
-func parseCIDRs(cidrsS []string) ([]CIDR, error) {
-	var cidrs []CIDR
+func parseCIDRs(cidrsS []string) ([]*CIDR, error) {
+	var cidrs []*CIDR
 	for _, cidrS := range cidrsS {
 		cidr, err := parseCIDR(cidrS)
 		if err != nil {
 			return nil, err
 		}
-		cidrs = append(cidrs, cidr)
+		cidrs = append(cidrs, &cidr)
 	}
 
 	return cidrs, nil
@@ -247,14 +247,14 @@ func parseCN(cnS string) (CN, error) {
 	return CN{cnS, syncx.Sequencer().Next(), common.AssetNew}, nil
 }
 
-func parseCNs(cnsS []string) ([]CN, error) {
-	var cns []CN
+func parseCNs(cnsS []string) ([]*CN, error) {
+	var cns []*CN
 	for _, cnS := range cnsS {
 		cn, err := parseCN(cnS)
 		if err != nil {
 			return nil, err
 		}
-		cns = append(cns, cn)
+		cns = append(cns, &cn)
 	}
 
 	return cns, nil

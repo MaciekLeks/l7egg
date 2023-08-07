@@ -156,8 +156,8 @@ func (ey *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType common
 func (ey *ebpfy) initCIDRs() {
 	//{cidrs
 	fmt.Println("[ACL]: Init")
-	for i := 0; i < ey.EggInfo.CIDRs.Len(); i++ {
-		cidr := ey.EggInfo.CIDRs.Get(i)
+	for i := 0; i < len(ey.EggInfo.CIDRs); i++ {
+		cidr := ey.EggInfo.CIDRs[i]
 		val := ipLPMVal{
 			ttl:     0,
 			counter: 0,
@@ -173,35 +173,29 @@ func (ey *ebpfy) initCIDRs() {
 			err = updateACLValueNew(ey.ipv6ACL, ip, val)
 		}
 		must(err, "Can't update ACL.")
-		ey.EggInfo.CIDRs.Update(i, func(current *CIDR) {
-			current.status = common.AssetSynced
-		})
+
+		cidr.status = common.AssetSynced
 	}
 }
 
 // initCNs
 func (ey *ebpfy) initCNs() {
-	for i := 0; i < ey.EggInfo.CNs.Len(); i++ {
-		ey.EggInfo.CNs.Update(i, func(current *CN) {
-			//to have simmilar approach only with CIDRs
-			current.status = common.AssetSynced
-		})
+	for i := 0; i < len(ey.EggInfo.CNs); i++ {
+		//to have simmilar approach only with CIDRs
+		current := ey.EggInfo.CNs[i]
+		current.status = common.AssetSynced
 	}
 }
 
-func (ey *ebpfy) updateCIDRs(cidrs []CIDR) error {
+func (ey *ebpfy) updateCIDRs(cidrs []*CIDR) error {
 
-	for i := 0; i < ey.EggInfo.CIDRs.Len(); i++ {
-		ey.EggInfo.CIDRs.Update(i, func(current *CIDR) {
-			current.status = common.AssetStale
-		})
+	for i := 0; i < len(ey.EggInfo.CIDRs); i++ {
+		current := ey.EggInfo.CIDRs[i]
+		current.status = common.AssetStale
 
-		current := ey.EggInfo.CIDRs.Get(i)
 		for _, newone := range cidrs {
 			if current.cidr == newone.cidr {
-				ey.EggInfo.CIDRs.Update(i, func(current *CIDR) {
-					current.status = common.AssetSynced
-				})
+				current.status = common.AssetSynced
 				newone.status = common.AssetSynced
 			}
 		}
@@ -221,8 +215,8 @@ func (ey *ebpfy) updateCIDRs(cidrs []CIDR) error {
 
 		//we control CIDR with ttl=0 only
 		if val.ttl == 0 {
-			for i := 0; i < ey.EggInfo.CIDRs.Len(); i++ {
-				cidr := ey.EggInfo.CIDRs.Get(i)
+			for i := 0; i < len(ey.EggInfo.CIDRs); i++ {
+				cidr := ey.EggInfo.CIDRs[i]
 				ipv4Key, ok := cidr.lpmKey.(ipv4LPMKey)
 				if ok {
 					if key.prefixLen == ipv4Key.prefixLen && key.data == ipv4Key.data {
@@ -252,8 +246,8 @@ func (ey *ebpfy) updateCIDRs(cidrs []CIDR) error {
 
 		//we control CIDR with ttl=0 only
 		if val.ttl == 0 {
-			for i := 0; i < ey.EggInfo.CIDRs.Len(); i++ {
-				cidr := ey.EggInfo.CIDRs.Get(i)
+			for i := 0; i < len(ey.EggInfo.CIDRs); i++ {
+				cidr := ey.EggInfo.CIDRs[i]
 				ipv6Key, ok := cidr.lpmKey.(ipv6LPMKey)
 				if ok {
 					if key.prefixLen == ipv6Key.prefixLen && key.data == ipv6Key.data {
@@ -285,12 +279,12 @@ func (ey *ebpfy) updateCIDRs(cidrs []CIDR) error {
 				return fmt.Errorf("Can't update ACL %#v", err)
 			}
 			cidr.status = common.AssetSynced
-			ey.EggInfo.CIDRs.Append(cidr)
+			ey.EggInfo.CIDRs = append(ey.EggInfo.CIDRs, cidr)
 		}
 	}
 
-	for i := 0; i < ey.EggInfo.CIDRs.Len(); i++ {
-		cidr := ey.EggInfo.CIDRs.Get(i)
+	for i := 0; i < len(ey.EggInfo.CIDRs); i++ {
+		cidr := ey.EggInfo.CIDRs[i]
 		if cidr.status != common.AssetSynced {
 			fmt.Printf("Stale keys %#v\n", cidr)
 
@@ -300,19 +294,14 @@ func (ey *ebpfy) updateCIDRs(cidrs []CIDR) error {
 	return nil
 }
 
-func (ey *ebpfy) updateCNs(cns []CN) error {
-	for i := 0; i < ey.EggInfo.CNs.Len(); i++ {
-		ey.EggInfo.CNs.Update(i, func(current *CN) {
-			current.status = common.AssetStale
-		})
+func (ey *ebpfy) updateCNs(cns []*CN) error {
+	for i := 0; i < len(ey.EggInfo.CNs); i++ {
+		current := ey.EggInfo.CNs[i]
+		current.status = common.AssetStale
 
-		current := ey.EggInfo.CNs.Get(i)
 		for _, newone := range cns {
 			if current.cn == newone.cn {
-				ey.EggInfo.CNs.Update(i, func(current *CN) {
-					fmt.Println("%%%>>> ebpfy.CNs.UpdateEgg")
-					current.status = common.AssetSynced
-				})
+				current.status = common.AssetSynced
 				newone.status = common.AssetSynced
 			}
 		}
@@ -332,8 +321,8 @@ func (ey *ebpfy) updateCNs(cns []CN) error {
 		//we control CNs with ttl!=0 only
 		if val.ttl != 0 {
 			fmt.Println("%%%>>> Found ttl!=0")
-			for i := 0; i < ey.EggInfo.CNs.Len(); i++ {
-				current := ey.EggInfo.CNs.Get(i)
+			for i := 0; i < len(ey.EggInfo.CNs); i++ {
+				current := ey.EggInfo.CNs[i]
 				if val.id == current.id {
 					if current.status == common.AssetStale {
 						fmt.Println("%%%>>> current.Status is Stale")
@@ -350,8 +339,8 @@ func (ey *ebpfy) updateCNs(cns []CN) error {
 		//we control CNs with ttl!=0 only
 		if val.ttl != 0 {
 			fmt.Println("%%%>>> Found ttl!=0")
-			for i := 0; i < ey.EggInfo.CNs.Len(); i++ {
-				current := ey.EggInfo.CNs.Get(i)
+			for i := 0; i < len(ey.EggInfo.CNs); i++ {
+				current := ey.EggInfo.CNs[i]
 				if val.id == current.id {
 					if current.status == common.AssetStale {
 						fmt.Println("%%%>>> current.Status is Stale")
@@ -370,12 +359,12 @@ func (ey *ebpfy) updateCNs(cns []CN) error {
 		fmt.Println("%%%>>> adding new cn %v", cn)
 		if cn.status == common.AssetNew {
 			cn.status = common.AssetSynced
-			ey.EggInfo.CNs.Append(cn)
+			ey.EggInfo.CNs = append(ey.EggInfo.CNs, cn)
 		}
 	}
 
-	for i := 0; i < ey.EggInfo.CNs.Len(); i++ {
-		current := ey.EggInfo.CNs.Get(i)
+	for i := 0; i < len(ey.EggInfo.CNs); i++ {
+		current := ey.EggInfo.CNs[i]
 		if current.status != common.AssetSynced {
 			fmt.Printf("CN: Stale key %#v\n", current)
 		}
