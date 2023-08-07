@@ -698,10 +698,10 @@ func fatal(format string, args ...interface{}) {
 	panic(err)
 }
 
-func containsCN(cns *syncx.SafeSlice[CN], cnS string) (CN, bool) {
-	var current CN
-	for i := 0; i < cns.Len(); i++ {
-		current = cns.Get(i)
+func containsCN(cns []*CN, cnS string) (*CN, bool) {
+	var current *CN
+	for i := 0; i < len(cns); i++ {
+		current = cns[i]
 		fmt.Printf("))) current=%#v cnS=%s\n", current, cnS)
 		if current.status == common.AssetSynced && strings.Contains(cnS, current.cn) { //e.g. DNS returns cnS="abc.example.com" and current.cn=".example.com"
 			fmt.Printf(" ^ found\n")
