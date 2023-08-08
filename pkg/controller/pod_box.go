@@ -153,6 +153,7 @@ func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.EggInfo) error {
 		return fmt.Errorf("no containers in pod %s", py.Name)
 	}
 
+	fmt.Println("deep[RunBoxySet][1]")
 	//TODO: it could be the case - container[0] is restarted abut network is the same :/
 	if eggi.ProgramType == common.ProgramTypeTC && py.Boxer == nil {
 		container := py.Containers[0]
@@ -176,32 +177,48 @@ func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.EggInfo) error {
 		return nil
 	} else {
 		var err error
+		fmt.Println("deep[RunBoxySet][2]")
 		for i := range py.Containers {
 			container := py.Containers[i]
 			if container.Ready == true && container.AssetStatus == common.AssetNew {
 
-				container.Boxer, err = core.NewBoxy(eggi)
+				fmt.Println("deep[RunBoxySet][3]")
+				container.Boxer, err = core.NewBoxy(eggi, core.WithPid(container.Pid))
+				fmt.Println("deep[RunBoxySet][30]", err)
 				if err != nil {
 					return err
 				}
+				fmt.Println("deep[RunBoxySet][31]")
 				err := container.Boxer.Run(ctx)
+				fmt.Println("deep[RunBoxySet][32]")
 				if err != nil {
 					return err
 				}
+				fmt.Println("deep[RunBoxySet][33]")
 				container.AssetStatus = common.AssetSynced
 			}
 		}
 
 		// run TC part of the program
-		if eggi.Shaping != nil && py.Boxer == nil {
-			// we need net netspace only for TC
-			py.Boxer, err = core.NewBoxy(eggi, core.WithNetCls(), core.WithPid(py.Containers[0].Pid))
-			if err != nil {
-				return err
-			}
-			err := py.Containers[0].Boxer.Run(ctx)
-			if err != nil {
-				return err
+		if eggi.Shaping != nil {
+			if py.Boxer == nil {
+				// we need net netspace only for TC
+				py.Boxer, err = core.NewBoxy(eggi, core.WithNetCls(), core.WithPid(py.Containers[0].Pid))
+				if err != nil {
+					return err
+				}
+
+				fmt.Println("deep[RunBoxySet][Before Run]")
+				err := py.Boxer.Run(ctx)
+				fmt.Println("deep[RunBoxySet][After Run]")
+				if err != nil {
+					return err
+				}
+			} else {
+				fmt.Println("deep[RunBoxySet->UpdateRunninng]")
+				if err := py.Boxer.UpdateRunning(ctx); err != nil {
+					return err
+				}
 			}
 		}
 	}

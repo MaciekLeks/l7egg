@@ -13,9 +13,14 @@ func (ey *ebpfy) stopNetClsCgroupStack(netNsPath string) error {
 	return net.CleanEgressTcNetStack(netNsPath, ey.EggInfo.EgressInterface)
 }
 
+func (ey *ebpfy) AddPidToNetClsCgroup(cgroupNetCls cgroup1.Cgroup, pid uint32) error {
+	return net.AddPidToNetClsCgroup(cgroupNetCls, pid)
+}
+
+// attachTcCgroupEgressStack attaches tc egress stack to the interface in the network namespace and adds pid to the cgroup
 func attachTcCgroupEgressStack(iface string, cgroupNetCls cgroup1.Cgroup, shaping *ShapingInfo, netNsPath string, pid uint32) error {
 	if err := net.AttachEgressTcCgroupNetStack(netNsPath, cgroupNetCls, iface, net.TcShaping(*shaping), pid); err != nil {
 		return err
 	}
-	return nil
+	return net.AddPidToNetClsCgroup(cgroupNetCls, pid)
 }

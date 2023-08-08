@@ -171,7 +171,7 @@ func (cil ContainerBoxList) GetContainerInfoByName(containerName string) *Contai
 	return nil
 }
 
-// ChangedContainers returns list of containers that have been changed - added, removed, updated
+// UpdateContainers ChangedContainers returns list of containers that have been changed - added, removed, updated
 func (cil ContainerBoxList) UpdateContainers(current ContainerBoxList) (ContainerBoxList, error) {
 	var newList ContainerBoxList
 	var resErr error
@@ -186,9 +186,10 @@ func (cil ContainerBoxList) UpdateContainers(current ContainerBoxList) (Containe
 			//TODO add more conditions
 			if c.ContainerID != current[i].ContainerID {
 				c.AssetStatus = common.AssetStale
-				if err := c.Boxer.Stop(); err != nil { //should Stop be here?
-					resErr = fmt.Errorf("%s: %w", err.Error(), resErr)
-				}
+				// Not stopping, if container is changes it's gone anyway
+				//if err := c.Boxer.Stop(); err != nil { //should Stop be here?
+				//	resErr = fmt.Errorf("%s: %w", err.Error(), resErr)
+				//}
 				newList = append(newList, current[i])
 			} else {
 				c.AssetStatus = common.AssetSynced

@@ -51,6 +51,7 @@ func newEbpfy(eggi *EggInfo) *ebpfy {
 func (ey *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType common.ProgramType, netNsPath string, cgroupPath string, pid uint32) error {
 	var err error
 
+	fmt.Println("deep[ebpfy:run]Starting ebpfy...")
 	ey.bpfModule, err = bpf.NewModuleFromFile(BpfObjectFileName)
 	if err != nil {
 		return err
@@ -58,6 +59,7 @@ func (ey *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType common
 
 	err = ey.bpfModule.BPFLoadObject()
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "deep[pbf:run]Failed to load BPF object: %v\n", err)
 		return err
 	}
 
@@ -80,6 +82,7 @@ func (ey *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType common
 	} else {
 		//err = attachTcCgroupEgressStack(ey.EggInfo.EgressInterface, ey.cgroupNetCls, ey.EggInfo.Shaping, netNsPath, pid)
 		//must(err, "can't attach tc cgroup stack")
+		fmt.Println("deep[bpf:run][cgroupPath]", cgroupPath)
 		err = attachCgroupProg(ey.bpfModule, "cgroup__skb_egress", bpf.BPFAttachTypeCgroupInetEgress, cgroupPath)
 		must(err, "can't attach cgroup hook")
 		err = attachCgroupProg(ey.bpfModule, "cgroup__skb_ingress", bpf.BPFAttachTypeCgroupInetIngress, cgroupPath)

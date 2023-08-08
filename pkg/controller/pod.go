@@ -120,13 +120,13 @@ func (c *Controller) syncPodHandler(ctx context.Context, key string) error {
 		return err
 	}
 
-	logger.Info("Update pod info.")
+	//logger.Info("Update pod info.")
 	err = c.updatePodInfo(ctx, pod) //TODO
 	if err != nil {
 		return fmt.Errorf("update clusteregg '%s':%s failed", name, err)
 	}
 
-	c.recorder.Event(pod, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
+	//c.recorder.Event(pod, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
 
 	return nil
 }
@@ -177,16 +177,16 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	logger.Info("Update pod info.")
 	podKey := types.NamespacedName{pod.Namespace, pod.Name}
 
-	fmt.Printf("******************* pod %s status: \nPodScheduled:%t\nInitialized:%t\nContainersReady:%t\nPodReady:%t\n",
-		pod.Name,
-		isPodInStatus(pod, corev1.PodScheduled),
-		isPodInStatus(pod, corev1.PodInitialized),
-		isPodInStatus(pod, corev1.ContainersReady),
-		isPodInStatus(pod, corev1.PodReady))
-
-	for i := range pod.Status.ContainerStatuses {
-		fmt.Printf("************** POD container statuses: %+v\n", pod.Status.ContainerStatuses[i])
-	}
+	//fmt.Printf("******************* pod %s status: \nPodScheduled:%t\nInitialized:%t\nContainersReady:%t\nPodReady:%t\n",
+	//	pod.Name,
+	//	isPodInStatus(pod, corev1.PodScheduled),
+	//	isPodInStatus(pod, corev1.PodInitialized),
+	//	isPodInStatus(pod, corev1.ContainersReady),
+	//	isPodInStatus(pod, corev1.PodReady))
+	//
+	//for i := range pod.Status.ContainerStatuses {
+	//	fmt.Printf("************** POD container statuses: %+v\n", pod.Status.ContainerStatuses[i])
+	//}
 
 	//podJson, err := json.MarshalIndent(pod.Status, "", "    ")
 	//if err != nil {
@@ -196,9 +196,10 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	//fmt.Printf("***************************Trying to add or update: %s\n\n", podJson)
 	if pb, found := c.podInfoMap.Load(podKey); found && isPodInStatus(pod, corev1.PodReady) {
 
-		fmt.Println("***************************Update not add ", podKey.String(), pod.Status.Phase, pod.DeletionTimestamp, pb)
+		//fmt.Println("***************************Update not add ", podKey.String(), pod.Status.Phase, pod.DeletionTimestamp, pb)
 
-		wasPaired := len(pb.PairedWithEgg.Name) > 0
+		wasPaired := pb.PairedWithEgg != nil && len(pb.PairedWithEgg.Name) > 0
+		fmt.Printf("deep[updatePodnfo] wasPaired: %t, pod:%s \n", wasPaired, podKey.String())
 
 		var stillPaired, isMatched bool
 		var eggi *core.EggInfo
@@ -215,13 +216,15 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 
 			isMatched = true
 			// all MatchedKeyBoxes must have the same Egg
-			if eggi.NamespaceName() == *pb.PairedWithEgg {
+			if pb.PairedWithEgg != nil && eggi.NamespaceName() == *pb.PairedWithEgg {
 				stillPaired = true
+				fmt.Printf("deep[updatePodnfo] stillPaired: %t, pod:%s \n", stillPaired, podKey.String())
 			}
 		}
 
 		if wasPaired && !stillPaired {
 			// Stop old boxes
+			fmt.Printf("deep[updatePodnfo] stopping boxes pod:%s \n", podKey.String())
 			if err := pb.StopBoxes(); err != nil {
 				return err
 			}
@@ -230,28 +233,35 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 
 		if isMatched && !stillPaired {
 			// Run new boxes
+			fmt.Printf("deep[updatePodnfo] running boxes pod:%s \n", podKey.String())
 			if err := runBoxessOnHost(ctx, eggi, pb); err != nil {
 				return err
 			}
 		}
 
 		if isMatched && stillPaired {
+			fmt.Printf("deep[updatePodnfo] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
 			cpi, err := NewPody(pod)
 			if err != nil {
 				return err
 			}
 			// Check: Check containers changes
+			fmt.Printf("deep[updatePodnfo][2] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
 			if newContainerList, err := pb.Containers.UpdateContainers(cpi.Containers); err == nil {
 				err = pb.Set(func(v *Pody) error {
+					fmt.Printf("deep[updatePodnfo][3] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
 					v.Containers = newContainerList
 					return nil
 				})
+				fmt.Printf("deep[updatePodnfo][4] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
 				if err != nil {
 					return err
 				}
+				fmt.Printf("deep[updatePodnfo][5] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
 				if err := runBoxessOnHost(ctx, eggi, pb); err != nil {
 					return err
 				}
+				fmt.Printf("deep[updatePodnfo][6] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
 			} else {
 				return err
 			}
@@ -293,6 +303,7 @@ func runBoxessOnHost(ctx context.Context, eggi *core.EggInfo, pb *Pody) error {
 		return err
 	}
 
+	fmt.Println("deep[runBoxesOnHost]", nodeHostname, pb.NodeName)
 	if nodeHostname == pb.NodeName {
 		err = pb.RunBoxySet(ctx, eggi)
 		if err != nil {
@@ -306,14 +317,13 @@ func (c *Controller) addPodBox(ctx context.Context, pod *corev1.Pod) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "namespace", pod.Namespace, "name", pod.Name)
 	podKey := types.NamespacedName{Namespace: pod.Namespace, Name: pod.Name}
 
-	fmt.Println("***************************Trying to add[0]", pod.Status.Phase, pod.Name, pod.Namespace)
 	if pod.Status.Phase == corev1.PodRunning {
-		fmt.Println("***************************Trying to add[1]", pod.Status.Phase)
 		pb, err := NewPody(pod)
 		if err != nil {
 			return err
 		}
 
+		fmt.Println("deep[controller:addPodBox[0]", pod.Name)
 		if eggKeys := c.checkEggMatch(pod); eggKeys.Len() > 0 {
 			if eggKeys.Len() > 1 {
 				logger.Info("More than one egg matched. Choosing the first one", "eggs", eggKeys)
@@ -339,7 +349,6 @@ func (c *Controller) addPodBox(ctx context.Context, pod *corev1.Pod) error {
 		c.podInfoMap.Store(podKey, pb)
 	} else {
 		logger.V(4).Info("Nor update nor add done")
-		fmt.Println("***************************Trying to add, update ??????????????????????????????", pod.Status.Phase)
 	}
 	return nil
 }
@@ -366,12 +375,12 @@ func (c *Controller) checkEggMatch(pod *corev1.Pod) *syncx.SafeSlice[types.Names
 	})
 
 	//{to be commented:
-	/*if eggKeys.Len() > 0 {
-		fmt.Println("+++++ checkPodMatch found matching pod to egg(policy)")
+	if eggKeys.Len() > 0 {
+		fmt.Println("||||||||||||||||| checkPodMatch found matching pod to egg(policy)")
 	} else {
 
-		fmt.Println("+++++ checkPodMatch NOT found matching pod to egg(policy)")
-	}*/
+		fmt.Println("||||||||||||||||||| checkPodMatch NOT found matching pod to egg(policy)")
+	}
 	//}
 
 	return &eggKeys

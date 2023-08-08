@@ -529,15 +529,10 @@ func AttachEgressTcCgroupNetStack(netNsPath string, cgroupNetCls cgroup1.Cgroup,
 	}
 	defer netNs.Close()
 
-	fmt.Println("YYYYYYYYYYYYYY - 0: ", pid)
-	if err = cgroupNetCls.AddTask(cgroup1.Process{Pid: int(pid)}); err != nil {
-		return err
-	}
-	fmt.Println("YYYYYYYYYYYYYY - adding pid", pid)
+	//err, err2 := funcName(pid, err, cgroupNetCls)
+	//if err2 != nil {
+	//	return err2
 	//}
-	if err != nil {
-		return err
-	}
 
 	/* see: https://github.com/containerd/cgroups/issues/301
 	//src: https://man.archlinux.org/man/core/iproute2/tc-cgroup.8.en
@@ -590,6 +585,16 @@ func AttachEgressTcCgroupNetStack(netNsPath string, cgroupNetCls cgroup1.Cgroup,
 	fmt.Println("YYYYYYYYYYYYYY - 3")
 
 	return err
+}
+
+func AddPidToNetClsCgroup(cgroupNetCls cgroup1.Cgroup, pid uint32) (err error) {
+	fmt.Println("deep[tc:AddPidToNetClsCgroup][0] ", pid)
+	if err = cgroupNetCls.AddTask(cgroup1.Process{Pid: int(pid)}); err != nil {
+		fmt.Println("deep[tc:AddPidToNetClsCgroup][00] ", err)
+		return err
+	}
+	fmt.Println("deep[tc:AddPidToNetClsCgroup][1] ", pid)
+	return
 }
 
 // AttachIngressTcBpfNetStack attaches a tc ingress stack to the given interface, ingress qdisc and bpf filter

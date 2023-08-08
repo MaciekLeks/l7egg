@@ -82,8 +82,9 @@ func NewBoxy(eggi *EggInfo, options ...func(*BoxyOptions)) (Boxer, error) {
 	}
 
 	boxy := &Boxy{
-		ebpfy:   newEbpfy(eggi),
-		options: opts,
+		ebpfy:     newEbpfy(eggi),
+		options:   opts,
+		waitGroup: &sync.WaitGroup{},
 	}
 
 	switch eggi.ProgramType {
@@ -91,8 +92,10 @@ func NewBoxy(eggi *EggInfo, options ...func(*BoxyOptions)) (Boxer, error) {
 		return newTcBoxy(boxy), nil
 	case common.ProgramTypeCgroup:
 		if opts.useNetCls {
+			fmt.Println("deep[NewBoxy->newCgroupNetClsBoxy][0]", opts.useNetCls)
 			return newCgroupNetClsBoxy(boxy)
 		} else {
+			fmt.Println("deep[NewBoxy->newCgroupBoxy][0]", opts.useNetCls)
 			return newCgroupBoxy(boxy), nil
 		}
 	default:
@@ -146,12 +149,16 @@ func (b *Boxy) Wait() {
 }
 
 func (b *Boxy) start(ctx context.Context, fn func(ctx context.Context) error) error {
+	fmt.Println("deep[Boxy:start][0]")
 	ctxWithCancel, cancelFunc := context.WithCancel(ctx)
+	fmt.Println("deep[Boxy:start][1]")
 	b.stopFunc = cancelFunc
 	b.waitGroup.Add(1)
+	fmt.Println("deep[Boxy:start][3]")
 	var err error
 	go func() {
 		defer b.waitGroup.Done()
+		fmt.Println("deep[Boxy:start][4]")
 		err = fn(ctxWithCancel)
 	}()
 
@@ -165,7 +172,7 @@ func containerdCgroupPath(pid uint32) (string, error) {
 func (b *CgroupBoxy) Run(ctx context.Context) error {
 	logger := klog.FromContext(ctx)
 	var err error
-	fmt.Println("CgroupBoxy:runBoxWithPid")
+	fmt.Println("deep[CgroupBoxy:Run][0]")
 
 	var cgroupPath string
 	logger.V(2).Info("runBoxWithPid: getting network space path")
@@ -181,7 +188,8 @@ func (b *CgroupBoxy) Run(ctx context.Context) error {
 	b.netNsPath = netNsPath
 
 	return b.start(ctx, func(ctx context.Context) error {
-		return b.ebpfy.run(ctx, b.waitGroup, common.ProgramTypeCgroup, netNsPath, cgroupPath, b.options.pid)
+		fmt.Println("deep[CgroupBoxy:Run][2]", b.cgroupPath, b.netNsPath)
+		return b.ebpfy.run(ctx, b.waitGroup, common.ProgramTypeCgroup, b.netNsPath, b.cgroupPath, b.options.pid)
 	})
 }
 
@@ -200,13 +208,23 @@ func (b *TcBoxy) Run(ctx context.Context) error {
 
 func (b *CgroupNetClsBoxy) Run(ctx context.Context) error {
 	logger := klog.FromContext(ctx)
-	fmt.Println("CgroupNetClsBoxy:runBoxWithPid")
+	fmt.Println("deep[CgroupNetClsBoxy:Run][0]")
 
 	logger.V(2).Info("runBoxWithPid: getting network space path")
 	netNsPath := fmt.Sprintf("/proc/%d/ns/net", b.options.pid)
 	b.netNsPath = netNsPath
 
+	fmt.Println("deep[CgroupNetClsBoxy:Run][1]", netNsPath, b.cgroupNetCls, b.options.pid)
 	return b.ebpfy.runNetClsCgroupStack(netNsPath, b.cgroupNetCls, b.options.pid)
+}
+
+func (b *CgroupNetClsBoxy) UpdateRunning(ctx context.Context) error {
+	logger := klog.FromContext(ctx)
+	fmt.Println("deep[CgroupNetClsBoxy:UpdateRunning][0]")
+
+	logger.V(2).Info("container process pid added to net_cls cgroup")
+	return b.ebpfy.AddPidToNetClsCgroup(b.cgroupNetCls, b.options.pid)
+
 }
 
 func (b *CgroupNetClsBoxy) Stop() error {
