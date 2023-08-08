@@ -178,6 +178,24 @@ func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.EggInfo) error {
 	} else {
 		var err error
 		fmt.Println("deep[RunBoxySet][2]")
+
+		// run TC part of the program - run once
+		if eggi.Shaping != nil && py.Boxer == nil {
+			// we need net netspace only for TC
+			py.Boxer, err = core.NewBoxy(eggi, core.WithNetCls(), core.WithPid(py.Containers[0].Pid))
+			if err != nil {
+				return err
+			}
+
+			fmt.Println("deep[RunBoxySet][Before Run]")
+			err := py.Boxer.Run(ctx)
+			fmt.Println("deep[RunBoxySet][After Run]")
+			if err != nil {
+				return err
+			}
+
+		}
+
 		for i := range py.Containers {
 			container := py.Containers[i]
 			if container.Ready == true && container.AssetStatus == common.AssetNew {
@@ -195,32 +213,18 @@ func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.EggInfo) error {
 					return err
 				}
 				fmt.Println("deep[RunBoxySet][33]")
+				if py.Boxer != nil {
+					//add process to net_clt cgroup
+					err := py.Boxer.Update(ctx, core.WithPid(container.Pid))
+					if err != nil {
+						return err
+					}
+				}
+
 				container.AssetStatus = common.AssetSynced
 			}
 		}
 
-		// run TC part of the program
-		if eggi.Shaping != nil {
-			if py.Boxer == nil {
-				// we need net netspace only for TC
-				py.Boxer, err = core.NewBoxy(eggi, core.WithNetCls(), core.WithPid(py.Containers[0].Pid))
-				if err != nil {
-					return err
-				}
-
-				fmt.Println("deep[RunBoxySet][Before Run]")
-				err := py.Boxer.Run(ctx)
-				fmt.Println("deep[RunBoxySet][After Run]")
-				if err != nil {
-					return err
-				}
-			} else {
-				fmt.Println("deep[RunBoxySet->UpdateRunninng]")
-				if err := py.Boxer.UpdateRunning(ctx); err != nil {
-					return err
-				}
-			}
-		}
 	}
 
 	py.PairedWithEgg = &types.NamespacedName{Namespace: "", Name: eggi.Name}
@@ -305,7 +309,7 @@ func (py *Pody) UpdateBoxes(ctx context.Context) error {
 	var err error
 	var resErr error
 	if py.Boxer != nil {
-		err = py.Boxer.UpdateRunning(ctx)
+		err = py.Boxer.Update(ctx)
 		if err != nil {
 			// append err to existing resErr if not nil
 			resErr = fmt.Errorf("%v\n%v", resErr, err)
@@ -315,7 +319,7 @@ func (py *Pody) UpdateBoxes(ctx context.Context) error {
 
 	for i := range py.Containers {
 		if py.Containers[i].Boxer != nil {
-			err = py.Containers[i].Boxer.UpdateRunning(ctx)
+			err = py.Containers[i].Boxer.Update(ctx)
 			if err != nil {
 				// append err to existing resErr if not nil
 				resErr = fmt.Errorf("%v\n%v", resErr, err)

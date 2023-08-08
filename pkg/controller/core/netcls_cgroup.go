@@ -13,7 +13,7 @@ func (ey *ebpfy) stopNetClsCgroupStack(netNsPath string) error {
 	return net.CleanEgressTcNetStack(netNsPath, ey.EggInfo.EgressInterface)
 }
 
-func (ey *ebpfy) AddPidToNetClsCgroup(cgroupNetCls cgroup1.Cgroup, pid uint32) error {
+func (ey *ebpfy) addPidToNetClsCgroup(cgroupNetCls cgroup1.Cgroup, pid uint32) error {
 	return net.AddPidToNetClsCgroup(cgroupNetCls, pid)
 }
 

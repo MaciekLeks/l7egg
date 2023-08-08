@@ -48,9 +48,8 @@ func (b *Boxy) RunBoxWithPid(ctx context.Context, pid uint32) error {
 type Boxer interface {
 	Stop() error
 	Wait()
-	//RunWithContainer(ctx context.Context, cb *controller.ContainerBox) error
-	Run(ctx context.Context) error
-	UpdateRunning(ctx context.Context) error
+	Run(context.Context) error
+	Update(context.Context, ...func(*BoxyOptions)) error
 	EggNamespaceName() types.NamespacedName
 }
 
@@ -218,13 +217,22 @@ func (b *CgroupNetClsBoxy) Run(ctx context.Context) error {
 	return b.ebpfy.runNetClsCgroupStack(netNsPath, b.cgroupNetCls, b.options.pid)
 }
 
-func (b *CgroupNetClsBoxy) UpdateRunning(ctx context.Context) error {
+// Update adds the container process pid to the net_cls cgroup
+func (b *CgroupNetClsBoxy) Update(ctx context.Context, options ...func(*BoxyOptions)) error {
 	logger := klog.FromContext(ctx)
-	fmt.Println("deep[CgroupNetClsBoxy:UpdateRunning][0]")
+	fmt.Println("deep[CgroupNetClsBoxy:Update][0]")
+
+	opts := &BoxyOptions{}
+	for i := range options {
+		options[i](opts)
+	}
+
+	if opts.pid == 0 {
+		return fmt.Errorf("pid is required")
+	}
 
 	logger.V(2).Info("container process pid added to net_cls cgroup")
-	return b.ebpfy.AddPidToNetClsCgroup(b.cgroupNetCls, b.options.pid)
-
+	return b.ebpfy.addPidToNetClsCgroup(b.cgroupNetCls, opts.pid)
 }
 
 func (b *CgroupNetClsBoxy) Stop() error {
@@ -239,7 +247,7 @@ func (b *CgroupNetClsBoxy) Stop() error {
 	return b.Boxy.Stop()
 }
 
-func (b *Boxy) UpdateRunning(ctx context.Context) error {
+func (b *Boxy) Update(ctx context.Context, options ...func(*BoxyOptions)) error {
 	if err := b.ebpfy.updateCIDRs(b.ebpfy.EggInfo.CIDRs); err != nil {
 		return err
 	}

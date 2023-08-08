@@ -323,8 +323,9 @@ func (c *Controller) addPodBox(ctx context.Context, pod *corev1.Pod) error {
 			return err
 		}
 
-		fmt.Println("deep[controller:addPodBox[0]", pod.Name)
 		if eggKeys := c.checkEggMatch(pod); eggKeys.Len() > 0 {
+
+			fmt.Println("deep[controller:addPodBox[0]", pod.Name)
 			if eggKeys.Len() > 1 {
 				logger.Info("More than one egg matched. Choosing the first one", "eggs", eggKeys)
 			}
