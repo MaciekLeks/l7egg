@@ -129,8 +129,11 @@ func newCgroupNetClsBoxy(boxy *Boxy) (*CgroupNetClsBoxy, error) {
 }
 
 func (b *Boxy) Stop() error {
+	fmt.Println("deep[Boxy:Stop][0]")
 	b.stopFunc()
+	fmt.Println("deep[Boxy:Stop][1]")
 	b.waitGroup.Wait()
+	fmt.Println("deep[Boxy:Stop][3]")
 	return nil
 }
 
@@ -144,6 +147,7 @@ func (b *CgroupBoxy) Stop() error {
 }
 
 func (b *Boxy) Wait() {
+	fmt.Println("deep[Boxy:Wait][0]")
 	b.waitGroup.Wait()
 }
 
@@ -236,14 +240,17 @@ func (b *CgroupNetClsBoxy) Update(ctx context.Context, options ...func(*BoxyOpti
 }
 
 func (b *CgroupNetClsBoxy) Stop() error {
+	fmt.Println("deep[CgroupNetClsBoxy:Stop][0]")
 	err := b.ebpfy.stopNetClsCgroupStack(b.netNsPath)
 	if err != nil {
 		return err
 	}
+	fmt.Println("deep[CgroupNetClsBoxy:Stop][1]")
 	err = b.cgroupNetCls.Delete()
 	if err != nil {
 		return fmt.Errorf("failed to delete net cls cgroup: %v", err)
 	}
+	fmt.Println("deep[CgroupNetClsBoxy:Stop][2]")
 	return b.Boxy.Stop()
 }
 

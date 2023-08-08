@@ -123,7 +123,7 @@ func (c *Controller) syncPodHandler(ctx context.Context, key string) error {
 	//logger.Info("Update pod info.")
 	err = c.updatePodInfo(ctx, pod) //TODO
 	if err != nil {
-		return fmt.Errorf("update clusteregg '%s':%s failed", name, err)
+		return fmt.Errorf("update pod '%s':%s failed", name, err)
 	}
 
 	//c.recorder.Event(pod, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
