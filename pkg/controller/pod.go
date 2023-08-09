@@ -201,7 +201,7 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 		fmt.Printf("deep[updatePodnfo] wasPaired: %t, pod:%s \n", wasPaired, podKey.String())
 
 		var stillPaired, isMatched bool
-		var eggi *core.EggInfo
+		var eggi *core.Eggy
 		if eggKeys := c.checkEggMatch(pod); eggKeys.Len() > 0 {
 			if eggKeys.Len() > 1 {
 				logger.Info("More than one egg matched. Choosing the first one", "eggs", eggKeys)
@@ -273,8 +273,8 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	return nil
 }
 
-// RunBoxySetOnHost runs one or many Boxy(s) on the host depends on EggInfo.ProgramType and Shaping settings
-func runBoxySetOnHost(ctx context.Context, eggi *core.EggInfo, pb *Pody) error {
+// RunBoxySetOnHost runs one or many Boxy(s) on the host depends on Eggy.ProgramType and Shaping settings
+func runBoxySetOnHost(ctx context.Context, eggi *core.Eggy, pb *Pody) error {
 	nodeHostname, err := utils.GetHostname()
 	if err != nil {
 		return err
@@ -342,7 +342,7 @@ func (c *Controller) checkEggMatch(pod *corev1.Pod) *syncx.SafeSlice[types.Names
 	eggKeys := syncx.SafeSlice[types.NamespacedName]{}
 	podLabels := labels.Set(pod.Labels)
 
-	c.eggInfoMap.Range(func(key types.NamespacedName, eggi *core.EggInfo) bool {
+	c.eggInfoMap.Range(func(key types.NamespacedName, eggi *core.Eggy) bool {
 		matchLabels := labels.Set(eggi.PodLabels)
 		selector := matchLabels.AsSelectorPreValidated()
 		if selector.Matches(podLabels) {

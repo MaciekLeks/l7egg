@@ -67,8 +67,8 @@ type CgroupNetClsBoxy struct {
 	cgroupNetCls cgroup1.Cgroup //cgroup net_cls for cgroup programs
 }
 
-func NewBoxy(eggi *EggInfo, options ...func(*BoxyOptions)) (Boxer, error) {
-	// returns CgroupBoxy or TcBoxy based on EggInfo.ProgramType
+func NewBoxy(eggi *Eggy, options ...func(*BoxyOptions)) (Boxer, error) {
+	// returns CgroupBoxy or TcBoxy based on Eggy.ProgramType
 
 	opts := BoxyOptions{}
 	for i := range options {
@@ -137,7 +137,7 @@ func (b *Boxy) Stop() error {
 }
 
 func (b *Boxy) EggNamespaceName() types.NamespacedName {
-	return b.ebpfy.EggInfo.NamespaceName()
+	return b.ebpfy.eggy.NamespaceName()
 }
 
 //func (b *CgroupBoxy) Stop() error {
@@ -255,11 +255,11 @@ func (b *CgroupNetClsBoxy) Stop() error {
 }
 
 func (b *Boxy) Update(ctx context.Context, options ...func(*BoxyOptions)) error {
-	if err := b.ebpfy.updateCIDRs(b.ebpfy.EggInfo.CIDRs); err != nil {
+	if err := b.ebpfy.updateCIDRs(b.ebpfy.eggy.CIDRs); err != nil {
 		return err
 	}
 
-	if err := b.ebpfy.updateCNs(b.ebpfy.EggInfo.CNs); err != nil {
+	if err := b.ebpfy.updateCNs(b.ebpfy.eggy.CNs); err != nil {
 		return err
 	}
 

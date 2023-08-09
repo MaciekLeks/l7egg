@@ -37,7 +37,7 @@ func main() {
 		return
 	}
 
-	clientegg, err := core.NewEggInfo(
+	clientegg, err := core.NewEggy(
 		v1alpha1.ClusterEgg{
 			TypeMeta: metav1.TypeMeta{},
 			ObjectMeta: metav1.ObjectMeta{

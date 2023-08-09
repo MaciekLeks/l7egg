@@ -141,8 +141,8 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 	eggNsNm := types.NamespacedName{Namespace: cegg.Namespace, Name: cegg.Name}
 	if eggi, ok := c.eggInfoMap.Load(eggNsNm); ok {
 		//changed := false
-		//err = eggi.Set(func(eggi *core.EggInfo) error {
-		neggi, err := core.NewEggInfo(cegg)
+		//err = eggi.Set(func(eggi *core.Eggy) error {
+		neggi, err := core.NewEggy(cegg)
 
 		if err != nil {
 			return fmt.Errorf("failed to create new egg info: %w", err)
@@ -224,13 +224,13 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 		//new egg
 		logger.Info("Adding egg")
 
-		eggi, err := core.NewEggInfo(cegg)
+		eggi, err := core.NewEggy(cegg)
 		if err != nil {
 			return fmt.Errorf("creating egginfo '%s' object failed: %s", cegg.Name, err.Error())
 		}
 
 		// store eggInfo in map
-		err = eggi.Set(func(eggi *core.EggInfo) error {
+		err = eggi.Set(func(eggi *core.Eggy) error {
 			fmt.Printf("\ntbd -add- eggi p:%p\n", eggi)
 			c.eggInfoMap.Store(eggNsNm, eggi)
 			// BoxStart cluster scope egg only if podLabels is empty
@@ -273,7 +273,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 	return err
 }
 
-// deleteEgg deletes EggInfo and stops its boxes
+// deleteEgg deletes Eggy and stops its boxes
 func (c *Controller) deleteEgg(ctx context.Context, eggNamespaceName types.NamespacedName) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "resourceName", eggNamespaceName.Name)
 

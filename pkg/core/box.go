@@ -9,14 +9,14 @@ package core
 //)
 //
 //type IEggManager interface {
-//	Start(context.Context, string, *EggInfo)
+//	Start(context.Context, string, *Eggy)
 //	Stop(string)
 //	Wait()
 //	UpdateCIDRs([]string)
 //	Exists(string)
 //}
 //
-//// EggBox holds EggInfo and steering variables (stopFunc to stop it from the controller witout stopping the controller iself).
+//// EggBox holds Eggy and steering variables (stopFunc to stop it from the controller witout stopping the controller iself).
 //// waitGroup synchronize bpf main groutine starting from user.run function
 //type EggBox struct {
 //	stopFunc    context.CancelFunc
@@ -85,7 +85,7 @@ package core
 //}
 
 // BoxStore stores a box but not run it
-//func (m *eggManager) BoxStore(ctx context.Context, boxKey common.BoxKey, ceggi *EggInfo) error {
+//func (m *eggManager) BoxStore(ctx context.Context, boxKey common.BoxKey, ceggi *Eggy) error {
 //	logger := klog.FromContext(ctx)
 //	logger.Info("Storing box for boxKey%s'\n", boxKey)
 //	ebpfy := newEbpfy(ceggi)
@@ -117,7 +117,7 @@ package core
 //	box.waitGroup = &subWaitGroup
 //	//box.netNsPath = netNsPath
 //	box.programInfo = common.ProgramInfo{
-//		box.ebpfy.EggInfo.ProgramType,
+//		box.ebpfy.Eggy.ProgramType,
 //		netNsPath,
 //		cgroupPath,
 //	}
@@ -202,7 +202,7 @@ package core
 //		var cgroupPath string
 //		netNsPath := fmt.Sprintf("/proc/%d/ns/net", pid)
 //
-//		if box.Egg().EggInfo.ProgramType == common.ProgramTypeCgroup {
+//		if box.Egg().Eggy.ProgramType == common.ProgramTypeCgroup {
 //			logger.V(2).Info("runEgg-7-cgroup")
 //			cgroupPath, err = getContainerdCgroupPath(pid)
 //			if err != nil {
@@ -229,7 +229,7 @@ package core
 //		var cgroupPath string
 //		netNsPath := fmt.Sprintf("/proc/%d/ns/net", pid)
 //
-//		if box.Egg().EggInfo.ProgramType == common.ProgramTypeCgroup {
+//		if box.Egg().Eggy.ProgramType == common.ProgramTypeCgroup {
 //			logger.V(2).Info("runEgg-7-cgroup")
 //			cgroupPath, err = getContainerdCgroupPath(pid)
 //			if err != nil {
@@ -297,7 +297,7 @@ package core
 //	return nil
 //}
 
-//func (m *eggManager) StoreBoxKeys(ctx context.Context, eggi *EggInfo, pi *controller.PodBox) ([]common.BoxKey, error) {
+//func (m *eggManager) StoreBoxKeys(ctx context.Context, eggi *Eggy, pi *controller.PodBox) ([]common.BoxKey, error) {
 //	var matchedKeyBoxes []common.BoxKey
 //	var err error
 //	if eggi.ProgramType == common.ProgramTypeCgroup {
@@ -323,7 +323,7 @@ package core
 //	return matchedKeyBoxes, err
 //}
 //
-//func (m *eggManager) RunBoxySet(ctx context.Context, eggi *EggInfo, pi *controller.PodBox) (err error) {
+//func (m *eggManager) RunBoxySet(ctx context.Context, eggi *Eggy, pi *controller.PodBox) (err error) {
 //	if eggi.ProgramType == common.ProgramTypeCgroup {
 //		for i := 0; i < len(pi.Containers); i++ {
 //			if pi.Containers[i].AssetStatus == common.AssetNew {

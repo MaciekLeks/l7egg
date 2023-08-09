@@ -29,10 +29,10 @@ import (
 	"unsafe"
 )
 
-// ebpfy holds EggInfo (extracted from ClusterEggSpec) and ebpf related structures, e.g. maps, channels operating on that maps
+// ebpfy holds Eggy (extracted from ClusterEggSpec) and ebpf related structures, e.g. maps, channels operating on that maps
 type ebpfy struct {
 	// Depreciated: should all part of ebpfy struct
-	EggInfo   *EggInfo //TOOD remove from here
+	eggy      *Eggy //TOOD remove from here
 	bpfModule *bpf.Module
 	ipv4ACL   *bpf.BPFMap
 	ipv6ACL   *bpf.BPFMap
@@ -41,9 +41,9 @@ type ebpfy struct {
 	//aclLoock  sync.RWMutex
 }
 
-func newEbpfy(eggi *EggInfo) *ebpfy {
+func newEbpfy(eggi *Eggy) *ebpfy {
 	var egg ebpfy
-	egg.EggInfo = eggi
+	egg.eggy = eggi
 	return &egg
 }
 
@@ -69,18 +69,18 @@ func (ey *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType common
 	if /*len(cgroupPath) == 0*/ programType == common.ProgramTypeTC {
 		time.Sleep(4 * time.Second)
 
-		//err = attachTcProg(ebpfy.bpfModule, ebpfy.EggInfo.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
-		err = attachTcBpfIngressStack(ey.bpfModule, ey.EggInfo.EgressInterface, netNsPath)
+		//err = attachTcProg(ebpfy.bpfModule, ebpfy.Eggy.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
+		err = attachTcBpfIngressStack(ey.bpfModule, ey.eggy.EgressInterface, netNsPath)
 		must(err, "Can't attach TC hook.")
-		//err = attachTcProg(ebpfy.bpfModule, ebpfy.EggInfo.EgressInterface, bpf.BPFTcEgress, "tc_egress")
-		err = attachTcBpfEgressStack(ey.bpfModule, ey.EggInfo.EgressInterface, netNsPath, ey.EggInfo.Shaping)
+		//err = attachTcProg(ebpfy.bpfModule, ebpfy.Eggy.EgressInterface, bpf.BPFTcEgress, "tc_egress")
+		err = attachTcBpfEgressStack(ey.bpfModule, ey.eggy.EgressInterface, netNsPath, ey.eggy.Shaping)
 		must(err, "Can't attach TC hook.")
 		logger.Info("Attached eBPF program to tc hooks")
 
 		//tools.ShapeEgressInterface(netNsPath, ebpfy.EgressInterface)
 
 	} else {
-		//err = attachTcCgroupEgressStack(ey.EggInfo.EgressInterface, ey.cgroupNetCls, ey.EggInfo.Shaping, netNsPath, pid)
+		//err = attachTcCgroupEgressStack(ey.Eggy.EgressInterface, ey.cgroupNetCls, ey.Eggy.Shaping, netNsPath, pid)
 		//must(err, "can't attach tc cgroup stack")
 		fmt.Println("deep[bpf:run][cgroupPath]", cgroupPath)
 		err = attachCgroupProg(ey.bpfModule, "cgroup__skb_egress", bpf.BPFAttachTypeCgroupInetEgress, cgroupPath)
@@ -127,16 +127,16 @@ func (ey *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType common
 		defer func() {
 			if /*len(cgroupPath) == 0*/ programType == common.ProgramTypeTC {
 				//tools.CleanInterfaces(netNsPath, ebpfy.IngressInterface, ebpfy.EgressInterface)
-				if err := net.CleanIngressTcNetStack(netNsPath, ey.EggInfo.IngressInterface); err != nil {
+				if err := net.CleanIngressTcNetStack(netNsPath, ey.eggy.IngressInterface); err != nil {
 					fmt.Println(err)
 				}
-				if err := net.CleanEgressTcNetStack(netNsPath, ey.EggInfo.EgressInterface); err != nil {
+				if err := net.CleanEgressTcNetStack(netNsPath, ey.eggy.EgressInterface); err != nil {
 					fmt.Println(err)
 				}
 			}
 			//} else {
 			//	// TODO add condition on shaping
-			//	if err := net.CleanEgressTcNetStack(netNsPath, ey.EggInfo.EgressInterface); err != nil {
+			//	if err := net.CleanEgressTcNetStack(netNsPath, ey.Eggy.EgressInterface); err != nil {
 			//		fmt.Println(err)
 			//	}
 			//}
@@ -160,8 +160,8 @@ func (ey *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType common
 func (ey *ebpfy) initCIDRs() {
 	//{cidrs
 	fmt.Println("[ACL]: Init")
-	for i := 0; i < len(ey.EggInfo.CIDRs); i++ {
-		cidr := ey.EggInfo.CIDRs[i]
+	for i := 0; i < len(ey.eggy.CIDRs); i++ {
+		cidr := ey.eggy.CIDRs[i]
 		val := ipLPMVal{
 			ttl:     0,
 			counter: 0,
@@ -184,17 +184,17 @@ func (ey *ebpfy) initCIDRs() {
 
 // initCNs
 func (ey *ebpfy) initCNs() {
-	for i := 0; i < len(ey.EggInfo.CNs); i++ {
+	for i := 0; i < len(ey.eggy.CNs); i++ {
 		//to have simmilar approach only with CIDRs
-		current := ey.EggInfo.CNs[i]
+		current := ey.eggy.CNs[i]
 		current.status = common.AssetSynced
 	}
 }
 
 func (ey *ebpfy) updateCIDRs(cidrs []*CIDR) error {
 
-	for i := 0; i < len(ey.EggInfo.CIDRs); i++ {
-		current := ey.EggInfo.CIDRs[i]
+	for i := 0; i < len(ey.eggy.CIDRs); i++ {
+		current := ey.eggy.CIDRs[i]
 		current.status = common.AssetStale
 
 		for _, newone := range cidrs {
@@ -219,8 +219,8 @@ func (ey *ebpfy) updateCIDRs(cidrs []*CIDR) error {
 
 		//we control CIDR with ttl=0 only
 		if val.ttl == 0 {
-			for i := 0; i < len(ey.EggInfo.CIDRs); i++ {
-				cidr := ey.EggInfo.CIDRs[i]
+			for i := 0; i < len(ey.eggy.CIDRs); i++ {
+				cidr := ey.eggy.CIDRs[i]
 				ipv4Key, ok := cidr.lpmKey.(ipv4LPMKey)
 				if ok {
 					if key.prefixLen == ipv4Key.prefixLen && key.data == ipv4Key.data {
@@ -250,8 +250,8 @@ func (ey *ebpfy) updateCIDRs(cidrs []*CIDR) error {
 
 		//we control CIDR with ttl=0 only
 		if val.ttl == 0 {
-			for i := 0; i < len(ey.EggInfo.CIDRs); i++ {
-				cidr := ey.EggInfo.CIDRs[i]
+			for i := 0; i < len(ey.eggy.CIDRs); i++ {
+				cidr := ey.eggy.CIDRs[i]
 				ipv6Key, ok := cidr.lpmKey.(ipv6LPMKey)
 				if ok {
 					if key.prefixLen == ipv6Key.prefixLen && key.data == ipv6Key.data {
@@ -283,12 +283,12 @@ func (ey *ebpfy) updateCIDRs(cidrs []*CIDR) error {
 				return fmt.Errorf("Can't update ACL %#v", err)
 			}
 			cidr.status = common.AssetSynced
-			ey.EggInfo.CIDRs = append(ey.EggInfo.CIDRs, cidr)
+			ey.eggy.CIDRs = append(ey.eggy.CIDRs, cidr)
 		}
 	}
 
-	for i := 0; i < len(ey.EggInfo.CIDRs); i++ {
-		cidr := ey.EggInfo.CIDRs[i]
+	for i := 0; i < len(ey.eggy.CIDRs); i++ {
+		cidr := ey.eggy.CIDRs[i]
 		if cidr.status != common.AssetSynced {
 			fmt.Printf("Stale keys %#v\n", cidr)
 
@@ -299,8 +299,8 @@ func (ey *ebpfy) updateCIDRs(cidrs []*CIDR) error {
 }
 
 func (ey *ebpfy) updateCNs(cns []*CN) error {
-	for i := 0; i < len(ey.EggInfo.CNs); i++ {
-		current := ey.EggInfo.CNs[i]
+	for i := 0; i < len(ey.eggy.CNs); i++ {
+		current := ey.eggy.CNs[i]
 		current.status = common.AssetStale
 
 		for _, newone := range cns {
@@ -325,8 +325,8 @@ func (ey *ebpfy) updateCNs(cns []*CN) error {
 		//we control CNs with ttl!=0 only
 		if val.ttl != 0 {
 			fmt.Println("%%%>>> Found ttl!=0")
-			for i := 0; i < len(ey.EggInfo.CNs); i++ {
-				current := ey.EggInfo.CNs[i]
+			for i := 0; i < len(ey.eggy.CNs); i++ {
+				current := ey.eggy.CNs[i]
 				if val.id == current.id {
 					if current.status == common.AssetStale {
 						fmt.Println("%%%>>> current.Status is Stale")
@@ -343,8 +343,8 @@ func (ey *ebpfy) updateCNs(cns []*CN) error {
 		//we control CNs with ttl!=0 only
 		if val.ttl != 0 {
 			fmt.Println("%%%>>> Found ttl!=0")
-			for i := 0; i < len(ey.EggInfo.CNs); i++ {
-				current := ey.EggInfo.CNs[i]
+			for i := 0; i < len(ey.eggy.CNs); i++ {
+				current := ey.eggy.CNs[i]
 				if val.id == current.id {
 					if current.status == common.AssetStale {
 						fmt.Println("%%%>>> current.Status is Stale")
@@ -363,12 +363,12 @@ func (ey *ebpfy) updateCNs(cns []*CN) error {
 		fmt.Println("%%%>>> adding new cn %v", cn)
 		if cn.status == common.AssetNew {
 			cn.status = common.AssetSynced
-			ey.EggInfo.CNs = append(ey.EggInfo.CNs, cn)
+			ey.eggy.CNs = append(ey.eggy.CNs, cn)
 		}
 	}
 
-	for i := 0; i < len(ey.EggInfo.CNs); i++ {
-		current := ey.EggInfo.CNs[i]
+	for i := 0; i < len(ey.eggy.CNs); i++ {
+		current := ey.eggy.CNs[i]
 		if current.status != common.AssetSynced {
 			fmt.Printf("CN: Stale key %#v\n", current)
 		}
@@ -464,7 +464,7 @@ func (ey *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, netN
 							//fmt.Println("key size:", unsafe.Sizeof(key))
 							//fmt.Println("key data:", key.data)
 
-							if cn, found := containsCN(ey.EggInfo.CNs, cn); found {
+							if cn, found := containsCN(ey.eggy.CNs, cn); found {
 								val := ipLPMVal{
 									ttl:     bootTtlNs,
 									counter: 0, //zero existsing elements :/ //TODO why 0?

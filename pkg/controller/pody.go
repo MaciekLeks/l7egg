@@ -38,7 +38,7 @@ type Pody struct {
 //type ComponentBoxer interface {
 //	Set(fn func(v *Pody) error) error
 //	NamespaceName() types.NamespacedName
-//	RunBoxySet(ctx context.Context, eggi *core.EggInfo) error
+//	RunBoxySet(ctx context.Context, eggi *core.Eggy) error
 //	StopBoxes() error
 //}
 
@@ -145,7 +145,7 @@ func (py *Pody) NamespaceName() types.NamespacedName {
 //	return types.NamespacedName{Namespace: "", Name: ""}
 //}
 
-func (py *Pody) RunBoxySet(ctx context.Context, eggi *core2.EggInfo) error {
+func (py *Pody) RunBoxySet(ctx context.Context, eggi *core2.Eggy) error {
 	py.Lock()
 	defer py.Unlock()
 
@@ -232,7 +232,7 @@ func (py *Pody) RunBoxySet(ctx context.Context, eggi *core2.EggInfo) error {
 	return nil
 }
 
-//func (nb *NodeBox) RunBoxySet(ctx context.Context, eggi *core.EggInfo) error {
+//func (nb *NodeBox) RunBoxySet(ctx context.Context, eggi *core.Eggy) error {
 //	nb.Lock()
 //	defer nb.Unlock()
 //

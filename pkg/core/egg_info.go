@@ -38,7 +38,7 @@ type ShapingInfo struct {
 	Ceil uint32
 }
 
-type EggInfo struct {
+type Eggy struct {
 	sync.RWMutex
 	Name             string
 	ProgramType      common.ProgramType
@@ -51,14 +51,14 @@ type EggInfo struct {
 	Shaping   *ShapingInfo
 }
 
-func (eggi *EggInfo) Set(fn func(v *EggInfo) error) error {
-	eggi.Lock()
-	defer eggi.Unlock()
-	return fn(eggi)
+func (ey *Eggy) Set(fn func(v *Eggy) error) error {
+	ey.Lock()
+	defer ey.Unlock()
+	return fn(ey)
 }
 
-func (eggi *EggInfo) NamespaceName() types.NamespacedName {
-	return types.NamespacedName{Namespace: "", Name: eggi.Name}
+func (ey *Eggy) NamespaceName() types.NamespacedName {
+	return types.NamespacedName{Namespace: "", Name: ey.Name}
 }
 
 // parseValueUnit parses input string and returns value and unit.
@@ -125,7 +125,7 @@ func parseShapingInfo(shaping *v1alpha1.ShapingSpec) (shapingInfo ShapingInfo, e
 	return
 }
 
-func NewEggInfo(cegg v1alpha1.ClusterEgg) (*EggInfo, error) {
+func NewEggy(cegg v1alpha1.ClusterEgg) (*Eggy, error) {
 	cidrs, err := parseCIDRs(cegg.Spec.Egress.CIDRs)
 	if err != nil {
 		fmt.Errorf("Parsing input data %#v", err)
@@ -160,7 +160,7 @@ func NewEggInfo(cegg v1alpha1.ClusterEgg) (*EggInfo, error) {
 		eiface = "eth0"
 	}
 
-	var cggi = &EggInfo{ //TODO make a function to wrap this up (parsing, building the object)
+	var cggi = &Eggy{ //TODO make a function to wrap this up (parsing, building the object)
 		Name:             cegg.Name,
 		ProgramType:      common.ProgramType(cegg.Spec.ProgramType),
 		IngressInterface: iiface,
@@ -174,9 +174,9 @@ func NewEggInfo(cegg v1alpha1.ClusterEgg) (*EggInfo, error) {
 	return cggi, nil
 }
 
-func (eggi *EggInfo) Update(cegg v1alpha1.ClusterEgg) error {
-	eggi.Lock()
-	defer eggi.Unlock()
+func (ey *Eggy) Update(cegg v1alpha1.ClusterEgg) error {
+	ey.Lock()
+	defer ey.Unlock()
 
 	cidrs, err := parseCIDRs(cegg.Spec.Egress.CIDRs)
 	if err != nil {
@@ -198,9 +198,9 @@ func (eggi *EggInfo) Update(cegg v1alpha1.ClusterEgg) error {
 		}
 	}
 
-	eggi.CNs = cns
-	eggi.CIDRs = cidrs
-	eggi.PodLabels = podLabels
+	ey.CNs = cns
+	ey.CIDRs = cidrs
+	ey.PodLabels = podLabels
 
 	return nil
 }

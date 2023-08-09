@@ -6,11 +6,11 @@ import (
 )
 
 func (ey *ebpfy) runNetClsCgroupStack(netNsPath string, cgroupNetCls cgroup1.Cgroup, pid uint32) error {
-	return attachTcCgroupEgressStack(ey.EggInfo.EgressInterface, cgroupNetCls, ey.EggInfo.Shaping, netNsPath, pid)
+	return attachTcCgroupEgressStack(ey.eggy.EgressInterface, cgroupNetCls, ey.eggy.Shaping, netNsPath, pid)
 }
 
 func (ey *ebpfy) stopNetClsCgroupStack(netNsPath string) error {
-	return net.CleanEgressTcNetStack(netNsPath, ey.EggInfo.EgressInterface)
+	return net.CleanEgressTcNetStack(netNsPath, ey.eggy.EgressInterface)
 }
 
 func (ey *ebpfy) addPidToNetClsCgroup(cgroupNetCls cgroup1.Cgroup, pid uint32) error {
