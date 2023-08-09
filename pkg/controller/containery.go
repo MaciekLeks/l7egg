@@ -20,7 +20,7 @@ const (
 	ContainerStateTerminated
 )
 
-type ContainerBox struct {
+type Containery struct {
 	Name          string
 	LastStateInfo ContainerStateInfo
 	StateInfo     ContainerStateInfo
@@ -32,9 +32,9 @@ type ContainerBox struct {
 	Boxer         core.Boxer
 }
 
-type ContainerBoxList []*ContainerBox
+type ContaineryList []*Containery
 
-func NewContainerBox(cs *corev1.ContainerStatus) (*ContainerBox, error) {
+func NewContainery(cs *corev1.ContainerStatus) (*Containery, error) {
 	var cid string
 	var pid uint32
 	var err error
@@ -47,7 +47,7 @@ func NewContainerBox(cs *corev1.ContainerStatus) (*ContainerBox, error) {
 		return nil, err
 	}
 
-	return &ContainerBox{
+	return &Containery{
 		Name:          cs.Name,
 		StateInfo:     mapContainerStateInfo(cs.State),
 		LastStateInfo: mapContainerStateInfo(cs.LastTerminationState),
@@ -59,10 +59,10 @@ func NewContainerBox(cs *corev1.ContainerStatus) (*ContainerBox, error) {
 	}, nil
 }
 
-// Update updates ContainerBox with ContainerStatus based on deep equality of ContainerBox
-func (ci *ContainerBox) Update(cs *corev1.ContainerStatus) (bool, error) {
+// Update updates Containery with ContainerStatus based on deep equality of Containery
+func (ci *Containery) Update(cs *corev1.ContainerStatus) (bool, error) {
 	var changed bool
-	nci, err := NewContainerBox(cs)
+	nci, err := NewContainery(cs)
 
 	if err != nil {
 		return changed, err
@@ -83,10 +83,10 @@ func (ci *ContainerBox) Update(cs *corev1.ContainerStatus) (bool, error) {
 	return changed, nil
 }
 
-func ExtractContainersBox(pod *corev1.Pod) ([]*ContainerBox, error) {
-	cis := make([]*ContainerBox, len(pod.Status.ContainerStatuses))
+func ExtractContainersBox(pod *corev1.Pod) ([]*Containery, error) {
+	cis := make([]*Containery, len(pod.Status.ContainerStatuses))
 	for i := range pod.Status.ContainerStatuses {
-		if ci, err := NewContainerBox(&pod.Status.ContainerStatuses[i]); err == nil {
+		if ci, err := NewContainery(&pod.Status.ContainerStatuses[i]); err == nil {
 			cis[i] = ci
 		} else {
 			return nil, err
@@ -154,7 +154,7 @@ func GetContainerPid(ctx context.Context, containerId string) (uint32, error) {
 	return pid, nil
 }
 
-func (cil ContainerBoxList) GetContainerInfoByContainerId(containerId string) *ContainerBox {
+func (cil ContaineryList) GetContainerInfoByContainerId(containerId string) *Containery {
 	for _, ci := range cil {
 		if ci.ContainerID == containerId {
 			return ci
@@ -163,7 +163,7 @@ func (cil ContainerBoxList) GetContainerInfoByContainerId(containerId string) *C
 	return nil
 }
 
-func (cil ContainerBoxList) GetContainerInfoByName(containerName string) *ContainerBox {
+func (cil ContaineryList) GetContainerInfoByName(containerName string) *Containery {
 	for _, ci := range cil {
 		if ci.Name == containerName {
 			return ci
@@ -173,8 +173,8 @@ func (cil ContainerBoxList) GetContainerInfoByName(containerName string) *Contai
 }
 
 // UpdateContainers ChangedContainers returns list of containers that have been changed - added, removed, updated
-func (cil ContainerBoxList) UpdateContainers(current ContainerBoxList) (ContainerBoxList, error) {
-	var newList ContainerBoxList
+func (cil ContaineryList) UpdateContainers(current ContaineryList) (ContaineryList, error) {
+	var newList ContaineryList
 	var resErr error
 	for i := range current {
 		name := current[i].Name

@@ -60,9 +60,10 @@ type Controller struct {
 
 	recorder record.EventRecorder
 
-	podInfoMap       syncx.SafeMap[types.NamespacedName, *Pody]
-	containerInfoMap syncx.SafeMap[ContainerName, *ContainerBox]
-	eggInfoMap       syncx.SafeMap[types.NamespacedName, *core.EggInfo] //namespace not used
+	// podyInfoMap is a map of pody object
+	podyInfoMap       syncx.SafeMap[types.NamespacedName, *Pody]
+	containeryInfoMap syncx.SafeMap[ContainerName, *Containery]
+	eggInfoMap        syncx.SafeMap[types.NamespacedName, *core.EggInfo] //namespace not used
 }
 
 const (
@@ -102,9 +103,9 @@ func NewController(ctx context.Context,
 
 		recorder: recorder,
 
-		//podInfoMap: PodInfoMap{},
-		podInfoMap: syncx.SafeMap[types.NamespacedName, *Pody]{},
-		eggInfoMap: syncx.SafeMap[types.NamespacedName, *core.EggInfo]{},
+		//podyInfoMap: PodInfoMap{},
+		podyInfoMap: syncx.SafeMap[types.NamespacedName, *Pody]{},
+		eggInfoMap:  syncx.SafeMap[types.NamespacedName, *core.EggInfo]{},
 	}
 
 	logger.Info("Setting up event handlers")
@@ -198,7 +199,7 @@ func (c *Controller) Wait(ctx context.Context) {
 		fmt.Printf("deep[Waiting]before <-done\n")
 		<-done
 		fmt.Printf("deep[Waiting]after <-done\n")
-		c.podInfoMap.Range(func(podNsNm types.NamespacedName, py *Pody) bool {
+		c.podyInfoMap.Range(func(podNsNm types.NamespacedName, py *Pody) bool {
 			fmt.Printf("deep[Waiting][range][0] - %s\n", podNsNm)
 			wg.Add(1)
 			go func() {

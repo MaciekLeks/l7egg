@@ -150,13 +150,13 @@ func (c *Controller) deletePody(ctx context.Context, pod *corev1.Pod) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "namespace", pod.Namespace, "name", pod.Name)
 
 	key := types.NamespacedName{pod.Namespace, pod.Name}
-	if pb, ok := c.podInfoMap.Load(key); ok {
+	if pb, ok := c.podyInfoMap.Load(key); ok {
 		if err := pb.StopBoxes(); err != nil {
 			logger.Error(err, "can't stop box")
 			return err
 		}
 		logger.Info("Delete pod info.")
-		c.podInfoMap.Delete(key)
+		c.podyInfoMap.Delete(key)
 	}
 
 	return nil
@@ -193,7 +193,7 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	//	fmt.Println("Błąd podczas konwersji na JSON:", err)
 	//	return err
 	//}
-	if pb, found := c.podInfoMap.Load(podKey); found && isPodInStatus(pod, corev1.PodReady) {
+	if pb, found := c.podyInfoMap.Load(podKey); found && isPodInStatus(pod, corev1.PodReady) {
 
 		//fmt.Println("***************************Update not add ", podKey.String(), pod.Status.Phase, pod.DeletionTimestamp, pb)
 
@@ -324,7 +324,7 @@ func (c *Controller) addPodBox(ctx context.Context, pod *corev1.Pod) error {
 			fmt.Println("**************************** - no egg matched")
 		}
 		// only now add to the list
-		c.podInfoMap.Store(podKey, pb)
+		c.podyInfoMap.Store(podKey, pb)
 	} else {
 		logger.V(4).Info("Nor update nor add done")
 	}

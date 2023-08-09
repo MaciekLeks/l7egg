@@ -154,7 +154,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 		logger.Info("Updating egg")
 
 		if eq := reflect.DeepEqual(neggi.PodLabels, eggi.PodLabels); !eq {
-			c.podInfoMap.Range(func(podNsnm types.NamespacedName, pb *Pody) bool {
+			c.podyInfoMap.Range(func(podNsnm types.NamespacedName, pb *Pody) bool {
 				// Find all boxes using the same egg specified by the cegg
 
 				if *pb.PairedWithEgg == eggNsNm {
@@ -179,7 +179,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 			if podKeys := c.checkPodMatch(cegg); podKeys.Len() > 0 {
 				for i := 0; i < podKeys.Len(); i++ {
 					//TODO: {refactor to one method
-					pb, ok := c.podInfoMap.Load(podKeys.Get(i))
+					pb, ok := c.podyInfoMap.Load(podKeys.Get(i))
 					if ok {
 						if pb.PairedWithEgg != nil {
 							return fmt.Errorf("pod '%s' already paired with egg '%s'", podKeys.Get(i).String(), pb.PairedWithEgg.String())
@@ -205,7 +205,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 
 		// update CNs, CIDRs,...for remaining boxes
 		logger.Info("Updating egg for CNs, CIDRs....")
-		c.podInfoMap.Range(func(podNsNm types.NamespacedName, py *Pody) bool {
+		c.podyInfoMap.Range(func(podNsNm types.NamespacedName, py *Pody) bool {
 			// Find all boxes using the same egg specified by the cegg
 			if *py.PairedWithEgg == eggNsNm {
 				err = py.UpdateBoxes(ctx)
@@ -249,11 +249,11 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 				if err := fakeNodePod.RunBoxySet(ctx, eggi); err != nil {
 					return fmt.Errorf("starting fake node pod box failed: %s", err.Error())
 				}
-				c.podInfoMap.Store(types.NamespacedName{"", ""}, fakeNodePod)
+				c.podyInfoMap.Store(types.NamespacedName{"", ""}, fakeNodePod)
 			} else {
 				if podKeys := c.checkPodMatch(cegg); podKeys.Len() > 0 {
 					for i := 0; i < podKeys.Len(); i++ {
-						pb, ok := c.podInfoMap.Load(podKeys.Get(i))
+						pb, ok := c.podyInfoMap.Load(podKeys.Get(i))
 						if ok {
 							if pb.PairedWithEgg != nil {
 								return fmt.Errorf("pod '%s' already paired with egg '%s'", podKeys.Get(i).String(), pb.PairedWithEgg.String())
@@ -279,7 +279,7 @@ func (c *Controller) deleteEgg(ctx context.Context, eggNamespaceName types.Names
 
 	logger.Info("Deleting egg's boxes")
 	var err error
-	c.podInfoMap.Range(func(key types.NamespacedName, pb *Pody) bool {
+	c.podyInfoMap.Range(func(key types.NamespacedName, pb *Pody) bool {
 		if *pb.PairedWithEgg == eggNamespaceName {
 			logger.Info("Stopping box", "pod", key)
 			if err = pb.StopBoxes(); err != nil {
@@ -316,7 +316,7 @@ func (c *Controller) checkPodMatch(cegg v1alpha1.ClusterEgg) *syncx.SafeSlice[ty
 
 	//fmt.Println("****************** +++++ checkPodMach podCacheSynced:%t ceggCacheSynced:%t", c.podCacheSynced(), c.podCacheSynced())
 
-	c.podInfoMap.Range(func(key types.NamespacedName, pi *Pody) bool {
+	c.podyInfoMap.Range(func(key types.NamespacedName, pi *Pody) bool {
 		selector := matchLabels.AsSelectorPreValidated()
 		if selector.Matches(labels.Set(pi.Labels)) {
 			podKeys.Append(key)

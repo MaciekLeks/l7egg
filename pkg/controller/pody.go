@@ -30,7 +30,7 @@ type Pody struct {
 	Namespace     string
 	Labels        map[string]string
 	NodeName      string
-	Containers    ContainerBoxList
+	Containers    ContaineryList
 	PairedWithEgg *types.NamespacedName
 	Boxer         core.Boxer
 }
@@ -68,13 +68,13 @@ func NewPody(pod *corev1.Pod) (*Pody, error) {
 	return pi, nil
 }
 
-// NewNodePody creates Pody with only one ContainerBox filled with Pid from os.GetPid();
+// NewNodePody creates Pody with only one Containery filled with Pid from os.GetPid();
 // It's used to not have to create polimorphic code for nodes (e.g. TC working on a host ifaces).
 func NewNodePody(name string) (*Pody, error) {
-	// Creates empty Containers list with only one ContainerBox filled with Pid from os.GetPid()
-	hosts := make([]*ContainerBox, 0)
+	// Creates empty Containers list with only one Containery filled with Pid from os.GetPid()
+	hosts := make([]*Containery, 0)
 	pid := uint32(os.Getpid())
-	hostBox := &ContainerBox{
+	hostBox := &Containery{
 		Name: name,
 	}
 	hostBox.Pid = pid
