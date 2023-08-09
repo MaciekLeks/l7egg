@@ -23,7 +23,6 @@ type Boxy struct {
 	stopFunc  context.CancelFunc
 	waitGroup *sync.WaitGroup //TODO: only ene goroutine (in run(...)) - changing to channel?
 	ebpfy     *ebpfy
-	//programInfo common.ProgramInfo
 	netNsPath string
 	options   BoxyOptions
 }

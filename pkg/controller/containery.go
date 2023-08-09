@@ -42,8 +42,8 @@ func NewContainery(cs *corev1.ContainerStatus) (*Containery, error) {
 		return nil, err
 	}
 
-	if pid, err = GetContainerPid(context.Background(), cid); err != nil {
-		fmt.Printf("deep[GetContainerPid] - error %s\n", err)
+	if pid, err = containerPid(context.Background(), cid); err != nil {
+		fmt.Printf("deep[containerPid] - error %s\n", err)
 		return nil, err
 	}
 
@@ -120,7 +120,7 @@ func extractContainerdContainerId(fqcid string) (string, error) {
 	return cid, err
 }
 
-func GetContainerPid(ctx context.Context, containerId string) (uint32, error) {
+func containerPid(ctx context.Context, containerId string) (uint32, error) {
 	var pid uint32
 	logger := klog.FromContext(ctx)
 
@@ -154,7 +154,7 @@ func GetContainerPid(ctx context.Context, containerId string) (uint32, error) {
 	return pid, nil
 }
 
-func (cil ContaineryList) GetContainerInfoByContainerId(containerId string) *Containery {
+func (cil ContaineryList) containeryByContainerId(containerId string) *Containery {
 	for _, ci := range cil {
 		if ci.ContainerID == containerId {
 			return ci
@@ -163,7 +163,7 @@ func (cil ContaineryList) GetContainerInfoByContainerId(containerId string) *Con
 	return nil
 }
 
-func (cil ContaineryList) GetContainerInfoByName(containerName string) *Containery {
+func (cil ContaineryList) containeryByName(containerName string) *Containery {
 	for _, ci := range cil {
 		if ci.Name == containerName {
 			return ci
@@ -178,7 +178,7 @@ func (cil ContaineryList) UpdateContainers(current ContaineryList) (ContaineryLi
 	var resErr error
 	for i := range current {
 		name := current[i].Name
-		c := cil.GetContainerInfoByName(name)
+		c := cil.containeryByName(name)
 		if c == nil {
 			// container is not found in previous list
 			newList = append(newList, current[i])
