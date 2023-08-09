@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/common"
-	"github.com/MaciekLeks/l7egg/pkg/controller/core"
+	core2 "github.com/MaciekLeks/l7egg/pkg/core"
 	"os"
 
 	//"github.com/MaciekLeks/l7egg/pkg/controller/core"
@@ -32,7 +32,7 @@ type Pody struct {
 	NodeName      string
 	Containers    ContaineryList
 	PairedWithEgg *types.NamespacedName
-	Boxer         core.Boxer
+	Boxer         core2.Boxer
 }
 
 //type ComponentBoxer interface {
@@ -145,7 +145,7 @@ func (py *Pody) NamespaceName() types.NamespacedName {
 //	return types.NamespacedName{Namespace: "", Name: ""}
 //}
 
-func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.EggInfo) error {
+func (py *Pody) RunBoxySet(ctx context.Context, eggi *core2.EggInfo) error {
 	py.Lock()
 	defer py.Unlock()
 
@@ -162,7 +162,7 @@ func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.EggInfo) error {
 
 			var err error
 			if py.Boxer == nil {
-				py.Boxer, err = core.NewBoxy(eggi, core.WithPid(container.Pid))
+				py.Boxer, err = core2.NewBoxy(eggi, core2.WithPid(container.Pid))
 				if err != nil {
 					return err
 				}
@@ -182,7 +182,7 @@ func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.EggInfo) error {
 		// run TC part of the program - run once
 		if eggi.Shaping != nil && py.Boxer == nil {
 			// we need net netspace only for TC
-			py.Boxer, err = core.NewBoxy(eggi, core.WithNetCls(), core.WithPid(py.Containers[0].Pid))
+			py.Boxer, err = core2.NewBoxy(eggi, core2.WithNetCls(), core2.WithPid(py.Containers[0].Pid))
 			if err != nil {
 				return err
 			}
@@ -201,7 +201,7 @@ func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.EggInfo) error {
 			if container.Ready == true && container.AssetStatus == common.AssetNew {
 
 				fmt.Println("deep[RunBoxySet][3]")
-				container.Boxer, err = core.NewBoxy(eggi, core.WithPid(container.Pid))
+				container.Boxer, err = core2.NewBoxy(eggi, core2.WithPid(container.Pid))
 				fmt.Println("deep[RunBoxySet][30]", err)
 				if err != nil {
 					return err
@@ -215,7 +215,7 @@ func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.EggInfo) error {
 				fmt.Println("deep[RunBoxySet][33]")
 				if py.Boxer != nil {
 					//add process to net_clt cgroup
-					err := py.Boxer.Update(ctx, core.WithPid(container.Pid))
+					err := py.Boxer.Update(ctx, core2.WithPid(container.Pid))
 					if err != nil {
 						return err
 					}

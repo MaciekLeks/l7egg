@@ -3,7 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
-	"github.com/MaciekLeks/l7egg/pkg/controller/core"
+	"github.com/MaciekLeks/l7egg/pkg/core"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	"github.com/MaciekLeks/l7egg/pkg/utils"
 	corev1 "k8s.io/api/core/v1"

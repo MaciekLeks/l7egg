@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/common"
-	"github.com/MaciekLeks/l7egg/pkg/controller/core"
+	"github.com/MaciekLeks/l7egg/pkg/core"
 	"github.com/containerd/containerd"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"

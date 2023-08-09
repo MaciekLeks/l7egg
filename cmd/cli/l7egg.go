@@ -6,7 +6,7 @@ import (
 	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
 	"github.com/MaciekLeks/l7egg/pkg/common"
 	"github.com/MaciekLeks/l7egg/pkg/controller"
-	"github.com/MaciekLeks/l7egg/pkg/controller/core"
+	"github.com/MaciekLeks/l7egg/pkg/core"
 	"github.com/MaciekLeks/l7egg/pkg/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"os"

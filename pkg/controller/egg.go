@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
-	"github.com/MaciekLeks/l7egg/pkg/controller/core"
+	"github.com/MaciekLeks/l7egg/pkg/core"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
