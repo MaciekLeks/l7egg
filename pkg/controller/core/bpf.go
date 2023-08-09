@@ -133,12 +133,13 @@ func (ey *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType common
 				if err := net.CleanEgressTcNetStack(netNsPath, ey.EggInfo.EgressInterface); err != nil {
 					fmt.Println(err)
 				}
-			} else {
-				// TODO add condition on shaping
-				if err := net.CleanEgressTcNetStack(netNsPath, ey.EggInfo.EgressInterface); err != nil {
-					fmt.Println(err)
-				}
 			}
+			//} else {
+			//	// TODO add condition on shaping
+			//	if err := net.CleanEgressTcNetStack(netNsPath, ey.EggInfo.EgressInterface); err != nil {
+			//		fmt.Println(err)
+			//	}
+			//}
 		}()
 
 		var lwg sync.WaitGroup

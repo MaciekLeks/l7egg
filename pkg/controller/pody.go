@@ -277,6 +277,7 @@ func (py *Pody) StopBoxes() error {
 	return resErr
 }
 
+// TODO - do we need it?
 // WaitBoxes waits for all boxes to finish. Blocking call.
 func (py *Pody) WaitBoxes() {
 	var podyWaitGroup sync.WaitGroup

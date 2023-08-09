@@ -141,10 +141,10 @@ func (b *Boxy) EggNamespaceName() types.NamespacedName {
 	return b.ebpfy.EggInfo.NamespaceName()
 }
 
-func (b *CgroupBoxy) Stop() error {
-	//_ = b.cgroupNetCls.Delete() //ebpfy should Delete net class cgroup
-	return b.Stop()
-}
+//func (b *CgroupBoxy) Stop() error {
+//	//_ = b.cgroupNetCls.Delete() //ebpfy should Delete net class cgroup
+//	return b.Stop()
+//}
 
 func (b *Boxy) Wait() {
 	fmt.Println("deep[Boxy:Wait][0]")
@@ -251,7 +251,8 @@ func (b *CgroupNetClsBoxy) Stop() error {
 		return fmt.Errorf("failed to delete net cls cgroup: %v", err)
 	}
 	fmt.Println("deep[CgroupNetClsBoxy:Stop][2]")
-	return b.Boxy.Stop()
+	//return b.Boxy.Stop()
+	return nil
 }
 
 func (b *Boxy) Update(ctx context.Context, options ...func(*BoxyOptions)) error {

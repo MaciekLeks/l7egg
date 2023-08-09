@@ -96,5 +96,5 @@ func main() {
 		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 	}
 
-	c.Wait()
+	c.Wait(ctx)
 }

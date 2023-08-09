@@ -193,7 +193,6 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	//	fmt.Println("Błąd podczas konwersji na JSON:", err)
 	//	return err
 	//}
-	//fmt.Printf("***************************Trying to add or update: %s\n\n", podJson)
 	if pb, found := c.podInfoMap.Load(podKey); found && isPodInStatus(pod, corev1.PodReady) {
 
 		//fmt.Println("***************************Update not add ", podKey.String(), pod.Status.Phase, pod.DeletionTimestamp, pb)
@@ -234,7 +233,7 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 		if isMatched && !stillPaired {
 			// Run new boxes
 			fmt.Printf("deep[updatePodnfo] running boxes pod:%s \n", podKey.String())
-			if err := runBoxessOnHost(ctx, eggi, pb); err != nil {
+			if err := runBoxySetOnHost(ctx, eggi, pb); err != nil {
 				return err
 			}
 		}
@@ -258,7 +257,7 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 					return err
 				}
 				fmt.Printf("deep[updatePodnfo][5] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
-				if err := runBoxessOnHost(ctx, eggi, pb); err != nil {
+				if err := runBoxySetOnHost(ctx, eggi, pb); err != nil {
 					return err
 				}
 				fmt.Printf("deep[updatePodnfo][6] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
@@ -267,37 +266,15 @@ func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 			}
 		}
 
-	} else if isPodInStatus(pod, corev1.PodReady) { //ADD
+	} else if isPodInStatus(pod, corev1.PodReady) && !found { //ADD
 		return c.addPodBox(ctx, pod)
 	}
 
 	return nil
 }
 
-//func StoreAndRunBoxes(ctx context.Context, eggi *core.EggInfo, pi *Pody) error {
-//	manager := core.BpfManagerInstance()
-//	matchedKeyBoxes, err := manager.StoreBoxKeys(ctx, eggi, pi)
-//	if err != nil {
-//		return err
-//	}
-//	_ = pi.Set(func(v *Pody) error {
-//		v.MatchedKeyBoxes = matchedKeyBoxes
-//		return nil
-//	})
-//
-//	if err != nil {
-//		return err
-//	}
-//
-//	err = RunBoxesOnHost(ctx, eggi, pi)
-//	if err != nil {
-//		return err
-//	}
-//	return nil
-//}
-
-// runs one or many Boxy(s) on the host depends on EggInfo.ProgramType and Shaping settings
-func runBoxessOnHost(ctx context.Context, eggi *core.EggInfo, pb *Pody) error {
+// RunBoxySetOnHost runs one or many Boxy(s) on the host depends on EggInfo.ProgramType and Shaping settings
+func runBoxySetOnHost(ctx context.Context, eggi *core.EggInfo, pb *Pody) error {
 	nodeHostname, err := utils.GetHostname()
 	if err != nil {
 		return err
@@ -324,8 +301,8 @@ func (c *Controller) addPodBox(ctx context.Context, pod *corev1.Pod) error {
 		}
 
 		if eggKeys := c.checkEggMatch(pod); eggKeys.Len() > 0 {
+			fmt.Printf("deep[controller:addPodBox] - checkEggMatched passed for pod: %s\n", pod.Name)
 
-			fmt.Println("deep[controller:addPodBox[0]", pod.Name)
 			if eggKeys.Len() > 1 {
 				logger.Info("More than one egg matched. Choosing the first one", "eggs", eggKeys)
 			}
@@ -336,7 +313,7 @@ func (c *Controller) addPodBox(ctx context.Context, pod *corev1.Pod) error {
 				return fmt.Errorf("egg not found", "egg", eggKey.String())
 			}
 
-			err = runBoxessOnHost(ctx, eggi, pb)
+			err = runBoxySetOnHost(ctx, eggi, pb)
 			if err != nil {
 				return err
 			}

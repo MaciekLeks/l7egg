@@ -43,6 +43,7 @@ func NewContainerBox(cs *corev1.ContainerStatus) (*ContainerBox, error) {
 	}
 
 	if pid, err = GetContainerPid(context.Background(), cid); err != nil {
+		fmt.Printf("deep[GetContainerPid] - error %s\n", err)
 		return nil, err
 	}
 
