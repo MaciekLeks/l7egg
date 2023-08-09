@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"github.com/MaciekLeks/l7egg/pkg/controller/common"
+	"github.com/MaciekLeks/l7egg/pkg/common"
 	"k8s.io/apimachinery/pkg/types"
 )
 

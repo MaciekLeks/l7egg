@@ -15,7 +15,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"github.com/MaciekLeks/l7egg/pkg/controller/common"
+	"github.com/MaciekLeks/l7egg/pkg/common"
 	"github.com/MaciekLeks/l7egg/pkg/net"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	bpf "github.com/aquasecurity/libbpfgo"

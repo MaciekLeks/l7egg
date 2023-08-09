@@ -3,7 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
-	"github.com/MaciekLeks/l7egg/pkg/controller/common"
+	"github.com/MaciekLeks/l7egg/pkg/common"
 	"github.com/MaciekLeks/l7egg/pkg/net"
 	cgroupsv2 "github.com/containerd/cgroups/v2"
 	"github.com/containerd/cgroups/v3/cgroup1"

@@ -7,7 +7,7 @@ import (
 	ceggscheme "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned/scheme"
 	cegginformer "github.com/MaciekLeks/l7egg/pkg/client/informers/externalversions/maciekleks.dev/v1alpha1"
 	cegglister "github.com/MaciekLeks/l7egg/pkg/client/listers/maciekleks.dev/v1alpha1"
-	"github.com/MaciekLeks/l7egg/pkg/controller/common"
+	"github.com/MaciekLeks/l7egg/pkg/common"
 	"github.com/MaciekLeks/l7egg/pkg/controller/core"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	corev1 "k8s.io/api/core/v1"

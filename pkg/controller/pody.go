@@ -3,7 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
-	"github.com/MaciekLeks/l7egg/pkg/controller/common"
+	"github.com/MaciekLeks/l7egg/pkg/common"
 	"github.com/MaciekLeks/l7egg/pkg/controller/core"
 	"os"
 
