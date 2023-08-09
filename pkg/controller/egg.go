@@ -207,7 +207,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 		logger.Info("Updating egg for CNs, CIDRs....")
 		c.podyInfoMap.Range(func(podNsNm types.NamespacedName, py *Pody) bool {
 			// Find all boxes using the same egg specified by the cegg
-			if *py.PairedWithEgg == eggNsNm {
+			if py.PairedWithEgg != nil && *py.PairedWithEgg == eggNsNm {
 				err = py.UpdateBoxes(ctx)
 				if err != nil {
 					err = fmt.Errorf("updating clusteregg '%s': %s failed", cegg.Name, err.Error())
