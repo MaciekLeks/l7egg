@@ -230,9 +230,12 @@ func (b *CgroupNetClsBoxy) Update(ctx context.Context, options ...func(*BoxyOpti
 		options[i](opts)
 	}
 
+	fmt.Println("deep[CgroupNetClsBoxy:Update][1]")
 	if opts.pid == 0 {
 		return fmt.Errorf("pid is required")
 	}
+
+	fmt.Println("deep[CgroupNetClsBoxy:Update][2]")
 
 	logger.V(2).Info("container process pid added to net_cls cgroup")
 	return b.ebpfy.addPidToNetClsCgroup(b.cgroupNetCls, opts.pid)

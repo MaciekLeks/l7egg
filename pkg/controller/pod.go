@@ -172,122 +172,211 @@ func isPodInStatus(pod *corev1.Pod, podCondType corev1.PodConditionType) bool {
 	return false
 }
 
+//func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
+//	logger := klog.LoggerWithValues(klog.FromContext(ctx), "namespace", pod.Namespace, "name", pod.Name)
+//	logger.Info("Update pod info.")
+//	podKey := types.NamespacedName{pod.Namespace, pod.Name}
+//
+//	//fmt.Printf("******************* pod %s status: \nPodScheduled:%t\nInitialized:%t\nContainersReady:%t\nPodReady:%t\n",
+//	//	pod.Name,
+//	//	isPodInStatus(pod, corev1.PodScheduled),
+//	//	isPodInStatus(pod, corev1.PodInitialized),
+//	//	isPodInStatus(pod, corev1.ContainersReady),
+//	//	isPodInStatus(pod, corev1.PodReady))
+//	//
+//	//for i := range pod.Status.ContainerStatuses {
+//	//	fmt.Printf("************** POD container statuses: %+v\n", pod.Status.ContainerStatuses[i])
+//	//}
+//
+//	//podJson, err := json.MarshalIndent(pod.Status, "", "    ")
+//	//if err != nil {
+//	//	fmt.Println("Błąd podczas konwersji na JSON:", err)
+//	//	return err
+//	//}
+//	if pb, found := c.podyInfoMap.Load(podKey); found && isPodInStatus(pod, corev1.PodReady) {
+//
+//		//fmt.Println("***************************Update not add ", podKey.String(), pod.Status.Phase, pod.DeletionTimestamp, pb)
+//
+//		wasPaired := pb.PairedWithEgg != nil && len(pb.PairedWithEgg.Name) > 0
+//		fmt.Printf("deep[updatePodnfo] wasPaired: %t, pod:%s \n", wasPaired, podKey.String())
+//
+//		var stillPaired, isMatched bool
+//		var eggi *core.Eggy
+//		if eggKeys := c.checkEggMatch(pod); eggKeys.Len() > 0 {
+//			if eggKeys.Len() > 1 {
+//				logger.Info("More than one egg matched. Choosing the first one", "eggs", eggKeys)
+//			}
+//			eggKey := eggKeys.Get(0)
+//			var ok bool
+//			eggi, ok = c.eggInfoMap.Load(eggKey)
+//			if !ok {
+//				return fmt.Errorf("egg not found", "egg", eggKey.String())
+//			}
+//
+//			isMatched = true
+//			// all MatchedKeyBoxes must have the same Egg
+//			if pb.PairedWithEgg != nil && eggi.NamespaceName() == *pb.PairedWithEgg {
+//				stillPaired = true
+//				fmt.Printf("deep[updatePodnfo] stillPaired: %t, pod:%s \n", stillPaired, podKey.String())
+//			}
+//		}
+//
+//		if wasPaired && !stillPaired {
+//			// Stop old boxes
+//			fmt.Printf("deep[updatePodnfo] stopping boxes pod:%s \n", podKey.String())
+//			if err := pb.StopBoxes(); err != nil {
+//				return err
+//			}
+//
+//		}
+//
+//		if isMatched && !stillPaired {
+//			// Run new boxes
+//			fmt.Printf("deep[updatePodnfo] running boxes pod:%s \n", podKey.String())
+//			if err := runBoxySetOnHost(ctx, eggi, pb); err != nil {
+//				return err
+//			}
+//		}
+//
+//		if isMatched && stillPaired {
+//			fmt.Printf("deep[updatePodnfo] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
+//			cpi, err := NewPody(pod)
+//			if err != nil {
+//				return err
+//			}
+//			// Check: Check containers changes
+//			fmt.Printf("deep[updatePodnfo][2] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
+//			if newContainerList, err := pb.Containers.UpdateContainers(cpi.Containers); err == nil {
+//				err = pb.Set(func(v *Pody) error {
+//					fmt.Printf("deep[updatePodnfo][3] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
+//					v.Containers = newContainerList
+//					return nil
+//				})
+//				fmt.Printf("deep[updatePodnfo][4] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
+//				if err != nil {
+//					return err
+//				}
+//				fmt.Printf("deep[updatePodnfo][5] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
+//				if err := runBoxySetOnHost(ctx, eggi, pb); err != nil {
+//					return err
+//				}
+//				fmt.Printf("deep[updatePodnfo][6] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
+//			} else {
+//				return err
+//			}
+//		}
+//
+//	} else if isPodInStatus(pod, corev1.PodReady) && !found { //ADD
+//		return c.addPodBox(ctx, pod)
+//	}
+//
+//	return nil
+//}
+//
+
 func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "namespace", pod.Namespace, "name", pod.Name)
 	logger.Info("Update pod info.")
 	podKey := types.NamespacedName{pod.Namespace, pod.Name}
 
-	//fmt.Printf("******************* pod %s status: \nPodScheduled:%t\nInitialized:%t\nContainersReady:%t\nPodReady:%t\n",
-	//	pod.Name,
-	//	isPodInStatus(pod, corev1.PodScheduled),
-	//	isPodInStatus(pod, corev1.PodInitialized),
-	//	isPodInStatus(pod, corev1.ContainersReady),
-	//	isPodInStatus(pod, corev1.PodReady))
-	//
-	//for i := range pod.Status.ContainerStatuses {
-	//	fmt.Printf("************** POD container statuses: %+v\n", pod.Status.ContainerStatuses[i])
-	//}
-
-	//podJson, err := json.MarshalIndent(pod.Status, "", "    ")
-	//if err != nil {
-	//	fmt.Println("Błąd podczas konwersji na JSON:", err)
-	//	return err
-	//}
-	if pb, found := c.podyInfoMap.Load(podKey); found && isPodInStatus(pod, corev1.PodReady) {
-
-		//fmt.Println("***************************Update not add ", podKey.String(), pod.Status.Phase, pod.DeletionTimestamp, pb)
-
-		wasPaired := pb.PairedWithEgg != nil && len(pb.PairedWithEgg.Name) > 0
-		fmt.Printf("deep[updatePodnfo] wasPaired: %t, pod:%s \n", wasPaired, podKey.String())
-
-		var stillPaired, isMatched bool
-		var eggi *core.Eggy
-		if eggKeys := c.checkEggMatch(pod); eggKeys.Len() > 0 {
-			if eggKeys.Len() > 1 {
-				logger.Info("More than one egg matched. Choosing the first one", "eggs", eggKeys)
-			}
-			eggKey := eggKeys.Get(0)
-			var ok bool
-			eggi, ok = c.eggInfoMap.Load(eggKey)
-			if !ok {
-				return fmt.Errorf("egg not found", "egg", eggKey.String())
-			}
-
-			isMatched = true
-			// all MatchedKeyBoxes must have the same Egg
-			if pb.PairedWithEgg != nil && eggi.NamespaceName() == *pb.PairedWithEgg {
-				stillPaired = true
-				fmt.Printf("deep[updatePodnfo] stillPaired: %t, pod:%s \n", stillPaired, podKey.String())
-			}
-		}
-
-		if wasPaired && !stillPaired {
-			// Stop old boxes
-			fmt.Printf("deep[updatePodnfo] stopping boxes pod:%s \n", podKey.String())
-			if err := pb.StopBoxes(); err != nil {
-				return err
-			}
-
-		}
-
-		if isMatched && !stillPaired {
-			// Run new boxes
-			fmt.Printf("deep[updatePodnfo] running boxes pod:%s \n", podKey.String())
-			if err := runBoxySetOnHost(ctx, eggi, pb); err != nil {
-				return err
-			}
-		}
-
-		if isMatched && stillPaired {
-			fmt.Printf("deep[updatePodnfo] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
-			cpi, err := NewPody(pod)
-			if err != nil {
-				return err
-			}
-			// Check: Check containers changes
-			fmt.Printf("deep[updatePodnfo][2] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
-			if newContainerList, err := pb.Containers.UpdateContainers(cpi.Containers); err == nil {
-				err = pb.Set(func(v *Pody) error {
-					fmt.Printf("deep[updatePodnfo][3] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
-					v.Containers = newContainerList
-					return nil
-				})
-				fmt.Printf("deep[updatePodnfo][4] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
-				if err != nil {
-					return err
-				}
-				fmt.Printf("deep[updatePodnfo][5] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
-				if err := runBoxySetOnHost(ctx, eggi, pb); err != nil {
-					return err
-				}
-				fmt.Printf("deep[updatePodnfo][6] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
-			} else {
-				return err
-			}
-		}
-
-	} else if isPodInStatus(pod, corev1.PodReady) && !found { //ADD
+	py, found := c.podyInfoMap.Load(podKey)
+	if found && isPodInStatus(pod, corev1.PodReady) {
+		return c.updatePody(ctx, pod, py)
+	} else if isPodInStatus(pod, corev1.PodReady) && !found {
 		return c.addPodBox(ctx, pod)
 	}
 
 	return nil
 }
 
-// RunBoxySetOnHost runs one or many Boxy(s) on the host depends on Eggy.ProgramType and Shaping settings
-func runBoxySetOnHost(ctx context.Context, eggi *core.Eggy, pb *Pody) error {
-	nodeHostname, err := utils.GetHostname()
+// updatePody updates the Pody object with the new pod information
+func (c *Controller) updatePody(ctx context.Context, pod *corev1.Pod, py *Pody) error {
+	podKey := types.NamespacedName{Namespace: pod.Namespace, Name: pod.Name}
+
+	wasPaired := py.PairedWithEgg != nil && len(py.PairedWithEgg.Name) > 0
+	fmt.Printf("deep[updatePodnfo] wasPaired: %t, pod:%s \n", wasPaired, podKey.String())
+
+	stillPaired, isMatched, eggi, err := c.checkAndUpdatePodMatch(ctx, pod, py)
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("deep[runBoxesOnHost]", nodeHostname, pb.NodeName)
-	if nodeHostname == pb.NodeName {
-		err = pb.RunBoxySet(ctx, eggi)
-		if err != nil {
+	if wasPaired && !stillPaired {
+		// Stop old boxes
+		fmt.Printf("deep[updatePodnfo] stopping boxes pod:%s \n", podKey.String())
+		if err := py.StopBoxes(); err != nil {
 			return err
 		}
 	}
+
+	if isMatched && !stillPaired {
+		// Run new boxes
+		fmt.Printf("deep[updatePodnfo] running boxes pod:%s \n", podKey.String())
+		return runBoxySetOnHost(ctx, eggi, py)
+	}
+
+	if isMatched && stillPaired {
+		fmt.Printf("deep[updatePodnfo] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
+		return c.checkAndUpdateContainerChanges(ctx, pod, py, eggi)
+	}
+
 	return nil
+}
+
+func (c *Controller) checkAndUpdatePodMatch(ctx context.Context, pod *corev1.Pod, py *Pody) (bool, bool, *core.Eggy, error) {
+	var stillPaired, isMatched bool
+	var eggi *core.Eggy
+	logger := klog.LoggerWithValues(klog.FromContext(ctx), "namespace", pod.Namespace, "name", pod.Name)
+
+	podKey := types.NamespacedName{Namespace: pod.Namespace, Name: pod.Name}
+	eggKeys := c.checkEggMatch(pod)
+	if eggKeys.Len() > 0 {
+		if eggKeys.Len() > 1 {
+			logger.Info("More than one egg matched. Choosing the first one", "eggs", eggKeys)
+		}
+
+		eggKey := eggKeys.Get(0)
+		var ok bool
+		eggi, ok = c.eggInfoMap.Load(eggKey)
+		if !ok {
+			return false, false, nil, fmt.Errorf("egg not found", "egg", eggKey.String())
+		}
+
+		isMatched = true
+		// all MatchedKeyBoxes must have the same Egg
+		if py.PairedWithEgg != nil && eggi.NamespaceName() == *py.PairedWithEgg {
+			stillPaired = true
+			fmt.Printf("deep[updatePodnfo] stillPaired: %t, pod:%s \n", stillPaired, podKey.String())
+		}
+	}
+
+	return stillPaired, isMatched, eggi, nil
+}
+
+func (c *Controller) checkAndUpdateContainerChanges(ctx context.Context, pod *corev1.Pod, pb *Pody, eggi *core.Eggy) error {
+	podKey := types.NamespacedName{Namespace: pod.Namespace, Name: pod.Name}
+
+	newpy, err := NewPody(pod)
+	if err != nil {
+		return err
+	}
+
+	newContainerList, err := pb.Containers.UpdateContainers(newpy.Containers)
+	if err != nil {
+		return err
+	}
+
+	err = pb.Set(func(v *Pody) error {
+		fmt.Printf("deep[updatePodnfo][3] isMatched:%t stillPaired:%t pod:%s\n", true, true, podKey.String())
+		v.Containers = newContainerList
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("deep[updatePodnfo][5] isMatched:%t stillPaired:%t pod:%s\n", true, true, podKey.String())
+	return runBoxySetOnHost(ctx, eggi, pb)
 }
 
 func (c *Controller) addPodBox(ctx context.Context, pod *corev1.Pod) error {
@@ -331,6 +420,23 @@ func (c *Controller) addPodBox(ctx context.Context, pod *corev1.Pod) error {
 	return nil
 }
 
+// RunBoxySetOnHost runs one or many Boxy(s) on the host depends on Eggy.ProgramType and Shaping settings
+func runBoxySetOnHost(ctx context.Context, eggi *core.Eggy, pb *Pody) error {
+	nodeHostname, err := utils.GetHostname()
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("deep[runBoxesOnHost]", nodeHostname, pb.NodeName)
+	if nodeHostname == pb.NodeName {
+		err = pb.RunBoxySet(ctx, eggi)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (c *Controller) forgetPod(ctx context.Context, key string) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "resourceName", key)
 	logger.Info("Delete pod info.")
@@ -343,6 +449,10 @@ func (c *Controller) checkEggMatch(pod *corev1.Pod) *syncx.SafeSlice[types.Names
 	podLabels := labels.Set(pod.Labels)
 
 	c.eggInfoMap.Range(func(key types.NamespacedName, eggi *core.Eggy) bool {
+		if eggi.PodLabels == nil || len(eggi.PodLabels) == 0 {
+			// no selector in ClusterEgg means - do not match to any pod - match to interface!!
+			return true
+		}
 		matchLabels := labels.Set(eggi.PodLabels)
 		selector := matchLabels.AsSelectorPreValidated()
 		if selector.Matches(podLabels) {

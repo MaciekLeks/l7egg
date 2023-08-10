@@ -31,6 +31,14 @@ func main() {
 	klog.InitFlags(nil)
 	flag.Parse()
 
+	//{gops
+	//if err := agent.Listen(agent.Options{
+	//	ShutdownCleanup: true, // automatically closes on os.Interrupt
+	//}); err != nil {
+	//	log.Fatal(err)
+	//}
+	//}
+
 	ctx := utils.SetupSignalHandler()
 	logger := klog.FromContext(ctx)
 
