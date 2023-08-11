@@ -154,8 +154,8 @@ func containerPid(ctx context.Context, containerId string) (uint32, error) {
 	return pid, nil
 }
 
-func (cil ContaineryList) containeryByContainerId(containerId string) *Containery {
-	for _, ci := range cil {
+func (cyl ContaineryList) containeryByContainerId(containerId string) *Containery {
+	for _, ci := range cyl {
 		if ci.ContainerID == containerId {
 			return ci
 		}
@@ -163,8 +163,8 @@ func (cil ContaineryList) containeryByContainerId(containerId string) *Container
 	return nil
 }
 
-func (cil ContaineryList) containeryByName(containerName string) *Containery {
-	for _, ci := range cil {
+func (cyl ContaineryList) containeryByName(containerName string) *Containery {
+	for _, ci := range cyl {
 		if ci.Name == containerName {
 			return ci
 		}
@@ -173,31 +173,35 @@ func (cil ContaineryList) containeryByName(containerName string) *Containery {
 }
 
 // UpdateContainers ChangedContainers returns list of containers that have been changed - added, removed, updated
-func (cil ContaineryList) UpdateContainers(current ContaineryList) (ContaineryList, error) {
+// update returns true if list owner of the cyl must be updated
+func (cyl ContaineryList) UpdateContainers(newcyl ContaineryList) (ContaineryList, bool, error) {
 	var newList ContaineryList
 	var resErr error
-	for i := range current {
-		name := current[i].Name
-		c := cil.containeryByName(name)
+	var update bool
+	for i := range newcyl {
+		name := newcyl[i].Name
+		c := cyl.containeryByName(name)
 		if c == nil {
 			// container is not found in previous list
-			newList = append(newList, current[i])
+			newList = append(newList, newcyl[i])
+			update = true
 		} else {
 			// container is found in previous list
 			//TODO add more conditions
-			if c.ContainerID != current[i].ContainerID {
+			if c.ContainerID != newcyl[i].ContainerID {
 				c.AssetStatus = common.AssetStale
 				// Not stopping, if container is changes it's gone anyway
 				//if err := c.Boxer.Stop(); err != nil { //should Stop be here?
 				//	resErr = fmt.Errorf("%s: %w", err.Error(), resErr)
 				//}
-				newList = append(newList, current[i])
+				newList = append(newList, newcyl[i])
+				update = true
 			} else {
 				c.AssetStatus = common.AssetSynced
-				current[i].AssetStatus = common.AssetSynced
-				newList = append(newList, current[i])
+				newcyl[i].AssetStatus = common.AssetSynced
+				newList = append(newList, newcyl[i])
 			}
 		}
 	}
-	return newList, resErr
+	return newList, update, resErr
 }

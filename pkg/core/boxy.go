@@ -7,7 +7,6 @@ import (
 	"github.com/MaciekLeks/l7egg/pkg/net"
 	cgroupsv2 "github.com/containerd/cgroups/v2"
 	"github.com/containerd/cgroups/v3/cgroup1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	"sync"
 )
@@ -47,9 +46,13 @@ func (b *Boxy) RunBoxWithPid(ctx context.Context, pid uint32) error {
 type Boxer interface {
 	Stop() error
 	Wait()
-	Run(context.Context) error
-	Update(context.Context, ...func(*BoxyOptions)) error
-	EggNamespaceName() types.NamespacedName
+	Install(context.Context) error
+	// Upgrade modify Boxy internals, e.g. net namespaces, not business data
+	Upgrade(context.Context, ...func(*BoxyOptions)) error
+	// Reconcile reconfigure Boxy, e.g. ebpf programs data to reconcile it with a new state of the Egg
+	Reconcile(context.Context) error
+	// Do some actions on the Boxy based on temprorary options (these options are not updated in Boxy internals)
+	DoAction(context.Context, ...func(actionOptions *BoxyOptions)) error
 }
 
 type TcBoxy struct {
@@ -136,9 +139,26 @@ func (b *Boxy) Stop() error {
 	return nil
 }
 
-func (b *Boxy) EggNamespaceName() types.NamespacedName {
-	return b.ebpfy.eggy.NamespaceName()
+func (b *CgroupNetClsBoxy) Stop() error {
+	err := b.ebpfy.stopNetClsCgroupStack(b.netNsPath)
+	if err != nil {
+		return err
+	}
+	err = b.cgroupNetCls.Delete()
+	if err != nil {
+		return fmt.Errorf("failed to delete net cls cgroup: %v", err)
+	}
+	return nil
 }
+
+func (b *TcBoxy) Stop() error {
+	_ = b.Boxy.Stop()
+	return b.ebpfy.stopTcNetStack(b.netNsPath)
+}
+
+//func (b *Boxy) EggNamespaceName() types.NamespacedName {
+//	return b.ebpfy.eggy.NamespaceName()
+//}
 
 //func (b *CgroupBoxy) Stop() error {
 //	//_ = b.cgroupNetCls.Delete() //ebpfy should Delete net class cgroup
@@ -171,10 +191,15 @@ func containerdCgroupPath(pid uint32) (string, error) {
 	return cgroupsv2.PidGroupPath(int(pid))
 }
 
-func (b *CgroupBoxy) Run(ctx context.Context) error {
+func containerNetNsPath(pid uint32) string {
+	fmt.Printf("deep[containerNetNsPath] pid: %d", pid)
+	return fmt.Sprintf("/proc/%d/ns/net", pid)
+}
+
+func (b *CgroupBoxy) Install(ctx context.Context) error {
 	logger := klog.FromContext(ctx)
 	var err error
-	fmt.Println("deep[CgroupBoxy:Run][0]")
+	fmt.Println("deep[CgroupBoxy:Install][0]")
 
 	var cgroupPath string
 	logger.V(2).Info("runBoxWithPid: getting network space path")
@@ -190,74 +215,49 @@ func (b *CgroupBoxy) Run(ctx context.Context) error {
 	b.netNsPath = netNsPath
 
 	return b.start(ctx, func(ctx context.Context) error {
-		fmt.Println("deep[CgroupBoxy:Run][2]", b.cgroupPath, b.netNsPath)
+		fmt.Println("deep[CgroupBoxy:Install][2]", b.cgroupPath, b.netNsPath)
 		return b.ebpfy.run(ctx, b.waitGroup, common.ProgramTypeCgroup, b.netNsPath, b.cgroupPath, b.options.pid)
 	})
 }
 
-func (b *TcBoxy) Run(ctx context.Context) error {
+func (b *TcBoxy) Install(ctx context.Context) error {
 	logger := klog.FromContext(ctx)
 	fmt.Println("TcBoxy:runBoxWithPid")
 
 	logger.V(2).Info("runBoxWithPid: getting network space path")
-	netNsPath := fmt.Sprintf("/proc/%d/ns/net", b.options.pid)
-	b.netNsPath = netNsPath
+	b.netNsPath = containerNetNsPath(b.options.pid)
 
 	return b.start(ctx, func(ctx context.Context) error {
-		return b.ebpfy.run(ctx, b.waitGroup, common.ProgramTypeTC, netNsPath, "", b.options.pid)
+		return b.ebpfy.run(ctx, b.waitGroup, common.ProgramTypeTC, b.netNsPath, "", b.options.pid)
 	})
 }
 
-func (b *CgroupNetClsBoxy) Run(ctx context.Context) error {
+func (b *CgroupNetClsBoxy) Install(ctx context.Context) error {
 	logger := klog.FromContext(ctx)
-	fmt.Println("deep[CgroupNetClsBoxy:Run][0]")
+	fmt.Println("deep[CgroupNetClsBoxy:Install][0]")
 
 	logger.V(2).Info("runBoxWithPid: getting network space path")
-	netNsPath := fmt.Sprintf("/proc/%d/ns/net", b.options.pid)
-	b.netNsPath = netNsPath
+	b.netNsPath = containerNetNsPath(b.options.pid)
 
-	fmt.Println("deep[CgroupNetClsBoxy:Run][1]", netNsPath, b.cgroupNetCls, b.options.pid)
-	return b.ebpfy.runNetClsCgroupStack(netNsPath, b.cgroupNetCls, b.options.pid)
+	fmt.Println("deep[CgroupNetClsBoxy:Install][1]", b.netNsPath, b.cgroupNetCls, b.options.pid)
+	return b.ebpfy.runNetClsCgroupStack(b.netNsPath, b.cgroupNetCls, b.options.pid)
 }
 
-// Update adds the container process pid to the net_cls cgroup
-func (b *CgroupNetClsBoxy) Update(ctx context.Context, options ...func(*BoxyOptions)) error {
-	logger := klog.FromContext(ctx)
-	fmt.Println("deep[CgroupNetClsBoxy:Update][0]")
+func (b *Boxy) Upgrade(ctx context.Context, options ...func(*BoxyOptions)) error {
 
-	opts := &BoxyOptions{}
+	// modify the options
 	for i := range options {
-		options[i](opts)
+		options[i](&b.options)
 	}
 
-	fmt.Println("deep[CgroupNetClsBoxy:Update][1]")
-	if opts.pid == 0 {
-		return fmt.Errorf("pid is required")
+	// Reconcile the netNsPath to the container's net namespace path
+	if b.options.pid != 0 {
+		b.netNsPath = containerNetNsPath(b.options.pid)
 	}
-
-	fmt.Println("deep[CgroupNetClsBoxy:Update][2]")
-
-	logger.V(2).Info("container process pid added to net_cls cgroup")
-	return b.ebpfy.addPidToNetClsCgroup(b.cgroupNetCls, opts.pid)
-}
-
-func (b *CgroupNetClsBoxy) Stop() error {
-	fmt.Println("deep[CgroupNetClsBoxy:Stop][0]")
-	err := b.ebpfy.stopNetClsCgroupStack(b.netNsPath)
-	if err != nil {
-		return err
-	}
-	fmt.Println("deep[CgroupNetClsBoxy:Stop][1]")
-	err = b.cgroupNetCls.Delete()
-	if err != nil {
-		return fmt.Errorf("failed to delete net cls cgroup: %v", err)
-	}
-	fmt.Println("deep[CgroupNetClsBoxy:Stop][2]")
-	//return b.Boxy.Stop()
 	return nil
 }
 
-func (b *Boxy) Update(ctx context.Context, options ...func(*BoxyOptions)) error {
+func (b *Boxy) Reconcile(ctx context.Context) error {
 	if err := b.ebpfy.updateCIDRs(b.ebpfy.eggy.CIDRs); err != nil {
 		return err
 	}
@@ -266,5 +266,39 @@ func (b *Boxy) Update(ctx context.Context, options ...func(*BoxyOptions)) error 
 		return err
 	}
 
+	return nil
+}
+
+// Reconcile does nothing
+func (b *CgroupNetClsBoxy) Reconcile(ctx context.Context) error {
+	// We do nothing here
+	return nil
+}
+
+// DoAction adds the pid to the net cls cgroup
+func (b *CgroupNetClsBoxy) DoAction(ctx context.Context, actionOptions ...func(actionOptions *BoxyOptions)) error {
+
+	actionOpts := BoxyOptions{}
+	for i := range actionOptions {
+		actionOptions[i](&actionOpts)
+	}
+
+	// we implement only one action
+	if actionOpts.pid == 0 {
+		return fmt.Errorf("pid is required")
+	}
+
+	logger := klog.FromContext(ctx)
+	err := b.ebpfy.addPidToNetClsCgroup(b.cgroupNetCls, b.options.pid)
+	if err != nil {
+		return fmt.Errorf("failed to add pid to net cls cgroup: %v", err)
+	}
+	logger.V(2).Info("pid to net cls cgroup", "pid", actionOpts.pid)
+
+	return nil
+}
+
+func (b *Boxy) DoAction(ctx context.Context, actionOptions ...func(actionOptions *BoxyOptions)) error {
+	// No action to do
 	return nil
 }

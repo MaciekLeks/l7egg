@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/net"
 	"github.com/containerd/cgroups/v3/cgroup1"
 )
@@ -11,6 +12,16 @@ func (ey *ebpfy) runNetClsCgroupStack(netNsPath string, cgroupNetCls cgroup1.Cgr
 
 func (ey *ebpfy) stopNetClsCgroupStack(netNsPath string) error {
 	return net.CleanEgressTcNetStack(netNsPath, ey.eggy.EgressInterface)
+}
+
+func (ey *ebpfy) stopTcNetStack(netNsPath string) error {
+	if err := net.CleanIngressTcNetStack(netNsPath, ey.eggy.IngressInterface); err != nil {
+		return fmt.Errorf("failed to clean ingress tc net stack: %v", err)
+	}
+	if err := net.CleanEgressTcNetStack(netNsPath, ey.eggy.EgressInterface); err != nil {
+		return fmt.Errorf("failed to clean egress tc net stack: %v", err)
+	}
+	return nil
 }
 
 func (ey *ebpfy) addPidToNetClsCgroup(cgroupNetCls cgroup1.Cgroup, pid uint32) error {

@@ -71,5 +71,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	nodePod.WaitBoxes()
+	nodePod.WaitBoxySet()
 }

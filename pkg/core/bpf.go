@@ -124,23 +124,23 @@ func (ey *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType common
 		//LIFO
 		defer wg.Done() //added with new tc filter approach via go-tc
 		defer ey.bpfModule.Close()
-		defer func() {
-			if /*len(cgroupPath) == 0*/ programType == common.ProgramTypeTC {
-				//tools.CleanInterfaces(netNsPath, ebpfy.IngressInterface, ebpfy.EgressInterface)
-				if err := net.CleanIngressTcNetStack(netNsPath, ey.eggy.IngressInterface); err != nil {
-					fmt.Println(err)
-				}
-				if err := net.CleanEgressTcNetStack(netNsPath, ey.eggy.EgressInterface); err != nil {
-					fmt.Println(err)
-				}
-			}
-			//} else {
-			//	// TODO add condition on shaping
-			//	if err := net.CleanEgressTcNetStack(netNsPath, ey.Eggy.EgressInterface); err != nil {
-			//		fmt.Println(err)
-			//	}
-			//}
-		}()
+		//defer func() {
+		//	//if /*len(cgroupPath) == 0*/ programType == common.ProgramTypeTC {
+		//	//	//tools.CleanInterfaces(netNsPath, ebpfy.IngressInterface, ebpfy.EgressInterface)
+		//	//	if err := net.CleanIngressTcNetStack(netNsPath, ey.eggy.IngressInterface); err != nil {
+		//	//		fmt.Println(err)
+		//	//	}
+		//	//	if err := net.CleanEgressTcNetStack(netNsPath, ey.eggy.EgressInterface); err != nil {
+		//	//		fmt.Println(err)
+		//	//	}
+		//	//}
+		//	//} else {
+		//	//	// TODO add condition on shaping
+		//	//	if err := net.CleanEgressTcNetStack(netNsPath, ey.Eggy.EgressInterface); err != nil {
+		//	//		fmt.Println(err)
+		//	//	}
+		//	//}
+		//}()
 
 		var lwg sync.WaitGroup
 		//runMapLooper(ctx, ebpfy.ipv4ACL, ebpfy.CNs, ipv4, &lwg, netNsPath, cgroupPath)

@@ -109,50 +109,29 @@ func (py *Pody) Set(fn func(v *Pody) error) error {
 	return fn(py)
 }
 
-//func (nb *NodeBox) Set(fn func(v *NodeBox) error) error {
-//	nb.Lock()
-//	defer nb.Unlock()
-//	return fn(nb)
-//}
-
-//func (pi *Pody) Update(pod *corev1.Pod) (bool, error) {
-//	var changed bool
-//	pi.RLock()
-//	defer pi.RUnlock()
-//
-//	npi, err := NewPody(pod)
-//	if err != nil {
-//		return changed, err
-//	}
-//
-//	if reflect.DeepEqual(&pi, &npi) {
-//		changed = true
-//		// Update Pody fields
-//		v.name = npi.name
-//		v.namespace = npi.namespace
-//		v.labels = npi.labels
-//		v.nodeName = npi.nodeName
-//		v.containers = npi.containers
-//
-//	}
-//
-//	return changed, nil
-//}
-
 func (py *Pody) NamespaceName() types.NamespacedName {
 	return types.NamespacedName{Namespace: py.Namespace, Name: py.Name}
 }
-
-//func (pb *NodeBox) NamespaceName() types.NamespacedName {
-//	return types.NamespacedName{Namespace: "", Name: ""}
-//}
 
 func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.Eggy) error {
 	py.Lock()
 	defer py.Unlock()
 
+	// pair with egg
+	eggKey := eggi.NamespaceName()
+	py.PairedWithEgg = &eggKey
+
 	if len(py.Containers) < 1 {
 		return fmt.Errorf("no containers in pod %s", py.Name)
+	}
+
+	if py.Boxer != nil {
+		// py.Boxer for TC must be updated with new pid, the same for cgroup net_cls
+		container := py.Containers[0]
+		err := py.Boxer.Upgrade(ctx, core.WithPid(container.Pid))
+		if err != nil {
+			return err
+		}
 	}
 
 	fmt.Println("deep[RunBoxySet][1]")
@@ -169,7 +148,7 @@ func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.Eggy) error {
 					return err
 				}
 			}
-			err = py.Boxer.Run(ctx)
+			err = py.Boxer.Install(ctx)
 			container.AssetStatus = common.AssetSynced
 			if err != nil {
 				return err
@@ -177,11 +156,12 @@ func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.Eggy) error {
 
 		}
 		return nil
-	} else {
+	} else if eggi.ProgramType == common.ProgramTypeCgroup {
 		var err error
 		fmt.Println("deep[RunBoxySet][2]")
 
 		// run TC part of the program - run once
+		// if py.Boxy != nil && py.Boxy.Options pid != od tego pid-a z contener-a 0 to znaczy ze trzeba go zmienic
 		if eggi.Shaping != nil && py.Boxer == nil {
 			// we need net netspace only for TC
 			py.Boxer, err = core.NewBoxy(eggi, core.WithNetCls(), core.WithPid(py.Containers[0].Pid))
@@ -189,9 +169,9 @@ func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.Eggy) error {
 				return err
 			}
 
-			fmt.Println("deep[RunBoxySet][Before Run]")
-			err := py.Boxer.Run(ctx)
-			fmt.Println("deep[RunBoxySet][After Run]")
+			fmt.Println("deep[RunBoxySet][Before Install]")
+			err := py.Boxer.Install(ctx)
+			fmt.Println("deep[RunBoxySet][After Install]")
 			if err != nil {
 				return err
 			}
@@ -209,7 +189,7 @@ func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.Eggy) error {
 					return err
 				}
 				fmt.Println("deep[RunBoxySet][31]")
-				err := container.Boxer.Run(ctx)
+				err := container.Boxer.Install(ctx)
 				fmt.Println("deep[RunBoxySet][32]")
 				if err != nil {
 					return err
@@ -217,7 +197,7 @@ func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.Eggy) error {
 				fmt.Println("deep[RunBoxySet][33]")
 				if py.Boxer != nil {
 					//add process to net_clt cgroup
-					err := py.Boxer.Update(ctx, core.WithPid(container.Pid))
+					err := py.Boxer.DoAction(ctx, core.WithPid(container.Pid))
 					if err != nil {
 						return err
 					}
@@ -229,27 +209,10 @@ func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.Eggy) error {
 
 	}
 
-	py.PairedWithEgg = &types.NamespacedName{Namespace: "", Name: eggi.Name}
+	//py.PairedWithEgg = &types.NamespacedName{Namespace: "", Name: eggi.Name}
 
 	return nil
 }
-
-//func (nb *NodeBox) RunBoxySet(ctx context.Context, eggi *core.Eggy) error {
-//	nb.Lock()
-//	defer nb.Unlock()
-//
-//	boxy := core.NewBoxy(eggi)
-//
-//	err := boxy.RunWithPid(ctx, uint32(os.Getpid()))
-//	if err != nil {
-//		return err
-//	}
-//
-//	nb.Boxer = boxy
-//	nb.PairedWithEgg = &types.NamespacedName{Namespace: "", Name: eggi.Name}
-//
-//	return nil
-//}
 
 func (py *Pody) StopBoxes() error {
 	py.Lock()
@@ -279,9 +242,8 @@ func (py *Pody) StopBoxes() error {
 	return resErr
 }
 
-// TODO - do we need it?
-// WaitBoxes waits for all boxes to finish. Blocking call.
-func (py *Pody) WaitBoxes() {
+// WaitBoxySet waits for all boxes to finish. Blocking call.
+func (py *Pody) WaitBoxySet() {
 	var podyWaitGroup sync.WaitGroup
 
 	if py.Boxer != nil {
@@ -305,14 +267,14 @@ func (py *Pody) WaitBoxes() {
 	podyWaitGroup.Wait()
 }
 
-func (py *Pody) UpdateBoxes(ctx context.Context) error {
+func (py *Pody) ReconcileBoxySet(ctx context.Context) error {
 	py.Lock()
 	defer py.Unlock()
 
 	var err error
 	var resErr error
 	if py.Boxer != nil {
-		err = py.Boxer.Update(ctx)
+		err = py.Boxer.Reconcile(ctx)
 		if err != nil {
 			// append err to existing resErr if not nil
 			resErr = fmt.Errorf("%v\n%v", resErr, err)
@@ -322,7 +284,7 @@ func (py *Pody) UpdateBoxes(ctx context.Context) error {
 
 	for i := range py.Containers {
 		if py.Containers[i].Boxer != nil {
-			err = py.Containers[i].Boxer.Update(ctx)
+			err = py.Containers[i].Boxer.Reconcile(ctx)
 			if err != nil {
 				// append err to existing resErr if not nil
 				resErr = fmt.Errorf("%v\n%v", resErr, err)

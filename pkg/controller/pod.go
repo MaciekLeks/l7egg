@@ -120,7 +120,7 @@ func (c *Controller) syncPodHandler(ctx context.Context, key string) error {
 		return err
 	}
 
-	//logger.Info("Update pod info.")
+	//logger.Info("Reconcile pod info.")
 	err = c.updatePodInfo(ctx, pod) //TODO
 	if err != nil {
 		return fmt.Errorf("update pod '%s':%s failed", name, err)
@@ -174,7 +174,7 @@ func isPodInStatus(pod *corev1.Pod, podCondType corev1.PodConditionType) bool {
 
 //func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 //	logger := klog.LoggerWithValues(klog.FromContext(ctx), "namespace", pod.Namespace, "name", pod.Name)
-//	logger.Info("Update pod info.")
+//	logger.Info("Reconcile pod info.")
 //	podKey := types.NamespacedName{pod.Namespace, pod.Name}
 //
 //	//fmt.Printf("******************* pod %s status: \nPodScheduled:%t\nInitialized:%t\nContainersReady:%t\nPodReady:%t\n",
@@ -195,7 +195,7 @@ func isPodInStatus(pod *corev1.Pod, podCondType corev1.PodConditionType) bool {
 //	//}
 //	if pb, found := c.podyInfoMap.Load(podKey); found && isPodInStatus(pod, corev1.PodReady) {
 //
-//		//fmt.Println("***************************Update not add ", podKey.String(), pod.Status.Phase, pod.DeletionTimestamp, pb)
+//		//fmt.Println("***************************Reconcile not add ", podKey.String(), pod.Status.Phase, pod.DeletionTimestamp, pb)
 //
 //		wasPaired := pb.PairedWithEgg != nil && len(pb.PairedWithEgg.Name) > 0
 //		fmt.Printf("deep[updatePodnfo] wasPaired: %t, pod:%s \n", wasPaired, podKey.String())
@@ -231,7 +231,7 @@ func isPodInStatus(pod *corev1.Pod, podCondType corev1.PodConditionType) bool {
 //		}
 //
 //		if isMatched && !stillPaired {
-//			// Run new boxes
+//			// Install new boxes
 //			fmt.Printf("deep[updatePodnfo] running boxes pod:%s \n", podKey.String())
 //			if err := runBoxySetOnHost(ctx, eggi, pb); err != nil {
 //				return err
@@ -276,7 +276,7 @@ func isPodInStatus(pod *corev1.Pod, podCondType corev1.PodConditionType) bool {
 
 func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "namespace", pod.Namespace, "name", pod.Name)
-	logger.Info("Update pod info.")
+	logger.Info("Reconcile pod info.")
 	podKey := types.NamespacedName{pod.Namespace, pod.Name}
 
 	py, found := c.podyInfoMap.Load(podKey)
@@ -310,7 +310,7 @@ func (c *Controller) updatePody(ctx context.Context, pod *corev1.Pod, py *Pody) 
 	}
 
 	if isMatched && !stillPaired {
-		// Run new boxes
+		// Install new boxes
 		fmt.Printf("deep[updatePodnfo] running boxes pod:%s \n", podKey.String())
 		return runBoxySetOnHost(ctx, eggi, py)
 	}
@@ -353,7 +353,7 @@ func (c *Controller) checkAndUpdatePodMatch(ctx context.Context, pod *corev1.Pod
 	return stillPaired, isMatched, eggi, nil
 }
 
-func (c *Controller) checkAndUpdateContainerChanges(ctx context.Context, pod *corev1.Pod, pb *Pody, eggi *core.Eggy) error {
+func (c *Controller) checkAndUpdateContainerChanges(ctx context.Context, pod *corev1.Pod, py *Pody, eggi *core.Eggy) error {
 	podKey := types.NamespacedName{Namespace: pod.Namespace, Name: pod.Name}
 
 	newpy, err := NewPody(pod)
@@ -361,12 +361,16 @@ func (c *Controller) checkAndUpdateContainerChanges(ctx context.Context, pod *co
 		return err
 	}
 
-	newContainerList, err := pb.Containers.UpdateContainers(newpy.Containers)
+	newContainerList, update, err := py.Containers.UpdateContainers(newpy.Containers)
 	if err != nil {
 		return err
 	}
 
-	err = pb.Set(func(v *Pody) error {
+	if !update {
+		return nil
+	}
+
+	err = py.Set(func(v *Pody) error {
 		fmt.Printf("deep[updatePodnfo][3] isMatched:%t stillPaired:%t pod:%s\n", true, true, podKey.String())
 		v.Containers = newContainerList
 		return nil
@@ -376,7 +380,7 @@ func (c *Controller) checkAndUpdateContainerChanges(ctx context.Context, pod *co
 	}
 
 	fmt.Printf("deep[updatePodnfo][5] isMatched:%t stillPaired:%t pod:%s\n", true, true, podKey.String())
-	return runBoxySetOnHost(ctx, eggi, pb)
+	return runBoxySetOnHost(ctx, eggi, py)
 }
 
 func (c *Controller) addPodBox(ctx context.Context, pod *corev1.Pod) error {
@@ -384,7 +388,7 @@ func (c *Controller) addPodBox(ctx context.Context, pod *corev1.Pod) error {
 	podKey := types.NamespacedName{Namespace: pod.Namespace, Name: pod.Name}
 
 	if pod.Status.Phase == corev1.PodRunning {
-		pb, err := NewPody(pod)
+		py, err := NewPody(pod)
 		if err != nil {
 			return err
 		}
@@ -402,18 +406,17 @@ func (c *Controller) addPodBox(ctx context.Context, pod *corev1.Pod) error {
 				return fmt.Errorf("egg not found", "egg", eggKey.String())
 			}
 
-			err = runBoxySetOnHost(ctx, eggi, pb)
+			//py.PairedWithEgg = &eggKey
+
+			err = runBoxySetOnHost(ctx, eggi, py)
 			if err != nil {
 				return err
 			}
-
-			pb.PairedWithEgg = &eggKey
-
 		} else {
 			fmt.Println("**************************** - no egg matched")
 		}
 		// only now add to the list
-		c.podyInfoMap.Store(podKey, pb)
+		c.podyInfoMap.Store(podKey, py)
 	} else {
 		logger.V(4).Info("Nor update nor add done")
 	}
@@ -421,15 +424,15 @@ func (c *Controller) addPodBox(ctx context.Context, pod *corev1.Pod) error {
 }
 
 // RunBoxySetOnHost runs one or many Boxy(s) on the host depends on Eggy.ProgramType and Shaping settings
-func runBoxySetOnHost(ctx context.Context, eggi *core.Eggy, pb *Pody) error {
+func runBoxySetOnHost(ctx context.Context, eggi *core.Eggy, py *Pody) error {
 	nodeHostname, err := utils.GetHostname()
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("deep[runBoxesOnHost]", nodeHostname, pb.NodeName)
-	if nodeHostname == pb.NodeName {
-		err = pb.RunBoxySet(ctx, eggi)
+	fmt.Println("deep[runBoxesOnHost]", nodeHostname, py.NodeName)
+	if nodeHostname == py.NodeName {
+		err = py.RunBoxySet(ctx, eggi)
 		if err != nil {
 			return err
 		}

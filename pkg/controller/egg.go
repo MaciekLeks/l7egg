@@ -102,13 +102,13 @@ func (c *Controller) syncEggHandler(ctx context.Context, key string) error {
 		return err
 	}
 
-	logger.Info("Update clusteregg.")
+	logger.Info("Reconcile clusteregg.")
 	err = c.updateEgg(ctx, *cegg)
 	if err != nil {
 		return fmt.Errorf("update clusteregg '%s':%s failed", name, err)
 	}
 
-	logger.Info("Update clusteregg Status.")
+	logger.Info("Reconcile clusteregg Status.")
 	err = c.updateEggStatus(ctx, cegg)
 	if err != nil {
 		return err
@@ -199,7 +199,7 @@ func (c *Controller) updateEggStatus(ctx context.Context, cegg *v1alpha1.Cluster
 //			return err
 //		}
 //
-//		err = eggi.Update(cegg)
+//		err = eggi.Reconcile(cegg)
 //		if err != nil {
 //			return err
 //		}
@@ -209,7 +209,7 @@ func (c *Controller) updateEggStatus(ctx context.Context, cegg *v1alpha1.Cluster
 //		c.podyInfoMap.Range(func(podNsNm types.NamespacedName, py *Pody) bool {
 //			// Find all boxes using the same egg specified by the cegg
 //			if py.PairedWithEgg != nil && *py.PairedWithEgg == eggNsNm {
-//				err = py.UpdateBoxes(ctx)
+//				err = py.ReconcileBoxySet(ctx)
 //				if err != nil {
 //					err = fmt.Errorf("updating clusteregg '%s': %s failed", cegg.Name, err.Error())
 //					return false
@@ -362,7 +362,7 @@ func (c *Controller) updateBoxySet(ctx context.Context, eggNsNm types.Namespaced
 	var err error
 	c.podyInfoMap.Range(func(podNsNm types.NamespacedName, py *Pody) bool {
 		if py.PairedWithEgg != nil && *py.PairedWithEgg == eggNsNm {
-			err = py.UpdateBoxes(ctx)
+			err = py.ReconcileBoxySet(ctx)
 			if err != nil {
 				err = fmt.Errorf("updating clusteregg '%s': %s failed", err.Error())
 				return false
@@ -400,14 +400,14 @@ func (c *Controller) handleEggScope(ctx context.Context, logger logr.Logger, ey 
 		// Check for matching pods and start boxes if needed
 		if podKeys := c.checkPodMatch(cegg); podKeys.Len() > 0 {
 			for i := 0; i < podKeys.Len(); i++ {
-				pb, ok := c.podyInfoMap.Load(podKeys.Get(i))
+				py, ok := c.podyInfoMap.Load(podKeys.Get(i))
 				if ok {
-					if pb.PairedWithEgg != nil {
-						return fmt.Errorf("pod '%s' already paired with egg '%s'", podKeys.Get(i).String(), pb.PairedWithEgg.String())
+					if py.PairedWithEgg != nil {
+						return fmt.Errorf("pod '%s' already paired with egg '%s'", podKeys.Get(i).String(), py.PairedWithEgg.String())
 					}
 
-					logger.Info("Starting box for the flow egg->pod", "pod", pb)
-					return pb.RunBoxySet(ctx, ey)
+					logger.Info("Starting box for the flow egg->pod", "pod", py)
+					return py.RunBoxySet(ctx, ey)
 				}
 			}
 		}

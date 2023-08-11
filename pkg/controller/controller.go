@@ -157,7 +157,7 @@ func (c *Controller) Run(ctx context.Context, ceggWorkers int, podWorkers int) e
 	logger.Info("Starting cegg workers.", "count", ceggWorkers)
 	// Launch 1..* workers to process ceggs resources
 	for i := 0; i < ceggWorkers; i++ {
-		// Run c.runWorker again after 1 sec only the previous launch ends
+		// Install c.runWorker again after 1 sec only the previous launch ends
 		go func() {
 			fmt.Println("waiting...............................")
 			time.Sleep(5 * time.Second)
@@ -169,13 +169,13 @@ func (c *Controller) Run(ctx context.Context, ceggWorkers int, podWorkers int) e
 	logger.Info("Starting pod workers.", "count", podWorkers)
 	// Launch 1..* workers to process pods resources
 	for i := 0; i < podWorkers; i++ {
-		// Run c.runWorker again after 1 sec only the previous launch ends
+		// Install c.runWorker again after 1 sec only the previous launch ends
 		go wait.UntilWithContext(context.WithValue(ctx, ctxAssetKey, ctxPodValue), c.runWorker, 1*time.Second)
 	}
 
-	logger.Info("deep[controller:Run] - workers started")
+	logger.Info("deep[controller:Install] - workers started")
 	//<-ctx.Done()
-	//logger.Info("deep[controller:Run] - shutting down workers.")
+	//logger.Info("deep[controller:Install] - shutting down workers.")
 
 	return nil
 }
@@ -258,7 +258,7 @@ func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 			utilruntime.HandleError(err)
 		}()
 
-		// Run the syncHandler, passing it the namespace/name string of the
+		// Install the syncHandler, passing it the namespace/name string of the
 		// Foo resource to be synced.
 		if err = c.syncHandler(ctx, key); err != nil {
 			c.queueAddRateLimited(ctx, key)
