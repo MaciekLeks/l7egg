@@ -113,11 +113,167 @@ func (py *Pody) NamespaceName() types.NamespacedName {
 	return types.NamespacedName{Namespace: py.Namespace, Name: py.Name}
 }
 
+//func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.Eggy) error {
+//	py.Lock()
+//	defer py.Unlock()
+//
+//	// pair with egg
+//	eggKey := eggi.NamespaceName()
+//	py.PairedWithEgg = &eggKey
+//
+//	if len(py.Containers) < 1 {
+//		return fmt.Errorf("no containers in pod %s", py.Name)
+//	}
+//
+//	if py.Boxer != nil {
+//		// py.Boxer for TC must be updated with new pid, the same for cgroup net_cls
+//		container := py.Containers[0]
+//		err := py.Boxer.Upgrade(ctx, core.WithPid(container.Pid))
+//		if err != nil {
+//			return err
+//		}
+//	}
+//
+//	fmt.Println("deep[RunBoxySet][1]")
+//	//TODO: it could be the case - container[0] is restarted abut network is the same :/
+//	if eggi.ProgramType == common.ProgramTypeTC && py.Boxer == nil {
+//		container := py.Containers[0]
+//		if container.Ready == true && container.AssetStatus == common.AssetNew {
+//			// not nil for Node
+//
+//			var err error
+//			if py.Boxer == nil {
+//				py.Boxer, err = core.NewBoxy(eggi, core.WithPid(container.Pid))
+//				if err != nil {
+//					return err
+//				}
+//			}
+//			err = py.Boxer.Install(ctx)
+//			container.AssetStatus = common.AssetSynced
+//			if err != nil {
+//				return err
+//			}
+//
+//		}
+//		return nil
+//	} else if eggi.ProgramType == common.ProgramTypeCgroup {
+//		var err error
+//		fmt.Println("deep[RunBoxySet][2]")
+//
+//		// run TC part of the program - run once
+//		// if py.Boxy != nil && py.Boxy.Options pid != od tego pid-a z contener-a 0 to znaczy ze trzeba go zmienic
+//		if eggi.Shaping != nil && py.Boxer == nil {
+//			// we need net netspace only for TC
+//			py.Boxer, err = core.NewBoxy(eggi, core.WithNetCls(), core.WithPid(py.Containers[0].Pid))
+//			if err != nil {
+//				return err
+//			}
+//
+//			fmt.Println("deep[RunBoxySet][Before Install]")
+//			err := py.Boxer.Install(ctx)
+//			fmt.Println("deep[RunBoxySet][After Install]")
+//			if err != nil {
+//				return err
+//			}
+//
+//		}
+//
+//		for i := range py.Containers {
+//			container := py.Containers[i]
+//			if container.Ready == true && container.AssetStatus == common.AssetNew {
+//
+//				fmt.Println("deep[RunBoxySet][3]")
+//				container.Boxer, err = core.NewBoxy(eggi, core.WithPid(container.Pid))
+//				fmt.Println("deep[RunBoxySet][30]", err)
+//				if err != nil {
+//					return err
+//				}
+//				fmt.Println("deep[RunBoxySet][31]")
+//				err := container.Boxer.Install(ctx)
+//				fmt.Println("deep[RunBoxySet][32]")
+//				if err != nil {
+//					return err
+//				}
+//				fmt.Println("deep[RunBoxySet][33]")
+//				if py.Boxer != nil {
+//					//add process to net_clt cgroup
+//					err := py.Boxer.DoAction(ctx, core.WithPid(container.Pid))
+//					if err != nil {
+//						return err
+//					}
+//				}
+//
+//				container.AssetStatus = common.AssetSynced
+//			}
+//		}
+//
+//	}
+//
+//	//py.PairedWithEgg = &types.NamespacedName{Namespace: "", Name: eggi.Name}
+//
+//	return nil
+//}
+
+// {
+func (py *Pody) handleTCProgramType(ctx context.Context, eggi *core.Eggy) error {
+	container := py.Containers[0]
+	if container.Ready == true && container.AssetStatus == common.AssetNew {
+		var err error
+		if py.Boxer == nil {
+			py.Boxer, err = core.NewBoxy(eggi, core.WithPid(container.Pid))
+			if err != nil {
+				return err
+			}
+		}
+		err = py.Boxer.Install(ctx)
+		container.AssetStatus = common.AssetSynced
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (py *Pody) handleCgroupProgramType(ctx context.Context, eggi *core.Eggy) error {
+	var err error
+	if eggi.Shaping != nil && py.Boxer == nil {
+		py.Boxer, err = core.NewBoxy(eggi, core.WithNetCls(), core.WithPid(py.Containers[0].Pid))
+		if err != nil {
+			return err
+		}
+		err = py.Boxer.Install(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	for i := range py.Containers {
+		container := py.Containers[i]
+		if container.Ready == true && container.AssetStatus == common.AssetNew {
+			container.Boxer, err = core.NewBoxy(eggi, core.WithPid(container.Pid))
+			if err != nil {
+				return err
+			}
+			err = container.Boxer.Install(ctx)
+			if err != nil {
+				return err
+			}
+			if py.Boxer != nil {
+				err = py.Boxer.DoAction(ctx, core.WithPid(container.Pid))
+				if err != nil {
+					return err
+				}
+			}
+			container.AssetStatus = common.AssetSynced
+		}
+	}
+	return nil
+}
+
 func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.Eggy) error {
 	py.Lock()
 	defer py.Unlock()
 
-	// pair with egg
 	eggKey := eggi.NamespaceName()
 	py.PairedWithEgg = &eggKey
 
@@ -126,7 +282,6 @@ func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.Eggy) error {
 	}
 
 	if py.Boxer != nil {
-		// py.Boxer for TC must be updated with new pid, the same for cgroup net_cls
 		container := py.Containers[0]
 		err := py.Boxer.Upgrade(ctx, core.WithPid(container.Pid))
 		if err != nil {
@@ -134,85 +289,16 @@ func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.Eggy) error {
 		}
 	}
 
-	fmt.Println("deep[RunBoxySet][1]")
-	//TODO: it could be the case - container[0] is restarted abut network is the same :/
 	if eggi.ProgramType == common.ProgramTypeTC && py.Boxer == nil {
-		container := py.Containers[0]
-		if container.Ready == true && container.AssetStatus == common.AssetNew {
-			// not nil for Node
-
-			var err error
-			if py.Boxer == nil {
-				py.Boxer, err = core.NewBoxy(eggi, core.WithPid(container.Pid))
-				if err != nil {
-					return err
-				}
-			}
-			err = py.Boxer.Install(ctx)
-			container.AssetStatus = common.AssetSynced
-			if err != nil {
-				return err
-			}
-
-		}
-		return nil
+		return py.handleTCProgramType(ctx, eggi)
 	} else if eggi.ProgramType == common.ProgramTypeCgroup {
-		var err error
-		fmt.Println("deep[RunBoxySet][2]")
-
-		// run TC part of the program - run once
-		// if py.Boxy != nil && py.Boxy.Options pid != od tego pid-a z contener-a 0 to znaczy ze trzeba go zmienic
-		if eggi.Shaping != nil && py.Boxer == nil {
-			// we need net netspace only for TC
-			py.Boxer, err = core.NewBoxy(eggi, core.WithNetCls(), core.WithPid(py.Containers[0].Pid))
-			if err != nil {
-				return err
-			}
-
-			fmt.Println("deep[RunBoxySet][Before Install]")
-			err := py.Boxer.Install(ctx)
-			fmt.Println("deep[RunBoxySet][After Install]")
-			if err != nil {
-				return err
-			}
-
-		}
-
-		for i := range py.Containers {
-			container := py.Containers[i]
-			if container.Ready == true && container.AssetStatus == common.AssetNew {
-
-				fmt.Println("deep[RunBoxySet][3]")
-				container.Boxer, err = core.NewBoxy(eggi, core.WithPid(container.Pid))
-				fmt.Println("deep[RunBoxySet][30]", err)
-				if err != nil {
-					return err
-				}
-				fmt.Println("deep[RunBoxySet][31]")
-				err := container.Boxer.Install(ctx)
-				fmt.Println("deep[RunBoxySet][32]")
-				if err != nil {
-					return err
-				}
-				fmt.Println("deep[RunBoxySet][33]")
-				if py.Boxer != nil {
-					//add process to net_clt cgroup
-					err := py.Boxer.DoAction(ctx, core.WithPid(container.Pid))
-					if err != nil {
-						return err
-					}
-				}
-
-				container.AssetStatus = common.AssetSynced
-			}
-		}
-
+		return py.handleCgroupProgramType(ctx, eggi)
 	}
-
-	//py.PairedWithEgg = &types.NamespacedName{Namespace: "", Name: eggi.Name}
 
 	return nil
 }
+
+//}
 
 func (py *Pody) StopBoxes() error {
 	py.Lock()
