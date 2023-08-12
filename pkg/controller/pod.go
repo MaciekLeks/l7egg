@@ -96,6 +96,17 @@ func (c *Controller) syncPodHandler(ctx context.Context, key string) error {
 
 	// Get pod with this namespace/name
 	pod, err := c.podLister.Pods(namespace).Get(name)
+
+	// Checks if the pod is on controller's node
+	//if pod.Spec.NodeName != c.nodeName {
+	//	logger.Info("Pod is not on controller's node.")
+	//	err = c.forgetPod(ctx, name) //TODO
+	//	if err != nil {
+	//		return fmt.Errorf("delete clusteregg '%s':%s failed", name, err)
+	//	}
+	//	return nil
+	//}
+
 	if err != nil {
 		// processing.
 		if apierrors.IsNotFound(err) {
@@ -246,7 +257,7 @@ func isPodInStatus(pod *corev1.Pod, podCondType corev1.PodConditionType) bool {
 //			}
 //			// Check: Check containers changes
 //			fmt.Printf("deep[updatePodnfo][2] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
-//			if newContainerList, err := pb.Containers.UpdateContainers(cpi.Containers); err == nil {
+//			if newContainerList, err := pb.Containers.CheckContainers(cpi.Containers); err == nil {
 //				err = pb.Set(func(v *Pody) error {
 //					fmt.Printf("deep[updatePodnfo][3] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
 //					v.Containers = newContainerList
@@ -354,6 +365,7 @@ func (c *Controller) checkAndUpdatePodMatch(ctx context.Context, pod *corev1.Pod
 }
 
 func (c *Controller) checkAndUpdateContainerChanges(ctx context.Context, pod *corev1.Pod, py *Pody, eggi *core.Eggy) error {
+	logger := klog.LoggerWithValues(klog.FromContext(ctx), "namespace", pod.Namespace, "name", pod.Name)
 	podKey := types.NamespacedName{Namespace: pod.Namespace, Name: pod.Name}
 
 	newpy, err := NewPody(pod)
@@ -361,7 +373,7 @@ func (c *Controller) checkAndUpdateContainerChanges(ctx context.Context, pod *co
 		return err
 	}
 
-	newContainerList, update, err := py.Containers.UpdateContainers(newpy.Containers)
+	tbuList, tbdList, update, err := py.Containers.CheckContainers(newpy.Containers)
 	if err != nil {
 		return err
 	}
@@ -371,16 +383,31 @@ func (c *Controller) checkAndUpdateContainerChanges(ctx context.Context, pod *co
 	}
 
 	err = py.Set(func(v *Pody) error {
-		fmt.Printf("deep[updatePodnfo][3] isMatched:%t stillPaired:%t pod:%s\n", true, true, podKey.String())
-		v.Containers = newContainerList
+		logger.V(2).Info("updating pody container list", "pod", podKey.String())
+		v.Containers = tbuList
 		return nil
 	})
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("deep[updatePodnfo][5] isMatched:%t stillPaired:%t pod:%s\n", true, true, podKey.String())
-	return runBoxySetOnHost(ctx, eggi, py)
+	logger.V(2).Info("running new boxy set", "pod", podKey.String())
+	err = runBoxySetOnHost(ctx, eggi, py)
+	if err != nil {
+		return err
+	}
+
+	// Stops old boxy set
+	for i := range tbdList {
+		// Can't stop boxies on not my host
+		err = tbdList[i].Boxer.Stop()
+		logger.V(2).Info("Stopping boxy for container", "pod", podKey.String(), "container", tbdList[i].Name)
+		if err != nil {
+			return fmt.Errorf("failed to stop boxy: %s", err)
+		}
+	}
+
+	return nil
 }
 
 func (c *Controller) addPodBox(ctx context.Context, pod *corev1.Pod) error {

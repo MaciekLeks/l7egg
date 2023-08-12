@@ -382,7 +382,6 @@ func (ey *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, netN
 	go func() {
 		defer lwg.Done()
 		defer fmt.Println("runPacketsLooper terminated")
-		fmt.Println("??????[1]")
 	recvLoop:
 
 		for {
@@ -391,7 +390,6 @@ func (ey *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, netN
 				fmt.Println("[recvLoop]: stopCh closed.")
 				break recvLoop
 			case b, ok := <-ey.packets:
-				fmt.Println("??????[2]")
 				if ok == false {
 					fmt.Println("[recvLoop]: Channel not OK!")
 					break recvLoop

@@ -6,8 +6,10 @@ import (
 	"github.com/MaciekLeks/l7egg/pkg/common"
 	"github.com/MaciekLeks/l7egg/pkg/core"
 	"github.com/containerd/containerd"
+	"github.com/containerd/containerd/namespaces"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
+	"log"
 	"strings"
 )
 
@@ -120,11 +122,51 @@ func extractContainerdContainerId(fqcid string) (string, error) {
 	return cid, err
 }
 
+const containerdSocketFileAbsPath = "/var/snap/microk8s/common/run/containerd.sock" //TODO move to config
+
+func findContainerByContainerId(ctx context.Context, containerId string) {
+	// Creates client to connect to containerd
+	client, err := containerd.New(containerdSocketFileAbsPath)
+	defer client.Close()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer client.Close()
+
+	// Gets available namespaces
+	nsService := client.NamespaceService()
+	nsList, err := nsService.List(ctx)
+	if err != nil {
+		fmt.Printf("\n\ndeep[xxx][1] %s\n\n", err)
+		log.Fatal(err)
+	}
+
+	// Searches for container in each ns
+	for _, ns := range nsList {
+		nsCtx := namespaces.WithNamespace(ctx, ns)
+		fmt.Printf("\n\ndeep[xxx]Searching for container %s in the %s ns of %d elements\n\n", containerId, ns, len(nsList))
+		_, err := client.LoadContainer(nsCtx, containerId)
+		if err == nil {
+			fmt.Printf("\n\ndeep[xxx]The sought container %s is in the %s ns\n\n", containerId, ns)
+			return
+		} else {
+			//just test
+			_, err = client.LoadContainer(ctx, containerId)
+			fmt.Printf("\n\ndeep[xxx]The sought container2 %s is in the %s ns\n\n", err, ns)
+		}
+	}
+}
+
 func containerPid(ctx context.Context, containerId string) (uint32, error) {
 	var pid uint32
 	logger := klog.FromContext(ctx)
 
-	client, err := containerd.New("/var/snap/microk8s/common/run/containerd.sock", containerd.WithDefaultNamespace("k8s.io"))
+	//{
+	findContainerByContainerId(ctx, containerId)
+	//}
+
+	client, err := containerd.New(containerdSocketFileAbsPath, containerd.WithDefaultNamespace("k8s.io"))
 	if err != nil {
 		return pid, fmt.Errorf("can't connect to containerd socket", err)
 	}
@@ -172,36 +214,32 @@ func (cyl ContaineryList) containeryByName(containerName string) *Containery {
 	return nil
 }
 
-// UpdateContainers ChangedContainers returns list of containers that have been changed - added, removed, updated
-// update returns true if list owner of the cyl must be updated
-func (cyl ContaineryList) UpdateContainers(newcyl ContaineryList) (ContaineryList, bool, error) {
-	var newList ContaineryList
-	var resErr error
-	var update bool
+// CheckContainers checks if containers are changed and returns list of containers to be updated (new, synced) and deleted (stale);
+// Old list is not changed
+func (cyl ContaineryList) CheckContainers(newcyl ContaineryList) (tbuList, tbdList ContaineryList, update bool, resErr error) {
 	for i := range newcyl {
 		name := newcyl[i].Name
 		c := cyl.containeryByName(name)
 		if c == nil {
 			// container is not found in previous list
-			newList = append(newList, newcyl[i])
+			tbuList = append(tbuList, newcyl[i])
 			update = true
 		} else {
 			// container is found in previous list
 			//TODO add more conditions
 			if c.ContainerID != newcyl[i].ContainerID {
-				c.AssetStatus = common.AssetStale
-				// Not stopping, if container is changes it's gone anyway
-				//if err := c.Boxer.Stop(); err != nil { //should Stop be here?
-				//	resErr = fmt.Errorf("%s: %w", err.Error(), resErr)
-				//}
-				newList = append(newList, newcyl[i])
+				// we do not modify receiver, so we need to create a copy
+				oldc := *c
+				oldc.AssetStatus = common.AssetStale
+				tbdList = append(tbdList, &oldc)
+				tbuList = append(tbuList, newcyl[i])
 				update = true
 			} else {
 				c.AssetStatus = common.AssetSynced
 				newcyl[i].AssetStatus = common.AssetSynced
-				newList = append(newList, newcyl[i])
+				tbuList = append(tbuList, newcyl[i])
 			}
 		}
 	}
-	return newList, update, resErr
+	return
 }
