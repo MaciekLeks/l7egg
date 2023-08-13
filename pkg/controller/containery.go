@@ -252,6 +252,8 @@ func containerPid(ctx context.Context, containerId string) (uint32, error) {
 		return pid, fmt.Errorf("can't get container task PID: %s", err)
 	}
 
+	logger.V(2).Info("Container pid found")
+
 	return pid, nil
 }
 
