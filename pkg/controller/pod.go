@@ -14,7 +14,6 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
-	"strings"
 )
 
 // PodInfoMap maps Pod namespace name to Pody
@@ -81,14 +80,33 @@ func (c *Controller) enqueuePod(obj interface{}) {
 	c.podQueue.Add(key)
 }
 
+// isNodePod checks if the pod is on controller's node
+// TODO: add some caching, e.g. using "github.com/patrickmn/go-cache"
+func isNodePod(ctx context.Context, pod *corev1.Pod) (error, bool) {
+	logger := klog.LoggerWithValues(klog.FromContext(ctx), "resourceName", pod.Name)
+	var podNodeHostname, nodeHostname string
+	var err error
+	if podNodeHostname, err = utils.CleanHostame(pod.Spec.NodeName); err != nil {
+		return err, true
+	}
+
+	if nodeHostname, err = utils.GetHostname(); err != nil {
+		return err, true
+	}
+
+	if podNodeHostname != nodeHostname {
+		logger.Info("Pod is not on controller's node.")
+		return nil, false
+	}
+	return nil, true
+}
+
 // syncHandler compares the actual state with the desired, and attempts to
 // converge the two. It then updates the Status block of the Foo resource
 // with the current Status of the resource.
 func (c *Controller) syncPodHandler(ctx context.Context, key string) error {
-	// Convert the namespace/name string into a distinct namespace and name
-
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "resourceName", key)
-
+	// Convert the namespace/name string into a distinct namespace and name
 	namespace, name, err := splitNamespaceNameFormKey(key)
 	if err != nil {
 		return err
@@ -98,16 +116,15 @@ func (c *Controller) syncPodHandler(ctx context.Context, key string) error {
 	pod, err := c.podLister.Pods(namespace).Get(name)
 
 	// Checks if the pod is on controller's node
-	//if pod.Spec.NodeName != c.nodeName {
-	//	logger.Info("Pod is not on controller's node.")
-	//	err = c.forgetPod(ctx, name) //TODO
-	//	if err != nil {
-	//		return fmt.Errorf("delete clusteregg '%s':%s failed", name, err)
-	//	}
-	//	return nil
-	//}
-
-	if err != nil {
+	if err == nil {
+		if err, nodePod := isNodePod(ctx, pod); err == nil && !nodePod {
+			err = c.forgetPod(ctx, name) //TODO
+			if err != nil {
+				return fmt.Errorf("can't forget not node pod '%s':%s failed", name, err)
+			}
+			return nil
+		}
+	} else {
 		// processing.
 		if apierrors.IsNotFound(err) {
 			//utilruntime.HandleError(fmt.Errorf("clusteregg '%s' in work queue no longer exists", key))
@@ -142,20 +159,20 @@ func (c *Controller) syncPodHandler(ctx context.Context, key string) error {
 	return nil
 }
 
-func getContainerdIDs(css []corev1.ContainerStatus) ([]string, error) {
-	cids := make([]string, len(css))
-	var err error
-	const crn = "containerd://"
-	for i := range css {
-		//TODO check Status of the container, e.g. Status, is init container, ...
-		if !strings.Contains(css[i].ContainerID, crn) {
-			return cids, fmt.Errorf("only containerd supported")
-		}
-		cid := strings.TrimPrefix(css[i].ContainerID, crn)
-		cids[i] = cid
-	}
-	return cids, err
-}
+//func getContainerdIDs(css []corev1.ContainerStatus) ([]string, error) {
+//	cids := make([]string, len(css))
+//	var err error
+//	const crn = "containerd://"
+//	for i := range css {
+//		//TODO check Status of the container, e.g. Status, is init container, ...
+//		if !strings.Contains(css[i].ContainerID, crn) {
+//			return cids, fmt.Errorf("only containerd supported")
+//		}
+//		cid := strings.TrimPrefix(css[i].ContainerID, crn)
+//		cids[i] = cid
+//	}
+//	return cids, err
+//}
 
 func (c *Controller) deletePody(ctx context.Context, pod *corev1.Pod) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "namespace", pod.Namespace, "name", pod.Name)
@@ -323,7 +340,8 @@ func (c *Controller) updatePody(ctx context.Context, pod *corev1.Pod, py *Pody) 
 	if isMatched && !stillPaired {
 		// Install new boxes
 		fmt.Printf("deep[updatePodnfo] running boxes pod:%s \n", podKey.String())
-		return runBoxySetOnHost(ctx, eggi, py)
+		//return runBoxySetOnHost(ctx, eggi, py)
+		return py.RunBoxySet(ctx, eggi)
 	}
 
 	if isMatched && stillPaired {
@@ -392,7 +410,8 @@ func (c *Controller) checkAndUpdateContainerChanges(ctx context.Context, pod *co
 	}
 
 	logger.V(2).Info("running new boxy set", "pod", podKey.String())
-	err = runBoxySetOnHost(ctx, eggi, py)
+	//err = runBoxySetOnHost(ctx, eggi, py)
+	err = py.RunBoxySet(ctx, eggi)
 	if err != nil {
 		return err
 	}
@@ -435,7 +454,8 @@ func (c *Controller) addPodBox(ctx context.Context, pod *corev1.Pod) error {
 
 			//py.PairedWithEgg = &eggKey
 
-			err = runBoxySetOnHost(ctx, eggi, py)
+			//err = runBoxySetOnHost(ctx, eggi, py)
+			err = py.RunBoxySet(ctx, eggi)
 			if err != nil {
 				return err
 			}
@@ -451,21 +471,21 @@ func (c *Controller) addPodBox(ctx context.Context, pod *corev1.Pod) error {
 }
 
 // RunBoxySetOnHost runs one or many Boxy(s) on the host depends on Eggy.ProgramType and Shaping settings
-func runBoxySetOnHost(ctx context.Context, eggi *core.Eggy, py *Pody) error {
-	nodeHostname, err := utils.GetHostname()
-	if err != nil {
-		return err
-	}
-
-	fmt.Println("deep[runBoxesOnHost]", nodeHostname, py.NodeName)
-	if nodeHostname == py.NodeName {
-		err = py.RunBoxySet(ctx, eggi)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
+//func runBoxySetOnHost(ctx context.Context, eggi *core.Eggy, py *Pody) error {
+//	nodeHostname, err := utils.GetHostname()
+//	if err != nil {
+//		return err
+//	}
+//
+//	fmt.Println("deep[runBoxesOnHost]", nodeHostname, py.NodeName)
+//	if nodeHostname == py.NodeName {
+//		err = py.RunBoxySet(ctx, eggi)
+//		if err != nil {
+//			return err
+//		}
+//	}
+//	return nil
+//}
 
 func (c *Controller) forgetPod(ctx context.Context, key string) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "resourceName", key)

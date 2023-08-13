@@ -9,7 +9,6 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
-	"log"
 	"strings"
 )
 
@@ -124,13 +123,15 @@ func extractContainerdContainerId(fqcid string) (string, error) {
 
 const containerdSocketFileAbsPath = "/var/snap/microk8s/common/run/containerd.sock" //TODO move to config
 
-func findContainerByContainerId(ctx context.Context, containerId string) {
+// findContainerByContainerId finds container by containerd id
+// TODO: do not look after container in all namespaces every call - cache namespaces
+func findContainerByContainerId(ctx context.Context, containerId string) (containerd.Container, error) {
 	// Creates client to connect to containerd
 	client, err := containerd.New(containerdSocketFileAbsPath)
 	defer client.Close()
 
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("can't connect to containerd socket %s", err)
 	}
 	defer client.Close()
 
@@ -138,62 +139,142 @@ func findContainerByContainerId(ctx context.Context, containerId string) {
 	nsService := client.NamespaceService()
 	nsList, err := nsService.List(ctx)
 	if err != nil {
-		fmt.Printf("\n\ndeep[xxx][1] %s\n\n", err)
-		log.Fatal(err)
+		return nil, fmt.Errorf("can't get containerd namespaces %s", err)
 	}
 
 	// Searches for container in each ns
 	for _, ns := range nsList {
 		nsCtx := namespaces.WithNamespace(ctx, ns)
-		fmt.Printf("\n\ndeep[xxx]Searching for container %s in the %s ns of %d elements\n\n", containerId, ns, len(nsList))
-		_, err := client.LoadContainer(nsCtx, containerId)
+		container, err := client.LoadContainer(nsCtx, containerId)
 		if err == nil {
 			fmt.Printf("\n\ndeep[xxx]The sought container %s is in the %s ns\n\n", containerId, ns)
-			return
-		} else {
-			//just test
-			_, err = client.LoadContainer(ctx, containerId)
-			fmt.Printf("\n\ndeep[xxx]The sought container2 %s is in the %s ns\n\n", err, ns)
+			return container, nil
 		}
 	}
+	return nil, fmt.Errorf("container %s not found", containerId)
 }
+
+//func containerPid(ctx context.Context, containerId string) (uint32, error) {
+//	var pid uint32
+//	logger := klog.FromContext(ctx)
+//
+//	// Creates client to connect to containerd
+//	client, err := containerd.New(containerdSocketFileAbsPath)
+//	defer client.Close()
+//
+//	if err != nil {
+//		return pid, fmt.Errorf("can't connect to containerd socket %s", err)
+//	}
+//	defer client.Close()
+//
+//	// Gets available namespaces
+//	// TODO: do not look after container in all namespaces every call - cache namespaces
+//	nsService := client.NamespaceService()
+//	nsList, err := nsService.List(ctx)
+//	if err != nil {
+//		return pid, fmt.Errorf("can't get containerd namespaces %s", err)
+//	}
+//
+//	// Searches for container in each ns
+//	var container containerd.Container
+//	var found bool
+//
+//	var nsCtx context.Context
+//	for i := range nsList {
+//		nsCtx = namespaces.WithNamespace(ctx, nsList[i])
+//		container, err = client.LoadContainer(nsCtx, containerId)
+//		if err == nil {
+//			fmt.Printf("\n\ndeep[xxx]The sought container %s is in the %s ns\n\n", containerId, nsCtx)
+//			found = true
+//			break
+//		}
+//	}
+//	if !found {
+//		return pid, fmt.Errorf("container %s not found", containerId)
+//	}
+//
+//	//{ old code
+//	//client, err := containerd.New(containerdSocketFileAbsPath, containerd.WithDefaultNamespace("k8s.io"))
+//	//if err != nil {
+//	//	return pid, fmt.Errorf("can't connect to containerd socket", err)
+//	//}
+//	//defer client.Close()
+//	//
+//	//logger.V(2).Info("Container client ready")
+//	//
+//	//container, err := client.LoadContainer(ctx, containerId)
+//	//if err != nil {
+//	//	return pid, fmt.Errorf("can't load container", err)
+//	//}
+//	//}
+//
+//	logger.V(2).Info("Container loaded")
+//
+//	task, err := container.Task(nsCtx, nil)
+//	if err != nil {
+//		return pid, fmt.Errorf("can't get container task", err)
+//	}
+//
+//	logger.V(2).Info("runEgg-4")
+//
+//	pid = task.Pid()
+//	if err != nil {
+//		return pid, fmt.Errorf("Can't get container task PID", err)
+//	}
+//
+//	return pid, nil
+//}
 
 func containerPid(ctx context.Context, containerId string) (uint32, error) {
 	var pid uint32
 	logger := klog.FromContext(ctx)
 
-	//{
-	findContainerByContainerId(ctx, containerId)
-	//}
-
-	client, err := containerd.New(containerdSocketFileAbsPath, containerd.WithDefaultNamespace("k8s.io"))
+	client, err := createContainerdClient()
 	if err != nil {
-		return pid, fmt.Errorf("can't connect to containerd socket", err)
+		return pid, fmt.Errorf("can't connect to containerd socket: %s", err)
 	}
 	defer client.Close()
 
-	logger.V(2).Info("Container client ready")
-
-	container, err := client.LoadContainer(ctx, containerId)
+	container, err := findContainer(ctx, client, containerId)
 	if err != nil {
-		return pid, fmt.Errorf("can't load container", err)
+		return pid, err
 	}
 
 	logger.V(2).Info("Container loaded")
 
 	task, err := container.Task(ctx, nil)
 	if err != nil {
-		return pid, fmt.Errorf("can't get container task", err)
+		return pid, fmt.Errorf("can't get container task: %s", err)
 	}
-
-	logger.V(2).Info("runEgg-4")
 
 	pid = task.Pid()
 	if err != nil {
-		return pid, fmt.Errorf("Can't get container task PID", err)
+		return pid, fmt.Errorf("can't get container task PID: %s", err)
 	}
 
 	return pid, nil
+}
+
+func createContainerdClient() (*containerd.Client, error) {
+	return containerd.New(containerdSocketFileAbsPath)
+}
+
+func findContainer(ctx context.Context, client *containerd.Client, containerId string) (containerd.Container, error) {
+	nsService := client.NamespaceService()
+	nsList, err := nsService.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("can't get containerd namespaces: %s", err)
+	}
+
+	for _, ns := range nsList {
+		nsCtx := namespaces.WithNamespace(ctx, ns)
+		container, err := client.LoadContainer(nsCtx, containerId)
+		if err == nil {
+			return container, nil
+		}
+	}
+
+	return nil, fmt.Errorf("container %s not found", containerId)
 }
 
 func (cyl ContaineryList) containeryByContainerId(containerId string) *Containery {
