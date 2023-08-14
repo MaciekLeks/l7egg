@@ -281,15 +281,15 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 	eggNsNm := types.NamespacedName{Namespace: cegg.Namespace, Name: cegg.Name}
 
 	if ey, ok := c.eggyInfoMap.Load(eggNsNm); ok {
-		err := c.updateExistingEgg(ctx, logger, ey, cegg, eggNsNm)
+		err := c.updateExistingEggy(ctx, logger, ey, cegg, eggNsNm)
 		return err
 	} else {
-		err := c.addNewEgg(ctx, logger, eggNsNm, cegg)
+		err := c.addNewEggy(ctx, logger, eggNsNm, cegg)
 		return err
 	}
 }
 
-func (c *Controller) updateExistingEgg(ctx context.Context, logger logr.Logger, ey *core.Eggy, cegg v1alpha1.ClusterEgg, eggNsNm types.NamespacedName) error {
+func (c *Controller) updateExistingEggy(ctx context.Context, logger logr.Logger, ey *core.Eggy, cegg v1alpha1.ClusterEgg, eggNsNm types.NamespacedName) error {
 	logger.Info("tbd - 1")
 	fmt.Println("tbd - 1p")
 
@@ -318,7 +318,7 @@ func (c *Controller) updateExistingEgg(ctx context.Context, logger logr.Logger, 
 	return nil
 }
 
-func (c *Controller) addNewEgg(ctx context.Context, logger logr.Logger, eggNsNm types.NamespacedName, ceg v1alpha1.ClusterEgg) error {
+func (c *Controller) addNewEggy(ctx context.Context, logger logr.Logger, eggNsNm types.NamespacedName, ceg v1alpha1.ClusterEgg) error {
 	logger.Info("Adding egg")
 
 	eggi, err := core.NewEggy(ceg)
@@ -331,7 +331,7 @@ func (c *Controller) addNewEgg(ctx context.Context, logger logr.Logger, eggNsNm 
 		return err
 	}
 
-	err = c.handleEggScope(ctx, logger, eggi, ceg)
+	err = c.handleEggyScope(ctx, logger, eggi, ceg)
 	if err != nil {
 		return err
 	}
@@ -378,7 +378,7 @@ func (c *Controller) storeEggy(eggNsNm types.NamespacedName, ey *core.Eggy) erro
 	return nil
 }
 
-func (c *Controller) handleEggScope(ctx context.Context, logger logr.Logger, ey *core.Eggy, cegg v1alpha1.ClusterEgg) error {
+func (c *Controller) handleEggyScope(ctx context.Context, logger logr.Logger, ey *core.Eggy, cegg v1alpha1.ClusterEgg) error {
 	// Determine if it's a cluster scope egg
 	if len(ey.PodLabels) == 0 {
 		// cluster scope cegg

@@ -31,8 +31,7 @@ import (
 
 // ebpfy holds Eggy (extracted from ClusterEggSpec) and ebpf related structures, e.g. maps, channels operating on that maps
 type ebpfy struct {
-	// Depreciated: should all part of ebpfy struct
-	eggy      *Eggy //TOOD remove from here
+	eggy      *Eggy
 	bpfModule *bpf.Module
 	ipv4ACL   *bpf.BPFMap
 	ipv6ACL   *bpf.BPFMap
