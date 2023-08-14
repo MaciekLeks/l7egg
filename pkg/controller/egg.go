@@ -162,7 +162,7 @@ func (c *Controller) updateEggStatus(ctx context.Context, cegg *v1alpha1.Cluster
 //					if len(podNsnm.Namespace) > 0 && len(podNsnm.Name) > 0 {
 //						if matched := c.checkSinglePodMatch(*pb, cegg); !matched {
 //							logger.Info("Stopping box", "pod", pb)
-//							err = pb.StopBoxes()
+//							err = pb.StopBoxySet()
 //							if err != nil {
 //								logger.Error(err, "can't stop box", "pod", pb)
 //							}
@@ -346,7 +346,7 @@ func (c *Controller) handleEggLabelsChange(ctx context.Context, logger logr.Logg
 				// Labels changed, perform your logic here
 				// Stop the box if needed
 				logger.Info("Stopping box", "pod", pb)
-				err := pb.StopBoxes()
+				err := pb.StopBoxySet()
 				if err != nil {
 					logger.Error(err, "can't stop box", "pod", pb)
 				}
@@ -424,7 +424,7 @@ func (c *Controller) deleteEgg(ctx context.Context, eggNamespaceName types.Names
 	c.podyInfoMap.Range(func(key types.NamespacedName, pb *Pody) bool {
 		if *pb.PairedWithEgg == eggNamespaceName {
 			logger.Info("Stopping box", "pod", key)
-			if err = pb.StopBoxes(); err != nil {
+			if err = pb.StopBoxySet(); err != nil {
 				logger.Error(err, "stopping box failed", "pod", key)
 				return false
 			}

@@ -8,7 +8,6 @@ import (
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/namespaces"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/klog/v2"
 	"strings"
 )
 
@@ -193,21 +192,6 @@ func findContainerByContainerId(ctx context.Context, containerId string) (contai
 //		return pid, fmt.Errorf("container %s not found", containerId)
 //	}
 //
-//	//{ old code
-//	//client, err := containerd.New(containerdSocketFileAbsPath, containerd.WithDefaultNamespace("k8s.io"))
-//	//if err != nil {
-//	//	return pid, fmt.Errorf("can't connect to containerd socket", err)
-//	//}
-//	//defer client.Close()
-//	//
-//	//logger.V(2).Info("Container client ready")
-//	//
-//	//container, err := client.LoadContainer(ctx, containerId)
-//	//if err != nil {
-//	//	return pid, fmt.Errorf("can't load container", err)
-//	//}
-//	//}
-//
 //	logger.V(2).Info("Container loaded")
 //
 //	task, err := container.Task(nsCtx, nil)
@@ -225,58 +209,61 @@ func findContainerByContainerId(ctx context.Context, containerId string) (contai
 //	return pid, nil
 //}
 
-func containerPid(ctx context.Context, containerId string) (uint32, error) {
-	var pid uint32
-	logger := klog.FromContext(ctx)
-
-	client, err := createContainerdClient()
+func createClient() (*containerd.Client, error) {
+	client, err := containerd.New(containerdSocketFileAbsPath)
 	if err != nil {
-		return pid, fmt.Errorf("can't connect to containerd socket: %s", err)
+		return nil, fmt.Errorf("can't connect to containerd socket: %w", err)
 	}
-	defer client.Close()
-
-	container, err := findContainer(ctx, client, containerId)
-	if err != nil {
-		return pid, err
-	}
-
-	logger.V(2).Info("Container loaded")
-
-	task, err := container.Task(ctx, nil)
-	if err != nil {
-		return pid, fmt.Errorf("can't get container task: %s", err)
-	}
-
-	pid = task.Pid()
-	if err != nil {
-		return pid, fmt.Errorf("can't get container task PID: %s", err)
-	}
-
-	logger.V(2).Info("Container pid found")
-
-	return pid, nil
+	return client, nil
 }
 
-func createContainerdClient() (*containerd.Client, error) {
-	return containerd.New(containerdSocketFileAbsPath)
-}
-
-func findContainer(ctx context.Context, client *containerd.Client, containerId string) (containerd.Container, error) {
+func listNamespaces(client *containerd.Client, ctx context.Context) ([]string, error) {
 	nsService := client.NamespaceService()
 	nsList, err := nsService.List(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("can't get containerd namespaces: %s", err)
+		return nil, fmt.Errorf("can't get containerd namespaces: %w", err)
 	}
+	return nsList, nil
+}
 
+func findContainer(ctx context.Context, client *containerd.Client, containerId string, nsList []string) (containerd.Container, string, error) {
 	for _, ns := range nsList {
 		nsCtx := namespaces.WithNamespace(ctx, ns)
 		container, err := client.LoadContainer(nsCtx, containerId)
 		if err == nil {
-			return container, nil
+			return container, ns, nil
 		}
 	}
+	return nil, "", fmt.Errorf("container %s not found", containerId)
+}
 
-	return nil, fmt.Errorf("container %s not found", containerId)
+func getTaskPid(ctx context.Context, container containerd.Container, namespace string) (uint32, error) {
+	task, err := container.Task(namespaces.WithNamespace(ctx, namespace), nil)
+	if err != nil {
+		return 0, fmt.Errorf("can't get container task: %w", err)
+	}
+	return task.Pid(), nil
+}
+
+func containerPid(ctx context.Context, containerId string) (uint32, error) {
+	client, err := createClient()
+	if err != nil {
+		return 0, err
+	}
+	defer client.Close()
+
+	// TODO: optimize the code - cache namespaces
+	nsList, err := listNamespaces(client, ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	container, namespace, err := findContainer(ctx, client, containerId, nsList)
+	if err != nil {
+		return 0, err
+	}
+
+	return getTaskPid(ctx, container, namespace)
 }
 
 func (cyl ContaineryList) containeryByContainerId(containerId string) *Containery {

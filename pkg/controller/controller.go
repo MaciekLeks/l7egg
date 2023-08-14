@@ -205,7 +205,7 @@ func (c *Controller) Wait(ctx context.Context) {
 			go func() {
 				defer wg.Done()
 				fmt.Printf("deep[Waiting][range][1] - %s\n", podNsNm)
-				if err := py.StopBoxes(); err != nil {
+				if err := py.StopBoxySet(); err != nil {
 					fmt.Printf("deep[Waiting][range][error] - %s - %s\n", podNsNm, err)
 				}
 

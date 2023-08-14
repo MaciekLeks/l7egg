@@ -179,7 +179,7 @@ func (c *Controller) deletePody(ctx context.Context, pod *corev1.Pod) error {
 
 	key := types.NamespacedName{pod.Namespace, pod.Name}
 	if pb, ok := c.podyInfoMap.Load(key); ok {
-		if err := pb.StopBoxes(); err != nil {
+		if err := pb.StopBoxySet(); err != nil {
 			logger.Error(err, "can't stop box")
 			return err
 		}
@@ -252,7 +252,7 @@ func isPodInStatus(pod *corev1.Pod, podCondType corev1.PodConditionType) bool {
 //		if wasPaired && !stillPaired {
 //			// Stop old boxes
 //			fmt.Printf("deep[updatePodnfo] stopping boxes pod:%s \n", podKey.String())
-//			if err := pb.StopBoxes(); err != nil {
+//			if err := pb.StopBoxySet(); err != nil {
 //				return err
 //			}
 //
@@ -332,7 +332,7 @@ func (c *Controller) updatePody(ctx context.Context, pod *corev1.Pod, py *Pody) 
 	if wasPaired && !stillPaired {
 		// Stop old boxes
 		fmt.Printf("deep[updatePodnfo] stopping boxes pod:%s \n", podKey.String())
-		if err := py.StopBoxes(); err != nil {
+		if err := py.StopBoxySet(); err != nil {
 			return err
 		}
 	}
@@ -346,7 +346,7 @@ func (c *Controller) updatePody(ctx context.Context, pod *corev1.Pod, py *Pody) 
 
 	if isMatched && stillPaired {
 		fmt.Printf("deep[updatePodnfo] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
-		return c.checkAndUpdateContainerChanges(ctx, pod, py, eggi)
+		return c.checkReconcileBoxySet(ctx, pod, py, eggi)
 	}
 
 	return nil
@@ -382,7 +382,8 @@ func (c *Controller) checkAndUpdatePodMatch(ctx context.Context, pod *corev1.Pod
 	return stillPaired, isMatched, eggi, nil
 }
 
-func (c *Controller) checkAndUpdateContainerChanges(ctx context.Context, pod *corev1.Pod, py *Pody, eggi *core.Eggy) error {
+// checkReconcileBoxySet checks if the pod's containers have changed and runs the boxy set if they have - new containers, and stop the old ones (killed/deleted containers)
+func (c *Controller) checkReconcileBoxySet(ctx context.Context, pod *corev1.Pod, py *Pody, ey *core.Eggy) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "namespace", pod.Namespace, "name", pod.Name)
 	podKey := types.NamespacedName{Namespace: pod.Namespace, Name: pod.Name}
 
@@ -391,40 +392,46 @@ func (c *Controller) checkAndUpdateContainerChanges(ctx context.Context, pod *co
 		return err
 	}
 
-	tbuList, tbdList, update, err := py.Containers.CheckContainers(newpy.Containers)
-	if err != nil {
+	//tbuList, tbdList, update, err := py.Containers.CheckContainers(newpy.Containers)
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//if !update {
+	//	return nil
+	//}
+	//
+	//err = py.Set(func(v *Pody) error {
+	//	logger.V(2).Info("updating pody container list", "pod", podKey.String())
+	//	v.Containers = tbuList
+	//	return nil
+	//})
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//logger.V(2).Info("running new boxy set", "pod", podKey.String())
+	////err = runBoxySetOnHost(ctx, ey, py)
+	//err = py.RunBoxySet(ctx, ey)
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//// Stops old boxy set
+	//for i := range tbdList {
+	//	// Can't stop boxies on not my host
+	//	err = tbdList[i].Boxer.Stop()
+	//	logger.V(2).Info("Stopping boxy for container", "pod", podKey.String(), "container", tbdList[i].Name)
+	//	if err != nil {
+	//		return fmt.Errorf("failed to stop boxy: %s", err)
+	//	}
+	//}
+
+	if err = py.CheckReconcileBoxySet(ctx, newpy.Containers, ey); err != nil {
 		return err
 	}
 
-	if !update {
-		return nil
-	}
-
-	err = py.Set(func(v *Pody) error {
-		logger.V(2).Info("updating pody container list", "pod", podKey.String())
-		v.Containers = tbuList
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-
-	logger.V(2).Info("running new boxy set", "pod", podKey.String())
-	//err = runBoxySetOnHost(ctx, eggi, py)
-	err = py.RunBoxySet(ctx, eggi)
-	if err != nil {
-		return err
-	}
-
-	// Stops old boxy set
-	for i := range tbdList {
-		// Can't stop boxies on not my host
-		err = tbdList[i].Boxer.Stop()
-		logger.V(2).Info("Stopping boxy for container", "pod", podKey.String(), "container", tbdList[i].Name)
-		if err != nil {
-			return fmt.Errorf("failed to stop boxy: %s", err)
-		}
-	}
+	logger.V(2).Info("new boxy set run", "pod", podKey.String())
 
 	return nil
 }

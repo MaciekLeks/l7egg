@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/common"
 	"github.com/MaciekLeks/l7egg/pkg/core"
+	"k8s.io/klog/v2"
 	"os"
 
 	//"github.com/MaciekLeks/l7egg/pkg/controller/core"
@@ -39,7 +40,7 @@ type Pody struct {
 //	Set(fn func(v *Pody) error) error
 //	NamespaceName() types.NamespacedName
 //	RunBoxySet(ctx context.Context, eggi *core.Eggy) error
-//	StopBoxes() error
+//	StopBoxySet() error
 //}
 
 //func NewNodeBox() (*NodeBox, error) {
@@ -215,12 +216,12 @@ func (py *Pody) NamespaceName() types.NamespacedName {
 //}
 
 // {
-func (py *Pody) handleTCProgramType(ctx context.Context, eggi *core.Eggy) error {
+func (py *Pody) handleTCProgramType(ctx context.Context, ey *core.Eggy) error {
 	container := py.Containers[0]
 	if container.Ready == true && container.AssetStatus == common.AssetNew {
 		var err error
 		if py.Boxer == nil {
-			py.Boxer, err = core.NewBoxy(eggi, core.WithPid(container.Pid))
+			py.Boxer, err = core.NewBoxy(ey, core.WithPid(container.Pid))
 			if err != nil {
 				return err
 			}
@@ -270,11 +271,11 @@ func (py *Pody) handleCgroupProgramType(ctx context.Context, eggi *core.Eggy) er
 	return nil
 }
 
-func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.Eggy) error {
+func (py *Pody) RunBoxySet(ctx context.Context, ey *core.Eggy) error {
 	py.Lock()
 	defer py.Unlock()
 
-	eggKey := eggi.NamespaceName()
+	eggKey := ey.NamespaceName()
 	py.PairedWithEgg = &eggKey
 
 	if len(py.Containers) < 1 {
@@ -289,10 +290,10 @@ func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.Eggy) error {
 		}
 	}
 
-	if eggi.ProgramType == common.ProgramTypeTC && py.Boxer == nil {
-		return py.handleTCProgramType(ctx, eggi)
-	} else if eggi.ProgramType == common.ProgramTypeCgroup {
-		return py.handleCgroupProgramType(ctx, eggi)
+	if ey.ProgramType == common.ProgramTypeTC && py.Boxer == nil {
+		return py.handleTCProgramType(ctx, ey)
+	} else if ey.ProgramType == common.ProgramTypeCgroup {
+		return py.handleCgroupProgramType(ctx, ey)
 	}
 
 	return nil
@@ -300,7 +301,7 @@ func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.Eggy) error {
 
 //}
 
-func (py *Pody) StopBoxes() error {
+func (py *Pody) StopBoxySet() error {
 	py.Lock()
 	defer py.Unlock()
 
@@ -382,7 +383,7 @@ func (py *Pody) ReconcileBoxySet(ctx context.Context) error {
 
 }
 
-//func (nb *NodeBox) StopBoxes() error {
+//func (nb *NodeBox) StopBoxySet() error {
 //	nb.Lock()
 //	defer nb.Unlock()
 //
@@ -398,3 +399,39 @@ func (py *Pody) ReconcileBoxySet(ctx context.Context) error {
 //
 //	return nil
 //}
+
+// CheckReconcileBoxySet checks if there are new containers to install, or old containers to stop; It's mutating method - it updates container list
+func (py *Pody) CheckReconcileBoxySet(ctx context.Context, newContaineryList ContaineryList, ey *core.Eggy) error {
+	py.Lock()
+	defer py.Unlock()
+
+	logger := klog.FromContext(ctx)
+
+	tbuList, tbdList, update, err := py.Containers.CheckContainers(newContaineryList)
+	if err != nil {
+		return err
+	}
+
+	if !update {
+		return nil
+	}
+
+	py.Containers = tbuList
+	logger.V(2).Info("pody container list update")
+	err = py.RunBoxySet(ctx, ey)
+	if err != nil {
+		return err
+	}
+
+	logger.V(2).Info("new boxy set run")
+
+	// Stops old boxy set
+	for i := range tbdList {
+		err = tbdList[i].Boxer.Stop()
+		if err != nil {
+			return fmt.Errorf("failed to stop boxy: %s", err)
+		}
+	}
+
+	return nil
+}
