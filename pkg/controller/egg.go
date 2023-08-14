@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
+	"github.com/MaciekLeks/l7egg/pkg/common"
 	"github.com/MaciekLeks/l7egg/pkg/core"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	"github.com/go-logr/logr"
@@ -315,26 +316,32 @@ func (c *Controller) updateExistingEggy(ctx context.Context, logger logr.Logger,
 		return err
 	}
 
+	ey.UpdateCidrStatus(common.AssetSynced)
+	ey.UpdateCommonNamesStatus(common.AssetSynced)
+
 	return nil
 }
 
 func (c *Controller) addNewEggy(ctx context.Context, logger logr.Logger, eggNsNm types.NamespacedName, ceg v1alpha1.ClusterEgg) error {
 	logger.Info("Adding egg")
 
-	eggi, err := core.NewEggy(ceg)
+	ey, err := core.NewEggy(ceg)
 	if err != nil {
 		return fmt.Errorf("creating eggy '%s' object failed: %s", ceg.Name, err.Error())
 	}
 
-	err = c.storeEggy(eggNsNm, eggi)
+	err = c.storeEggy(eggNsNm, ey)
 	if err != nil {
 		return err
 	}
 
-	err = c.handleEggyScope(ctx, logger, eggi, ceg)
+	err = c.handleEggyScope(ctx, logger, ey, ceg)
 	if err != nil {
 		return err
 	}
+
+	ey.UpdateCidrStatus(common.AssetSynced)
+	ey.UpdateCommonNamesStatus(common.AssetSynced)
 
 	return nil
 }

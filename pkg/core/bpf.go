@@ -178,12 +178,12 @@ func (eby *ebpfy) initCIDRs() {
 		must(err, "Can't update ACL.")
 	}
 
-	eby.eggy.UpdateCidrStatus(common.AssetSynced)
+	//eby.eggy.UpdateCidrStatus(common.AssetSynced)
 }
 
 // initCNs
 func (eby *ebpfy) initCNs() {
-	eby.eggy.UpdateCommonNamesStatus(common.AssetSynced)
+	//eby.eggy.UpdateCommonNamesStatus(common.AssetSynced)
 }
 
 func (eby *ebpfy) updateCIDRs() error {
@@ -268,7 +268,7 @@ func (eby *ebpfy) updateCIDRs() error {
 		}
 	}
 
-	eby.eggy.UpdateCidrStatus(common.AssetSynced)
+	//eby.eggy.UpdateCidrStatus(common.AssetSynced)
 
 	return nil
 }
@@ -333,7 +333,7 @@ func (eby *ebpfy) updateCNs() error {
 		}
 	}
 
-	eby.eggy.UpdateCommonNamesStatus(common.AssetSynced)
+	//eby.eggy.UpdateCommonNamesStatus(common.AssetSynced)
 
 	return nil
 }
