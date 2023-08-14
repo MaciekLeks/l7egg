@@ -236,7 +236,7 @@ func isPodInStatus(pod *corev1.Pod, podCondType corev1.PodConditionType) bool {
 //			}
 //			eggKey := eggKeys.Get(0)
 //			var ok bool
-//			eggi, ok = c.eggInfoMap.Load(eggKey)
+//			eggi, ok = c.eggyInfoMap.Load(eggKey)
 //			if !ok {
 //				return fmt.Errorf("egg not found", "egg", eggKey.String())
 //			}
@@ -366,7 +366,7 @@ func (c *Controller) checkAndUpdatePodMatch(ctx context.Context, pod *corev1.Pod
 
 		eggKey := eggKeys.Get(0)
 		var ok bool
-		eggi, ok = c.eggInfoMap.Load(eggKey)
+		eggi, ok = c.eggyInfoMap.Load(eggKey)
 		if !ok {
 			return false, false, nil, fmt.Errorf("egg not found", "egg", eggKey.String())
 		}
@@ -454,7 +454,7 @@ func (c *Controller) addPodBox(ctx context.Context, pod *corev1.Pod) error {
 			}
 
 			eggKey := eggKeys.Get(0)
-			eggi, ok := c.eggInfoMap.Load(eggKey)
+			eggi, ok := c.eggyInfoMap.Load(eggKey)
 			if !ok {
 				return fmt.Errorf("egg not found", "egg", eggKey.String())
 			}
@@ -505,7 +505,7 @@ func (c *Controller) checkEggMatch(pod *corev1.Pod) *syncx.SafeSlice[types.Names
 	eggKeys := syncx.SafeSlice[types.NamespacedName]{}
 	podLabels := labels.Set(pod.Labels)
 
-	c.eggInfoMap.Range(func(key types.NamespacedName, eggi *core.Eggy) bool {
+	c.eggyInfoMap.Range(func(key types.NamespacedName, eggi *core.Eggy) bool {
 		if eggi.PodLabels == nil || len(eggi.PodLabels) == 0 {
 			// no selector in ClusterEgg means - do not match to any pod - match to interface!!
 			return true

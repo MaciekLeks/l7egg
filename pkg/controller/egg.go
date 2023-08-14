@@ -140,7 +140,7 @@ func (c *Controller) updateEggStatus(ctx context.Context, cegg *v1alpha1.Cluster
 //	// Either add or update
 //	// If the egg already exists, update it
 //	eggNsNm := types.NamespacedName{Namespace: cegg.Namespace, Name: cegg.Name}
-//	if eggi, ok := c.eggInfoMap.Load(eggNsNm); ok {
+//	if eggi, ok := c.eggyInfoMap.Load(eggNsNm); ok {
 //		//changed := false
 //		//err = eggi.Set(func(eggi *core.Eggy) error {
 //		neggi, err := core.NewEggy(cegg)
@@ -233,7 +233,7 @@ func (c *Controller) updateEggStatus(ctx context.Context, cegg *v1alpha1.Cluster
 //		// store eggInfo in map
 //		err = eggi.Set(func(eggi *core.Eggy) error {
 //			fmt.Printf("\ntbd -add- eggi p:%p\n", eggi)
-//			c.eggInfoMap.Store(eggNsNm, eggi)
+//			c.eggyInfoMap.Store(eggNsNm, eggi)
 //			// BoxStart cluster scope egg only if podLabels is empty
 //			if len(eggi.PodLabels) == 0 {
 //				// cluster scope cegg
@@ -280,8 +280,8 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 	logger.Info("updating")
 	eggNsNm := types.NamespacedName{Namespace: cegg.Namespace, Name: cegg.Name}
 
-	if eggi, ok := c.eggInfoMap.Load(eggNsNm); ok {
-		err := c.updateExistingEgg(ctx, logger, eggi, cegg, eggNsNm)
+	if ey, ok := c.eggyInfoMap.Load(eggNsNm); ok {
+		err := c.updateExistingEgg(ctx, logger, ey, cegg, eggNsNm)
 		return err
 	} else {
 		err := c.addNewEgg(ctx, logger, eggNsNm, cegg)
@@ -289,7 +289,7 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 	}
 }
 
-func (c *Controller) updateExistingEgg(ctx context.Context, logger logr.Logger, eggi *core.Eggy, cegg v1alpha1.ClusterEgg, eggNsNm types.NamespacedName) error {
+func (c *Controller) updateExistingEgg(ctx context.Context, logger logr.Logger, ey *core.Eggy, cegg v1alpha1.ClusterEgg, eggNsNm types.NamespacedName) error {
 	logger.Info("tbd - 1")
 	fmt.Println("tbd - 1p")
 
@@ -298,14 +298,14 @@ func (c *Controller) updateExistingEgg(ctx context.Context, logger logr.Logger, 
 		return fmt.Errorf("failed to create new egg info: %w", err)
 	}
 
-	if eq := reflect.DeepEqual(neggi.PodLabels, eggi.PodLabels); !eq {
-		err = c.handleEggLabelsChange(ctx, logger, eggi, eggNsNm, neggi)
+	if eq := reflect.DeepEqual(neggi.PodLabels, ey.PodLabels); !eq {
+		err = c.handleEggLabelsChange(ctx, logger, ey, eggNsNm, neggi)
 		if err != nil {
 			return err
 		}
 	}
 
-	err = eggi.Update(cegg)
+	err = ey.Update(cegg)
 	if err != nil {
 		return err
 	}
@@ -374,7 +374,7 @@ func (c *Controller) updateBoxySet(ctx context.Context, eggNsNm types.Namespaced
 }
 
 func (c *Controller) storeEggy(eggNsNm types.NamespacedName, ey *core.Eggy) error {
-	c.eggInfoMap.Store(eggNsNm, ey)
+	c.eggyInfoMap.Store(eggNsNm, ey)
 	return nil
 }
 
@@ -437,7 +437,7 @@ func (c *Controller) deleteEgg(ctx context.Context, eggNamespaceName types.Names
 	}
 
 	logger.Info("Egg deleted.")
-	c.eggInfoMap.Delete(eggNamespaceName)
+	c.eggyInfoMap.Delete(eggNamespaceName)
 
 	return nil
 }

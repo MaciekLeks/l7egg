@@ -63,7 +63,7 @@ type Controller struct {
 	// podyInfoMap is a map of pody object
 	podyInfoMap       syncx.SafeMap[types.NamespacedName, *Pody]
 	containeryInfoMap syncx.SafeMap[ContainerName, *Containery]
-	eggInfoMap        syncx.SafeMap[types.NamespacedName, *core.Eggy] //namespace not used
+	eggyInfoMap       syncx.SafeMap[types.NamespacedName, *core.Eggy] //namespace not used
 }
 
 const (
@@ -105,7 +105,7 @@ func NewController(ctx context.Context,
 
 		//podyInfoMap: PodInfoMap{},
 		podyInfoMap: syncx.SafeMap[types.NamespacedName, *Pody]{},
-		eggInfoMap:  syncx.SafeMap[types.NamespacedName, *core.Eggy]{},
+		eggyInfoMap: syncx.SafeMap[types.NamespacedName, *core.Eggy]{},
 	}
 
 	logger.Info("Setting up event handlers")
