@@ -1,5 +1,7 @@
 package common
 
+import "fmt"
+
 type ProgramType string
 type CtxAssetType string
 type CtxAssetValue int8
@@ -32,30 +34,37 @@ const (
 //	return fmt.Sprintf("%s|%s|%s", bk.Egg.String(), bk.Pod.String(), bk.ContainerId)
 //}
 
-// { For CNs, CIDRs,...
-type Asset[T comparable] struct {
-	Value       T
-	AssetStatus AssetStatus
+// Generic type X which is comparable and implements Stringer interface
+
+// { For CommonNames, Cidrs,...
+type Asset[T fmt.Stringer] struct {
+	Value  *T
+	Status AssetStatus
 }
-type PtrAssetList[T comparable] []*Asset[T]
+type AssetList[T fmt.Stringer] []Asset[T]
+
+// Len returns the length of ptrAssetList[T]
+func (l *AssetList[T]) Len() int {
+	return len(*l)
+}
 
 // Add adds element to ptrAssetList[T] if it does not exist already.
 // Returns true if element was added, false otherwise.
-func (l *PtrAssetList[T]) Add(element T) bool {
+func (l *AssetList[T]) Add(element *T) bool {
 	for _, e := range *l {
-		if e.Value == element {
+		if (*e.Value).String() == (*element).String() {
 			return false
 		}
 	}
-	*l = append(*l, &Asset[T]{Value: element, AssetStatus: AssetNew})
+	*l = append(*l, Asset[T]{Value: element, Status: AssetNew})
 	return true
 }
 
 // Remove removes element from ptrAssetList[T] if it exists.
 // Returns true if element was removed, false otherwise.
-func (l *PtrAssetList[T]) Remove(element T) bool {
+func (l *AssetList[T]) Remove(element *T) bool {
 	for i, e := range *l {
-		if e.Value == element {
+		if (*e.Value).String() == (*element).String() {
 			*l = append((*l)[:i], (*l)[i+1:]...)
 			return true
 		}
@@ -64,9 +73,9 @@ func (l *PtrAssetList[T]) Remove(element T) bool {
 }
 
 // Contains returns true if ptrAssetList[T] contains element, false otherwise.
-func (l *PtrAssetList[T]) Contains(element T) bool {
+func (l *AssetList[T]) Contains(element *T) bool {
 	for _, e := range *l {
-		if e.Value == element {
+		if (*e.Value).String() == (*element).String() {
 			return true
 		}
 	}
@@ -76,13 +85,12 @@ func (l *PtrAssetList[T]) Contains(element T) bool {
 // Update updates element in the receiver pointer list on the basis a new ptrAssetList[T]
 // It adds element if not exist on receiver list, sets AssetSync status if they are the same,
 // or AssetStale receiver list contains element which does not exist on a new list.
-// Returns true if element was updated, false otherwise.
-func (l *PtrAssetList[T]) Update(newList PtrAssetList[T]) bool {
-	for _, e := range *l {
-		if !newList.Contains(e.Value) {
-			e.AssetStatus = AssetStale
+func (l *AssetList[T]) Update(newList AssetList[T]) {
+	for i := range *l {
+		if !newList.Contains((*l)[i].Value) {
+			(*l)[i].Status = AssetStale
 		} else {
-			e.AssetStatus = AssetSynced
+			(*l)[i].Status = AssetSynced
 		}
 	}
 	for _, e := range newList {
@@ -90,14 +98,22 @@ func (l *PtrAssetList[T]) Update(newList PtrAssetList[T]) bool {
 			l.Add(e.Value)
 		}
 	}
-	return true
 }
 
 // Cleans clean ptrAssetList[T] from elements with status common.AssetStale
-func (l *PtrAssetList[T]) Clean() {
-	for i, e := range *l {
-		if e.AssetStatus == AssetStale {
-			*l = append((*l)[:i], (*l)[i+1:]...)
+//func (l AssetList[T]) Clean() {
+//	for i, e := range l {
+//		if e.Status == AssetStale {
+//			l = append((l)[:i], (l)[i+1:]...)
+//		}
+//	}
+//}
+
+// SetStatus sets status to AssetStatus for all elements except Stale
+func (l *AssetList[T]) SetStatus(status AssetStatus) {
+	for i := range *l {
+		if (*l)[i].Status != AssetStale {
+			(*l)[i].Status = status
 		}
 	}
 }

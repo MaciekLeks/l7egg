@@ -282,7 +282,7 @@ package core
 //
 //func (m *eggManager) UpdateEgg(boxKey common.BoxKey, newSpec v1alpha1.ClusterEggSpec) error {
 //	fmt.Printf("+++++++++++++++ 1")
-//	err := m.UpdateCIDRs(boxKey, newSpec.Egress.CIDRs)
+//	err := m.UpdateCIDRs(boxKey, newSpec.Egress.Cidrs)
 //	if err != nil {
 //		return err
 //	}

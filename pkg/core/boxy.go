@@ -258,11 +258,11 @@ func (b *Boxy) Upgrade(ctx context.Context, options ...func(*BoxyOptions)) error
 }
 
 func (b *Boxy) Reconcile(ctx context.Context) error {
-	if err := b.ebpfy.updateCIDRs(b.ebpfy.eggy.CIDRs); err != nil {
+	if err := b.ebpfy.updateCIDRs(); err != nil {
 		return err
 	}
 
-	if err := b.ebpfy.updateCNs(b.ebpfy.eggy.CNs); err != nil {
+	if err := b.ebpfy.updateCNs(); err != nil {
 		return err
 	}
 

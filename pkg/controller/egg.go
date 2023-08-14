@@ -204,8 +204,8 @@ func (c *Controller) updateEggStatus(ctx context.Context, cegg *v1alpha1.Cluster
 //			return err
 //		}
 //
-//		// update CNs, CIDRs,...for remaining boxes
-//		logger.Info("Updating egg for CNs, CIDRs....")
+//		// update CommonNames, Cidrs,...for remaining boxes
+//		logger.Info("Updating egg for CommonNames, Cidrs....")
 //		c.podyInfoMap.Range(func(podNsNm types.NamespacedName, py *Pody) bool {
 //			// Find all boxes using the same egg specified by the cegg
 //			if py.PairedWithEgg != nil && *py.PairedWithEgg == eggNsNm {
@@ -293,19 +293,19 @@ func (c *Controller) updateExistingEggy(ctx context.Context, logger logr.Logger,
 	logger.Info("tbd - 1")
 	fmt.Println("tbd - 1p")
 
-	neggi, err := core.NewEggy(cegg)
+	ney, err := core.NewEggy(cegg)
 	if err != nil {
 		return fmt.Errorf("failed to create new egg info: %w", err)
 	}
 
-	if eq := reflect.DeepEqual(neggi.PodLabels, ey.PodLabels); !eq {
-		err = c.handleEggLabelsChange(ctx, logger, ey, eggNsNm, neggi)
+	if eq := reflect.DeepEqual(ney.PodLabels, ey.PodLabels); !eq {
+		err = c.handleEggLabelsChange(ctx, logger, ey, eggNsNm, ney)
 		if err != nil {
 			return err
 		}
 	}
 
-	err = ey.Update(cegg)
+	err = ey.Update(ney)
 	if err != nil {
 		return err
 	}

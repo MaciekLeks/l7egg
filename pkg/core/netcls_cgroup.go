@@ -6,25 +6,25 @@ import (
 	"github.com/containerd/cgroups/v3/cgroup1"
 )
 
-func (ey *ebpfy) runNetClsCgroupStack(netNsPath string, cgroupNetCls cgroup1.Cgroup, pid uint32) error {
-	return attachTcCgroupEgressStack(ey.eggy.EgressInterface, cgroupNetCls, ey.eggy.Shaping, netNsPath, pid)
+func (eby *ebpfy) runNetClsCgroupStack(netNsPath string, cgroupNetCls cgroup1.Cgroup, pid uint32) error {
+	return attachTcCgroupEgressStack(eby.eggy.EgressInterface, cgroupNetCls, eby.eggy.Shaping, netNsPath, pid)
 }
 
-func (ey *ebpfy) stopNetClsCgroupStack(netNsPath string) error {
-	return net.CleanEgressTcNetStack(netNsPath, ey.eggy.EgressInterface)
+func (eby *ebpfy) stopNetClsCgroupStack(netNsPath string) error {
+	return net.CleanEgressTcNetStack(netNsPath, eby.eggy.EgressInterface)
 }
 
-func (ey *ebpfy) stopTcNetStack(netNsPath string) error {
-	if err := net.CleanIngressTcNetStack(netNsPath, ey.eggy.IngressInterface); err != nil {
+func (eby *ebpfy) stopTcNetStack(netNsPath string) error {
+	if err := net.CleanIngressTcNetStack(netNsPath, eby.eggy.IngressInterface); err != nil {
 		return fmt.Errorf("failed to clean ingress tc net stack: %v", err)
 	}
-	if err := net.CleanEgressTcNetStack(netNsPath, ey.eggy.EgressInterface); err != nil {
+	if err := net.CleanEgressTcNetStack(netNsPath, eby.eggy.EgressInterface); err != nil {
 		return fmt.Errorf("failed to clean egress tc net stack: %v", err)
 	}
 	return nil
 }
 
-func (ey *ebpfy) addPidToNetClsCgroup(cgroupNetCls cgroup1.Cgroup, pid uint32) error {
+func (eby *ebpfy) addPidToNetClsCgroup(cgroupNetCls cgroup1.Cgroup, pid uint32) error {
 	return net.AddPidToNetClsCgroup(cgroupNetCls, pid)
 }
 

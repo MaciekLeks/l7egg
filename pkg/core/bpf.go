@@ -47,16 +47,16 @@ func newEbpfy(eggi *Eggy) *ebpfy {
 }
 
 // run runs the ebpfy, and if neither nsNetPath nor cgroupPath is Set, it will run the ebpfy in the current network netspace (tc over cgroup
-func (ey *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType common.ProgramType, netNsPath string, cgroupPath string, pid uint32) error {
+func (eby *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType common.ProgramType, netNsPath string, cgroupPath string, pid uint32) error {
 	var err error
 
 	fmt.Println("deep[ebpfy:run]Starting ebpfy...")
-	ey.bpfModule, err = bpf.NewModuleFromFile(BpfObjectFileName)
+	eby.bpfModule, err = bpf.NewModuleFromFile(BpfObjectFileName)
 	if err != nil {
 		return err
 	}
 
-	err = ey.bpfModule.BPFLoadObject()
+	err = eby.bpfModule.BPFLoadObject()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "deep[pbf:run]Failed to load BPF object: %v\n", err)
 		return err
@@ -69,22 +69,22 @@ func (ey *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType common
 		time.Sleep(4 * time.Second)
 
 		//err = attachTcProg(ebpfy.bpfModule, ebpfy.Eggy.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
-		err = attachTcBpfIngressStack(ey.bpfModule, ey.eggy.EgressInterface, netNsPath)
+		err = attachTcBpfIngressStack(eby.bpfModule, eby.eggy.EgressInterface, netNsPath)
 		must(err, "Can't attach TC hook.")
 		//err = attachTcProg(ebpfy.bpfModule, ebpfy.Eggy.EgressInterface, bpf.BPFTcEgress, "tc_egress")
-		err = attachTcBpfEgressStack(ey.bpfModule, ey.eggy.EgressInterface, netNsPath, ey.eggy.Shaping)
+		err = attachTcBpfEgressStack(eby.bpfModule, eby.eggy.EgressInterface, netNsPath, eby.eggy.Shaping)
 		must(err, "Can't attach TC hook.")
 		logger.Info("Attached eBPF program to tc hooks")
 
 		//tools.ShapeEgressInterface(netNsPath, ebpfy.EgressInterface)
 
 	} else {
-		//err = attachTcCgroupEgressStack(ey.Eggy.EgressInterface, ey.cgroupNetCls, ey.Eggy.Shaping, netNsPath, pid)
+		//err = attachTcCgroupEgressStack(eby.Eggy.EgressInterface, eby.cgroupNetCls, eby.Eggy.Shaping, netNsPath, pid)
 		//must(err, "can't attach tc cgroup stack")
 		fmt.Println("deep[bpf:run][cgroupPath]", cgroupPath)
-		err = attachCgroupProg(ey.bpfModule, "cgroup__skb_egress", bpf.BPFAttachTypeCgroupInetEgress, cgroupPath)
+		err = attachCgroupProg(eby.bpfModule, "cgroup__skb_egress", bpf.BPFAttachTypeCgroupInetEgress, cgroupPath)
 		must(err, "can't attach cgroup hook")
-		err = attachCgroupProg(ey.bpfModule, "cgroup__skb_ingress", bpf.BPFAttachTypeCgroupInetIngress, cgroupPath)
+		err = attachCgroupProg(eby.bpfModule, "cgroup__skb_ingress", bpf.BPFAttachTypeCgroupInetIngress, cgroupPath)
 		must(err, "can't attach cgroup hook")
 		logger.Info("Attached eBPF program to cgroup hooks")
 		//err = attachCgroupProg(ebpfy.bpfModule, "cgroup__sock", bpf.BPFAttachTypeCgroupSockOps)
@@ -92,9 +92,9 @@ func (ey *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType common
 
 	}
 
-	ey.packets = make(chan []byte) //TODO need Close() on this channel
+	eby.packets = make(chan []byte) //TODO need Close() on this channel
 
-	rb, err := ey.bpfModule.InitRingBuf("packets", ey.packets)
+	rb, err := eby.bpfModule.InitRingBuf("packets", eby.packets)
 	must(err, "Can't initialize ring buffer map.")
 
 	//rb.Start()
@@ -111,40 +111,40 @@ func (ey *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType common
 	//	}
 	//}()
 
-	ey.ipv4ACL, err = ey.bpfModule.GetMap("ipv4_lpm_map")
-	ey.ipv6ACL, err = ey.bpfModule.GetMap("ipv6_lpm_map")
+	eby.ipv4ACL, err = eby.bpfModule.GetMap("ipv4_lpm_map")
+	eby.ipv6ACL, err = eby.bpfModule.GetMap("ipv6_lpm_map")
 	must(err, "Can't get map") //TODO remove Must
 
-	ey.initCIDRs()
-	ey.initCNs()
+	eby.initCIDRs()
+	eby.initCNs()
 
 	wg.Add(1)
 	go func() {
 		//LIFO
 		defer wg.Done() //added with new tc filter approach via go-tc
-		defer ey.bpfModule.Close()
+		defer eby.bpfModule.Close()
 		//defer func() {
 		//	//if /*len(cgroupPath) == 0*/ programType == common.ProgramTypeTC {
 		//	//	//tools.CleanInterfaces(netNsPath, ebpfy.IngressInterface, ebpfy.EgressInterface)
-		//	//	if err := net.CleanIngressTcNetStack(netNsPath, ey.eggy.IngressInterface); err != nil {
+		//	//	if err := net.CleanIngressTcNetStack(netNsPath, eby.eggy.IngressInterface); err != nil {
 		//	//		fmt.Println(err)
 		//	//	}
-		//	//	if err := net.CleanEgressTcNetStack(netNsPath, ey.eggy.EgressInterface); err != nil {
+		//	//	if err := net.CleanEgressTcNetStack(netNsPath, eby.eggy.EgressInterface); err != nil {
 		//	//		fmt.Println(err)
 		//	//	}
 		//	//}
 		//	//} else {
 		//	//	// TODO add condition on shaping
-		//	//	if err := net.CleanEgressTcNetStack(netNsPath, ey.Eggy.EgressInterface); err != nil {
+		//	//	if err := net.CleanEgressTcNetStack(netNsPath, eby.Eggy.EgressInterface); err != nil {
 		//	//		fmt.Println(err)
 		//	//	}
 		//	//}
 		//}()
 
 		var lwg sync.WaitGroup
-		//runMapLooper(ctx, ebpfy.ipv4ACL, ebpfy.CNs, ipv4, &lwg, netNsPath, cgroupPath)
-		//runMapLooper(ctx, ebpfy.ipv6ACL, ebpfy.CNs, ipv6, &lwg, netNsPath, cgroupPath)
-		ey.runPacketsLooper(ctx, &lwg, netNsPath, cgroupPath)
+		//runMapLooper(ctx, ebpfy.ipv4ACL, ebpfy.CommonNames, ipv4, &lwg, netNsPath, cgroupPath)
+		//runMapLooper(ctx, ebpfy.ipv6ACL, ebpfy.CommonNames, ipv6, &lwg, netNsPath, cgroupPath)
+		eby.runPacketsLooper(ctx, &lwg, netNsPath, cgroupPath)
 		lwg.Wait()
 
 		fmt.Println("///Stopping recvLoop.")
@@ -156,11 +156,11 @@ func (ey *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType common
 	return nil
 }
 
-func (ey *ebpfy) initCIDRs() {
+func (eby *ebpfy) initCIDRs() {
 	//{cidrs
 	fmt.Println("[ACL]: Init")
-	for i := 0; i < len(ey.eggy.CIDRs); i++ {
-		cidr := ey.eggy.CIDRs[i]
+	for i := 0; i < len(eby.eggy.Cidrs); i++ {
+		cidr := eby.eggy.Cidrs[i]
 		val := ipLPMVal{
 			ttl:     0,
 			counter: 0,
@@ -169,43 +169,27 @@ func (ey *ebpfy) initCIDRs() {
 		}
 
 		var err error
-		switch ip := cidr.lpmKey.(type) {
+		switch ip := cidr.Value.lpmKey.(type) {
 		case ipv4LPMKey:
-			err = updateACLValueNew(ey.ipv4ACL, ip, val)
+			err = updateACLValueNew(eby.ipv4ACL, ip, val)
 		case ipv6LPMKey:
-			err = updateACLValueNew(ey.ipv6ACL, ip, val)
+			err = updateACLValueNew(eby.ipv6ACL, ip, val)
 		}
 		must(err, "Can't update ACL.")
-
-		cidr.status = common.AssetSynced
 	}
+
+	eby.eggy.UpdateCidrStatus(common.AssetSynced)
 }
 
 // initCNs
-func (ey *ebpfy) initCNs() {
-	for i := 0; i < len(ey.eggy.CNs); i++ {
-		//to have simmilar approach only with CIDRs
-		current := ey.eggy.CNs[i]
-		current.status = common.AssetSynced
-	}
+func (eby *ebpfy) initCNs() {
+	eby.eggy.UpdateCommonNamesStatus(common.AssetSynced)
 }
 
-func (ey *ebpfy) updateCIDRs(cidrs []*CIDR) error {
-
-	for i := 0; i < len(ey.eggy.CIDRs); i++ {
-		current := ey.eggy.CIDRs[i]
-		current.status = common.AssetStale
-
-		for _, newone := range cidrs {
-			if current.cidr == newone.cidr {
-				current.status = common.AssetSynced
-				newone.status = common.AssetSynced
-			}
-		}
-	}
+func (eby *ebpfy) updateCIDRs() error {
 
 	// ipv4: Set stale
-	i := ey.ipv4ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
+	i := eby.ipv4ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
 	for i.Next() {
 		fmt.Println("%%%>>>4.2")
 		if i.Err() != nil {
@@ -214,20 +198,20 @@ func (ey *ebpfy) updateCIDRs(cidrs []*CIDR) error {
 
 		keyBytes := i.Key()
 		key := unmarshalIpv4ACLKey(keyBytes)
-		val := getACLValue(ey.ipv4ACL, key)
+		val := getACLValue(eby.ipv4ACL, key)
 
-		//we control CIDR with ttl=0 only
+		//we control Cidr with ttl=0 only
 		if val.ttl == 0 {
-			for i := 0; i < len(ey.eggy.CIDRs); i++ {
-				cidr := ey.eggy.CIDRs[i]
-				ipv4Key, ok := cidr.lpmKey.(ipv4LPMKey)
+			for i := 0; i < len(eby.eggy.Cidrs); i++ {
+				cidr := eby.eggy.Cidrs[i]
+				ipv4Key, ok := cidr.Value.lpmKey.(ipv4LPMKey)
 				if ok {
 					if key.prefixLen == ipv4Key.prefixLen && key.data == ipv4Key.data {
-						if cidr.status == common.AssetStale {
+						if cidr.Status == common.AssetStale {
 							val.status = uint8(common.AssetStale)
-							err := updateACLValueNew(ey.ipv4ACL, key, val)
+							err := updateACLValueNew(eby.ipv4ACL, key, val)
 							if err != nil {
-								return fmt.Errorf("Updating value status", ey)
+								return fmt.Errorf("Updating value status", eby)
 							}
 						}
 					}
@@ -236,7 +220,7 @@ func (ey *ebpfy) updateCIDRs(cidrs []*CIDR) error {
 		}
 	}
 	// ipv6: Set stale
-	i = ey.ipv6ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
+	i = eby.ipv6ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
 	for i.Next() {
 		fmt.Println("%%%>>>4.2")
 		if i.Err() != nil {
@@ -245,21 +229,21 @@ func (ey *ebpfy) updateCIDRs(cidrs []*CIDR) error {
 
 		keyBytes := i.Key()
 		key := unmarshalIpv6ACLKey(keyBytes)
-		val := getACLValue(ey.ipv6ACL, key)
+		val := getACLValue(eby.ipv6ACL, key)
 
-		//we control CIDR with ttl=0 only
+		//we control Cidr with ttl=0 only
 		if val.ttl == 0 {
-			for i := 0; i < len(ey.eggy.CIDRs); i++ {
-				cidr := ey.eggy.CIDRs[i]
-				ipv6Key, ok := cidr.lpmKey.(ipv6LPMKey)
+			for i := 0; i < len(eby.eggy.Cidrs); i++ {
+				cidr := eby.eggy.Cidrs[i]
+				ipv6Key, ok := cidr.Value.lpmKey.(ipv6LPMKey)
 				if ok {
 					if key.prefixLen == ipv6Key.prefixLen && key.data == ipv6Key.data {
-						if cidr.status == common.AssetStale {
+						if cidr.Status == common.AssetStale {
 
 							val.status = uint8(common.AssetStale)
-							err := updateACLValueNew(ey.ipv6ACL, key, val)
+							err := updateACLValueNew(eby.ipv6ACL, key, val)
 							if err != nil {
-								return fmt.Errorf("Updating value status", ey)
+								return fmt.Errorf("Updating value status", eby)
 							}
 						}
 					}
@@ -269,49 +253,29 @@ func (ey *ebpfy) updateCIDRs(cidrs []*CIDR) error {
 	}
 
 	//add
-	for _, cidr := range cidrs {
-		if cidr.status == common.AssetNew {
+	for _, cidr := range eby.eggy.Cidrs {
+		if cidr.Status == common.AssetNew {
 			val := ipLPMVal{
 				ttl:     0,
 				counter: 0,
 				status:  uint8(common.AssetSynced),
 			}
 
-			err := updateACLValueNew(ey.ipv4ACL, cidr.lpmKey, val)
+			err := updateACLValueNew(eby.ipv4ACL, cidr.Value.lpmKey, val)
 			if err != nil {
 				return fmt.Errorf("Can't update ACL %#v", err)
 			}
-			cidr.status = common.AssetSynced
-			ey.eggy.CIDRs = append(ey.eggy.CIDRs, cidr)
 		}
 	}
 
-	for i := 0; i < len(ey.eggy.CIDRs); i++ {
-		cidr := ey.eggy.CIDRs[i]
-		if cidr.status != common.AssetSynced {
-			fmt.Printf("Stale keys %#v\n", cidr)
-
-		}
-	}
+	eby.eggy.UpdateCidrStatus(common.AssetSynced)
 
 	return nil
 }
 
-func (ey *ebpfy) updateCNs(cns []*CN) error {
-	for i := 0; i < len(ey.eggy.CNs); i++ {
-		current := ey.eggy.CNs[i]
-		current.status = common.AssetStale
-
-		for _, newone := range cns {
-			if current.cn == newone.cn {
-				current.status = common.AssetSynced
-				newone.status = common.AssetSynced
-			}
-		}
-	}
-
+func (eby *ebpfy) updateCNs() error {
 	// delete
-	i := ey.ipv4ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
+	i := eby.ipv4ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
 	for i.Next() {
 		if i.Err() != nil {
 			return fmt.Errorf("BPF Map Iterator error", i.Err())
@@ -319,64 +283,62 @@ func (ey *ebpfy) updateCNs(cns []*CN) error {
 
 		keyBytes := i.Key()
 		key := unmarshalIpv4ACLKey(keyBytes)
-		val := getACLValue(ey.ipv4ACL, key)
+		val := getACLValue(eby.ipv4ACL, key)
 
-		//we control CNs with ttl!=0 only
+		//we control CommonNames with ttl!=0 only
 		if val.ttl != 0 {
 			fmt.Println("%%%>>> Found ttl!=0")
-			for i := 0; i < len(ey.eggy.CNs); i++ {
-				current := ey.eggy.CNs[i]
-				if val.id == current.id {
-					if current.status == common.AssetStale {
+			for i := 0; i < len(eby.eggy.CommonNames); i++ {
+				current := eby.eggy.CommonNames[i]
+				if val.id == current.Value.id {
+					if current.Status == common.AssetStale {
 						fmt.Println("%%%>>> current.Status is Stale")
 						val.status = uint8(common.AssetStale)
-						err := updateACLValueNew(ey.ipv4ACL, key, val) //invalidate all IPs for stale CNs
+						err := updateACLValueNew(eby.ipv4ACL, key, val) //invalidate all IPs for stale CommonNames
 						if err != nil {
-							return fmt.Errorf("Updating value status", ey)
-						}
-					}
-				}
-			}
-		}
-
-		//we control CNs with ttl!=0 only
-		if val.ttl != 0 {
-			fmt.Println("%%%>>> Found ttl!=0")
-			for i := 0; i < len(ey.eggy.CNs); i++ {
-				current := ey.eggy.CNs[i]
-				if val.id == current.id {
-					if current.status == common.AssetStale {
-						fmt.Println("%%%>>> current.Status is Stale")
-						val.status = uint8(common.AssetStale)
-						err := updateACLValueNew(ey.ipv4ACL, key, val) //invalidate all IPs for stale CNs
-						if err != nil {
-							return fmt.Errorf("Updating value status", ey)
+							return fmt.Errorf("Updating value status", eby)
 						}
 					}
 				}
 			}
 		}
 	}
-	//add
-	for _, cn := range cns {
-		fmt.Println("%%%>>> adding new cn %v", cn)
-		if cn.status == common.AssetNew {
-			cn.status = common.AssetSynced
-			ey.eggy.CNs = append(ey.eggy.CNs, cn)
+
+	i = eby.ipv6ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
+	for i.Next() {
+		if i.Err() != nil {
+			return fmt.Errorf("BPF Map Iterator error", i.Err())
+		}
+
+		keyBytes := i.Key()
+		key := unmarshalIpv4ACLKey(keyBytes)
+		val := getACLValue(eby.ipv4ACL, key)
+
+		//we control CommonNames with ttl!=0 only
+		if val.ttl != 0 {
+			fmt.Println("%%%>>> Found ttl!=0")
+			for i := 0; i < len(eby.eggy.CommonNames); i++ {
+				current := eby.eggy.CommonNames[i]
+				if val.id == current.Value.id {
+					if current.Status == common.AssetStale {
+						fmt.Println("%%%>>> current.Status is Stale")
+						val.status = uint8(common.AssetStale)
+						err := updateACLValueNew(eby.ipv4ACL, key, val) //invalidate all IPs for stale CommonNames
+						if err != nil {
+							return fmt.Errorf("Updating value status", eby)
+						}
+					}
+				}
+			}
 		}
 	}
 
-	for i := 0; i < len(ey.eggy.CNs); i++ {
-		current := ey.eggy.CNs[i]
-		if current.status != common.AssetSynced {
-			fmt.Printf("CN: Stale key %#v\n", current)
-		}
-	}
+	eby.eggy.UpdateCommonNamesStatus(common.AssetSynced)
 
 	return nil
 }
 
-func (ey *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, netNsPath string, cgroupPath string) {
+func (eby *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, netNsPath string, cgroupPath string) {
 	lwg.Add(1)
 	go func() {
 		defer lwg.Done()
@@ -388,7 +350,7 @@ func (ey *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, netN
 			case <-ctx.Done():
 				fmt.Println("[recvLoop]: stopCh closed.")
 				break recvLoop
-			case b, ok := <-ey.packets:
+			case b, ok := <-eby.packets:
 				if ok == false {
 					fmt.Println("[recvLoop]: Channel not OK!")
 					break recvLoop
@@ -461,21 +423,21 @@ func (ey *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, netN
 							//fmt.Println("key size:", unsafe.Sizeof(key))
 							//fmt.Println("key data:", key.data)
 
-							if cn, found := containsCN(ey.eggy.CNs, cn); found {
+							if cn, found := containsCN(eby.eggy.CommonNames, cn); found {
 								val := ipLPMVal{
 									ttl:     bootTtlNs,
 									counter: 0, //zero existsing elements :/ //TODO why 0?
-									id:      cn.id,
+									id:      cn.Value.id,
 									status:  uint8(common.AssetSynced),
 								}
 								var err error
 								if a.Type == layers.DNSTypeA {
-									err = updateACLValueNew(ey.ipv4ACL, key, val)
+									err = updateACLValueNew(eby.ipv4ACL, key, val)
 								} else {
-									err = updateACLValueNew(ey.ipv6ACL, key, val)
+									err = updateACLValueNew(eby.ipv6ACL, key, val)
 								}
 								must(err, "Can't update ACL.")
-								fmt.Printf("ebpfy-ref: %p, netNsPath: %s cgroupPath: %s - updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", ey, netNsPath, cgroupPath, cn, ip, ttlSec, ttlNs, bootTtlNs)
+								fmt.Printf("ebpfy-ref: %p, netNsPath: %s cgroupPath: %s - updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", eby, netNsPath, cgroupPath, cn, ip, ttlSec, ttlNs, bootTtlNs)
 
 							} else {
 								fmt.Println("DROP")
@@ -494,7 +456,7 @@ func (ey *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, netN
 						//	//fmt.Println("key size:", unsafe.Sizeof(key))
 						//	//fmt.Println("key data:", key.data)
 						//
-						//	if cn, found := containsCN(ebpfy.CNs, cn); found {
+						//	if cn, found := containsCN(ebpfy.CommonNames, cn); found {
 						//		val := ipLPMVal{
 						//			ttl:     bootTtlNs,
 						//			counter: 0, //zero existsing elements :/
@@ -527,7 +489,7 @@ func (ey *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, netN
 	}()
 }
 
-func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns *syncx.SafeSlice[CN], ipv ipProtocolVersion, lwg *sync.WaitGroup, netNsPath string, cgroupPath string) {
+func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns *syncx.SafeSlice[CommonName], ipv ipProtocolVersion, lwg *sync.WaitGroup, netNsPath string, cgroupPath string) {
 	lwg.Add(1)
 	go func() {
 		defer lwg.Done()
@@ -699,12 +661,12 @@ func fatal(format string, args ...interface{}) {
 	panic(err)
 }
 
-func containsCN(cns []*CN, cnS string) (*CN, bool) {
-	var current *CN
-	for i := 0; i < len(cns); i++ {
+func containsCN(cns common.AssetList[CommonName], cnS string) (common.Asset[CommonName], bool) {
+	var current common.Asset[CommonName]
+	for i := 0; i < cns.Len(); i++ {
 		current = cns[i]
 		fmt.Printf("))) current=%#v cnS=%s\n", current, cnS)
-		if current.status == common.AssetSynced && strings.Contains(cnS, current.cn) { //e.g. DNS returns cnS="abc.example.com" and current.cn=".example.com"
+		if current.Status == common.AssetSynced && strings.Contains(cnS, current.Value.cn) { //e.g. DNS returns cnS="abc.example.com" and current.cn=".example.com"
 			fmt.Printf(" ^ found\n")
 			return current, true
 		}

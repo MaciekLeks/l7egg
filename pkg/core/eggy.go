@@ -17,18 +17,24 @@ const (
 	IfaceDefault = "eth0"
 )
 
-type CIDR struct {
+type Cidr struct {
 	//TODO ipv6 needed
 	cidr   string
 	id     uint16 //test
 	lpmKey ILPMKey
-	status common.AssetStatus
 }
 
-type CN struct {
-	cn     string
-	id     uint16 //test
-	status common.AssetStatus
+func (c Cidr) String() string {
+	return c.cidr
+}
+
+type CommonName struct {
+	cn string
+	id uint16 //test
+}
+
+func (c CommonName) String() string {
+	return c.cn
 }
 
 type ShapingInfo struct {
@@ -42,8 +48,8 @@ type Eggy struct {
 	sync.RWMutex
 	Name             string
 	ProgramType      common.ProgramType
-	CNs              []*CN
-	CIDRs            []*CIDR
+	CommonNames      common.AssetList[CommonName]
+	Cidrs            common.AssetList[Cidr]
 	IngressInterface string
 	EgressInterface  string
 	//BPFObjectPath    string
@@ -160,101 +166,126 @@ func NewEggy(cegg v1alpha1.ClusterEgg) (*Eggy, error) {
 		eiface = "eth0"
 	}
 
-	var cggi = &Eggy{ //TODO make a function to wrap this up (parsing, building the object)
+	var ey = &Eggy{ //TODO make a function to wrap this up (parsing, building the object)
 		Name:             cegg.Name,
 		ProgramType:      common.ProgramType(cegg.Spec.ProgramType),
 		IngressInterface: iiface,
 		EgressInterface:  eiface,
-		CNs:              cns,
-		CIDRs:            cidrs,
+		CommonNames:      cns,
+		Cidrs:            cidrs,
 		//BPFObjectPath:    "./l7egg.bpf.o",
 		PodLabels: podLabels,
 		Shaping:   &shapingInfo,
 	}
-	return cggi, nil
+	return ey, nil
 }
 
-func (ey *Eggy) Update(cegg v1alpha1.ClusterEgg) error {
+//func (ey *Eggy) Update(cegg v1alpha1.ClusterEgg) error {
+//	ey.Lock()
+//	defer ey.Unlock()
+//
+//	cidrs, err := parseCIDRs(cegg.Spec.Egress.Cidrs)
+//	if err != nil {
+//		fmt.Errorf("Parsing input data %#v", err)
+//		return err
+//	}
+//
+//	cns, err := parseCNs(cegg.Spec.Egress.CommonNames)
+//	if err != nil {
+//		fmt.Errorf("Parsing input data %#v", err)
+//		return err
+//	}
+//
+//	var podLabels map[string]string
+//	if cegg.Spec.Egress.PodSelector.Size() != 0 {
+//		podLabels, err = metav1.LabelSelectorAsMap(cegg.Spec.Egress.PodSelector)
+//		if err != nil {
+//			return fmt.Errorf("bad label selector for cegg [%+v]: %w", cegg.Spec, err)
+//		}
+//	}
+//
+//	ey.CommonNames = cns
+//	ey.Cidrs = cidrs
+//	ey.PodLabels = podLabels
+//
+//	return nil
+//}
+
+func (ey *Eggy) Update(ney *Eggy) error {
 	ey.Lock()
 	defer ey.Unlock()
 
-	cidrs, err := parseCIDRs(cegg.Spec.Egress.CIDRs)
-	if err != nil {
-		fmt.Errorf("Parsing input data %#v", err)
-		return err
-	}
-
-	cns, err := parseCNs(cegg.Spec.Egress.CommonNames)
-	if err != nil {
-		fmt.Errorf("Parsing input data %#v", err)
-		return err
-	}
-
-	var podLabels map[string]string
-	if cegg.Spec.Egress.PodSelector.Size() != 0 {
-		podLabels, err = metav1.LabelSelectorAsMap(cegg.Spec.Egress.PodSelector)
-		if err != nil {
-			return fmt.Errorf("bad label selector for cegg [%+v]: %w", cegg.Spec, err)
-		}
-	}
-
-	ey.CNs = cns
-	ey.CIDRs = cidrs
-	ey.PodLabels = podLabels
+	ey.CommonNames.Update(ney.CommonNames)
+	ey.Cidrs.Update(ney.Cidrs)
+	ey.PodLabels = ney.PodLabels
 
 	return nil
 }
 
-func parseCIDR(cidrS string) (CIDR, error) {
+func (ey *Eggy) UpdateCommonNamesStatus(status common.AssetStatus) {
+	ey.Lock()
+	defer ey.Unlock()
+
+	ey.CommonNames.SetStatus(status)
+}
+
+func (ey *Eggy) UpdateCidrStatus(status common.AssetStatus) {
+	ey.Lock()
+	defer ey.Unlock()
+
+	ey.Cidrs.SetStatus(status)
+}
+
+func parseCIDR(cidrS string) (Cidr, error) {
 	ip, ipNet, err := net.ParseCIDR(cidrS)
 	must(err, "Can't parse ipv4 Net.")
 	if err != nil {
-		return CIDR{}, fmt.Errorf("can't parse CIDR %s", cidrS)
+		return Cidr{}, fmt.Errorf("can't parse Cidr %s", cidrS)
 	}
 
 	fmt.Println("#### parseCID ", ip, " ipNEt", ipNet)
 
 	prefix, _ := ipNet.Mask.Size()
 	if ipv4 := ip.To4(); ipv4 != nil {
-		return CIDR{cidrS, syncx.Sequencer().Next(), ipv4LPMKey{uint32(prefix), [4]uint8(ipv4)}, common.AssetNew}, nil
+		return Cidr{cidrS, syncx.Sequencer().Next(), ipv4LPMKey{uint32(prefix), [4]uint8(ipv4)}}, nil
 	} else if ipv6 := ip.To16(); ipv6 != nil {
-		return CIDR{cidrS, syncx.Sequencer().Next(), ipv6LPMKey{uint32(prefix), [16]uint8(ipv6)}, common.AssetNew}, nil
+		return Cidr{cidrS, syncx.Sequencer().Next(), ipv6LPMKey{uint32(prefix), [16]uint8(ipv6)}}, nil
 	}
 
-	return CIDR{}, fmt.Errorf("can't converts CIDR to IPv4/IPv6 %s", cidrS)
+	return Cidr{}, fmt.Errorf("can't converts Cidr to IPv4/IPv6 %s", cidrS)
 }
 
 // ParseCIDRs TODO: only ipv4
-func parseCIDRs(cidrsS []string) ([]*CIDR, error) {
-	var cidrs []*CIDR
+func parseCIDRs(cidrsS []string) (common.AssetList[Cidr], error) {
+	var cidrs common.AssetList[Cidr]
 	for _, cidrS := range cidrsS {
 		cidr, err := parseCIDR(cidrS)
 		if err != nil {
-			return nil, err
+			return cidrs, err
 		}
-		cidrs = append(cidrs, &cidr)
+		_ = cidrs.Add(&cidr)
 	}
 
 	return cidrs, nil
 }
 
-// ParseCN returns CN object from string
-func parseCN(cnS string) (CN, error) {
-	//TODO add some validation before returning CN
+// ParseCN returns CommonName object from string
+func parseCN(cnS string) (CommonName, error) {
+	//TODO add some validation before returning CommonName
 	//we are sync - due to we do not have to update kernel side
 	//we can use simple Id generator
 
-	return CN{cnS, syncx.Sequencer().Next(), common.AssetNew}, nil
+	return CommonName{cnS, syncx.Sequencer().Next()}, nil
 }
 
-func parseCNs(cnsS []string) ([]*CN, error) {
-	var cns []*CN
+func parseCNs(cnsS []string) (common.AssetList[CommonName], error) {
+	var cns common.AssetList[CommonName]
 	for _, cnS := range cnsS {
 		cn, err := parseCN(cnS)
 		if err != nil {
-			return nil, err
+			return cns, err
 		}
-		cns = append(cns, &cn)
+		_ = cns.Add(&cn)
 	}
 
 	return cns, nil
