@@ -402,9 +402,6 @@ func (py *Pody) ReconcileBoxySet(ctx context.Context) error {
 
 // CheckReconcileBoxySet checks if there are new containers to install, or old containers to stop; It's mutating method - it updates container list
 func (py *Pody) CheckReconcileBoxySet(ctx context.Context, newContaineryList ContaineryList, ey *core.Eggy) error {
-	py.Lock()
-	defer py.Unlock()
-
 	logger := klog.FromContext(ctx)
 
 	tbuList, tbdList, update, err := py.Containers.CheckContainers(newContaineryList)
@@ -416,7 +413,12 @@ func (py *Pody) CheckReconcileBoxySet(ctx context.Context, newContaineryList Con
 		return nil
 	}
 
-	py.Containers = tbuList
+	// Update container list
+	_ = py.Set(func(p *Pody) error {
+		p.Containers = tbuList
+		return nil
+	})
+
 	logger.V(2).Info("pody container list update")
 	err = py.RunBoxySet(ctx, ey)
 	if err != nil {

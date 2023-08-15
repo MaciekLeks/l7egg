@@ -222,18 +222,15 @@ func (ey *Eggy) Update(ney *Eggy) error {
 	return nil
 }
 
-func (ey *Eggy) UpdateCommonNamesStatus(status common.AssetStatus) {
+func (ey *Eggy) UpdateDone() {
 	ey.Lock()
 	defer ey.Unlock()
 
-	ey.CommonNames.SetStatus(status)
-}
+	ey.Cidrs.RemoveStale()
+	ey.Cidrs.SetStatus(common.AssetSynced)
 
-func (ey *Eggy) UpdateCidrStatus(status common.AssetStatus) {
-	ey.Lock()
-	defer ey.Unlock()
-
-	ey.Cidrs.SetStatus(status)
+	ey.CommonNames.RemoveStale()
+	ey.CommonNames.SetStatus(common.AssetSynced)
 }
 
 func parseCIDR(cidrS string) (Cidr, error) {

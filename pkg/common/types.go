@@ -60,11 +60,11 @@ func (l *AssetList[T]) Add(element *T) bool {
 	return true
 }
 
-// Remove removes element from ptrAssetList[T] if it exists.
+// RemoveStale removes element from ptrAssetList[T] if it exists.
 // Returns true if element was removed, false otherwise.
-func (l *AssetList[T]) Remove(element *T) bool {
+func (l *AssetList[T]) RemoveStale() bool {
 	for i, e := range *l {
-		if (*e.Value).String() == (*element).String() {
+		if e.Status == AssetStale {
 			*l = append((*l)[:i], (*l)[i+1:]...)
 			return true
 		}
