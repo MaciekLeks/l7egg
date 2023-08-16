@@ -519,7 +519,7 @@ func (c *Controller) deleteEgg(ctx context.Context, eggNamespaceName types.Names
 //	return false
 //}
 
-// checkPodyMatchesEggy searches for all matchings between cegg PodSelector and pods. Returns slice of pod keys (namespace/name)
+// checkPodyMatchesEggy searches for all matching between cegg PodSelector and pods. Returns slice of pod keys (namespace/name)
 func (c *Controller) checkMatchesEggy(podSelector map[string]string) *syncx.SafeSlice[types.NamespacedName] {
 	var matchLabels labels.Set = podSelector
 	podKeys := syncx.SafeSlice[types.NamespacedName]{}
