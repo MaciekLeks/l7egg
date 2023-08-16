@@ -298,21 +298,32 @@ func (c *Controller) updateExistingEggy(ctx context.Context, logger logr.Logger,
 		return fmt.Errorf("failed to create new egg info: %w", err)
 	}
 
-	if eq := reflect.DeepEqual(ney.PodLabels, ey.PodLabels); !eq {
-		err = c.handleEggLabelsChange(ctx, logger, ey, eggNsNm, ney)
+	var labelsChanged = !reflect.DeepEqual(ney.PodLabels, ey.PodLabels)
+	if labelsChanged {
+		err = c.stopNotMatchingBoxySets(ctx, logger, ey, eggNsNm, ney)
 		if err != nil {
 			return err
 		}
 	}
 
-	err = ey.Update(ney)
+	// Updates eggy with new spec, e.g. cidrs, common names, labels
+	err = ey.UpdateSpec(ney)
 	if err != nil {
 		return err
 	}
 
+	// Reconciles existing boxy sets with updated eggy
 	err = c.updateBoxySet(ctx, eggNsNm)
 	if err != nil {
 		return err
+	}
+
+	// Starts a new boxy set if labels changed
+	if labelsChanged {
+		// Handle eggy scope for the new pod matching new labels
+		if err = c.handleEggyScope(ctx, ey, cegg); err != nil {
+			return err
+		}
 	}
 
 	ey.UpdateDone()
@@ -333,7 +344,7 @@ func (c *Controller) addNewEggy(ctx context.Context, logger logr.Logger, eggNsNm
 		return err
 	}
 
-	err = c.handleEggyScope(ctx, logger, ey, ceg)
+	err = c.handleEggyScope(ctx, ey, ceg)
 	if err != nil {
 		return err
 	}
@@ -343,23 +354,24 @@ func (c *Controller) addNewEggy(ctx context.Context, logger logr.Logger, eggNsNm
 	return nil
 }
 
-func (c *Controller) handleEggLabelsChange(ctx context.Context, logger logr.Logger, ey *core.Eggy, eggNsNm types.NamespacedName, newey *core.Eggy) error {
+func (c *Controller) stopNotMatchingBoxySets(ctx context.Context, logger logr.Logger, ey *core.Eggy, eggNsNm types.NamespacedName, newey *core.Eggy) error {
+	var err error
 	c.podyInfoMap.Range(func(podNsnm types.NamespacedName, pb *Pody) bool {
-		if *pb.PairedWithEgg == eggNsNm {
-			if !reflect.DeepEqual(newey.PodLabels, ey.PodLabels) {
-				// Labels changed, perform your logic here
-				// Stop the box if needed
-				logger.Info("Stopping box", "pod", pb)
-				err := pb.StopBoxySet()
-				if err != nil {
-					logger.Error(err, "can't stop box", "pod", pb)
-				}
-				logger.Info("Box stopped", "pb", pb)
+		fmt.Printf("deep[handleLabelChanges] %s\n", podNsnm)
+		if pb.PairedWithEgg != nil && *pb.PairedWithEgg == eggNsNm {
+			// Labels changed, perform your logic here
+			// Stop the box if needed
+			logger.Info("Stopping box", "pod", pb)
+			err = pb.StopBoxySet()
+			if err != nil {
+				err = fmt.Errorf("can't stop boxy set for pod %s", pb)
+				return false
 			}
+			logger.Info("box stopped", "pb", pb)
 		}
 		return true
 	})
-	return nil
+	return err
 }
 
 func (c *Controller) updateBoxySet(ctx context.Context, eggNsNm types.NamespacedName) error {
@@ -382,7 +394,8 @@ func (c *Controller) storeEggy(eggNsNm types.NamespacedName, ey *core.Eggy) erro
 	return nil
 }
 
-func (c *Controller) handleEggyScope(ctx context.Context, logger logr.Logger, ey *core.Eggy, cegg v1alpha1.ClusterEgg) error {
+func (c *Controller) handleEggyScope(ctx context.Context, ey *core.Eggy, cegg v1alpha1.ClusterEgg) error {
+	logger := klog.LoggerWithValues(klog.FromContext(ctx), "resourceName", cegg.Name)
 	// Determine if it's a cluster scope egg
 	if len(ey.PodLabels) == 0 {
 		// cluster scope cegg

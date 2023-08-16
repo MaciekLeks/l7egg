@@ -180,7 +180,7 @@ func NewEggy(cegg v1alpha1.ClusterEgg) (*Eggy, error) {
 	return ey, nil
 }
 
-//func (ey *Eggy) Update(cegg v1alpha1.ClusterEgg) error {
+//func (ey *Eggy) UpdateSpec(cegg v1alpha1.ClusterEgg) error {
 //	ey.Lock()
 //	defer ey.Unlock()
 //
@@ -211,7 +211,7 @@ func NewEggy(cegg v1alpha1.ClusterEgg) (*Eggy, error) {
 //	return nil
 //}
 
-func (ey *Eggy) Update(ney *Eggy) error {
+func (ey *Eggy) UpdateSpec(ney *Eggy) error {
 	ey.Lock()
 	defer ey.Unlock()
 

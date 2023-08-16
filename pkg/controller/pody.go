@@ -314,6 +314,7 @@ func (py *Pody) StopBoxySet() error {
 			resErr = fmt.Errorf("%v\n%v", resErr, err)
 
 		}
+		py.Boxer = nil
 	}
 
 	for i := range py.Containers {
@@ -323,8 +324,11 @@ func (py *Pody) StopBoxySet() error {
 				// append err to existing resErr if not nil
 				resErr = fmt.Errorf("%v\n%v", resErr, err)
 			}
+			py.Containers[i].Boxer = nil
 		}
 	}
+
+	py.PairedWithEgg = nil
 
 	return resErr
 }
@@ -413,7 +417,7 @@ func (py *Pody) CheckReconcileBoxySet(ctx context.Context, newContaineryList Con
 		return nil
 	}
 
-	// Update container list
+	// UpdateSpec container list
 	_ = py.Set(func(p *Pody) error {
 		p.Containers = tbuList
 		return nil
