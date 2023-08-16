@@ -499,25 +499,25 @@ func (c *Controller) deleteEgg(ctx context.Context, eggNamespaceName types.Names
 //	}
 //
 // checkSinglePodMatch matches pod info with cegg PdoSelector and returns true if matches
-func (c *Controller) checkSinglePodMatch(pi Pody, cegg v1alpha1.ClusterEgg) bool {
-	var matchLabels labels.Set
-	var err error
-
-	if cegg.Spec.Egress.PodSelector.Size() != 0 {
-		matchLabels, err = metav1.LabelSelectorAsMap(cegg.Spec.Egress.PodSelector)
-		if err != nil {
-			utilruntime.HandleError(err)
-			return false
-		}
-	}
-
-	selector := matchLabels.AsSelectorPreValidated()
-	if selector.Matches(labels.Set(pi.Labels)) {
-		return true
-	}
-
-	return false
-}
+//func (c *Controller) checkSinglePodMatch(pi Pody, cegg v1alpha1.ClusterEgg) bool {
+//	var matchLabels labels.Set
+//	var err error
+//
+//	if cegg.Spec.Egress.PodSelector.Size() != 0 {
+//		matchLabels, err = metav1.LabelSelectorAsMap(cegg.Spec.Egress.PodSelector)
+//		if err != nil {
+//			utilruntime.HandleError(err)
+//			return false
+//		}
+//	}
+//
+//	selector := matchLabels.AsSelectorPreValidated()
+//	if selector.Matches(labels.Set(pi.Labels)) {
+//		return true
+//	}
+//
+//	return false
+//}
 
 // checkPodyMatchesEggy searches for all matchings between cegg PodSelector and pods. Returns slice of pod keys (namespace/name)
 func (c *Controller) checkMatchesEggy(podSelector map[string]string) *syncx.SafeSlice[types.NamespacedName] {
