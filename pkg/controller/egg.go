@@ -321,7 +321,7 @@ func (c *Controller) updateExistingEggy(ctx context.Context, logger logr.Logger,
 	// Starts a new boxy set if labels changed
 	if labelsChanged {
 		// Handle eggy scope for the new pod matching new labels
-		if err = c.handleEggyScope(ctx, ey, cegg); err != nil {
+		if err = c.handleEggyScope(ctx, ey); err != nil {
 			return err
 		}
 	}
@@ -344,7 +344,7 @@ func (c *Controller) addNewEggy(ctx context.Context, logger logr.Logger, eggNsNm
 		return err
 	}
 
-	err = c.handleEggyScope(ctx, ey, ceg)
+	err = c.handleEggyScope(ctx, ey)
 	if err != nil {
 		return err
 	}
@@ -394,8 +394,8 @@ func (c *Controller) storeEggy(eggNsNm types.NamespacedName, ey *core.Eggy) erro
 	return nil
 }
 
-func (c *Controller) handleEggyScope(ctx context.Context, ey *core.Eggy, cegg v1alpha1.ClusterEgg) error {
-	logger := klog.LoggerWithValues(klog.FromContext(ctx), "resourceName", cegg.Name)
+func (c *Controller) handleEggyScope(ctx context.Context, ey *core.Eggy) error {
+	logger := klog.LoggerWithValues(klog.FromContext(ctx), "resourceName", ey.Name)
 	// Determine if it's a cluster scope egg
 	if len(ey.PodLabels) == 0 {
 		// cluster scope cegg
@@ -415,7 +415,8 @@ func (c *Controller) handleEggyScope(ctx context.Context, ey *core.Eggy, cegg v1
 		// pod scope cegg
 		// Handle the logic for a pod scope egg
 		// Check for matching pods and start boxes if needed
-		if podKeys := c.checkPodMatch(cegg); podKeys.Len() > 0 {
+		//if podKeys := c.checkPodMatch(cegg); podKeys.Len() > 0 {
+		if podKeys := c.checkMatchesEggy(ey.PodLabels); podKeys.Len() > 0 {
 			for i := 0; i < podKeys.Len(); i++ {
 				py, ok := c.podyInfoMap.Load(podKeys.Get(i))
 				if ok {
@@ -460,42 +461,43 @@ func (c *Controller) deleteEgg(ctx context.Context, eggNamespaceName types.Names
 }
 
 // checkPodMatch searches for all matchings between cegg PodSelector and pods. Returns TODO ???
-func (c *Controller) checkPodMatch(cegg v1alpha1.ClusterEgg) *syncx.SafeSlice[types.NamespacedName] {
-	var matchLabels labels.Set
-	var err error
-	podKeys := syncx.SafeSlice[types.NamespacedName]{}
-
-	if cegg.Spec.Egress.PodSelector.Size() != 0 {
-		matchLabels, err = metav1.LabelSelectorAsMap(cegg.Spec.Egress.PodSelector)
-		if err != nil {
-			utilruntime.HandleError(err)
-			return nil
-		}
-	}
-
-	//fmt.Println("****************** +++++ checkPodMach podCacheSynced:%t ceggCacheSynced:%t", c.podCacheSynced(), c.podCacheSynced())
-
-	c.podyInfoMap.Range(func(key types.NamespacedName, pi *Pody) bool {
-		selector := matchLabels.AsSelectorPreValidated()
-		if selector.Matches(labels.Set(pi.Labels)) {
-			podKeys.Append(key)
-			//fmt.Println("****************** +++++ checkPodMach key:%v added", key)
-			return true
-		}
-		return true
-	})
-
-	/*
-		if podKeys.Len() > 0 {
-			fmt.Println("+++++ checkPodMatch found no matching pod to egg")
-		} else {
-
-			fmt.Println("+++++ checkPodMatch found matching pod to policy")
-		}*/
-
-	return &podKeys
-}
-
+//
+//	func (c *Controller) checkPodMatch(cegg v1alpha1.ClusterEgg) *syncx.SafeSlice[types.NamespacedName] {
+//		var matchLabels labels.Set
+//		var err error
+//		podKeys := syncx.SafeSlice[types.NamespacedName]{}
+//
+//		if cegg.Spec.Egress.PodSelector.Size() != 0 {
+//			matchLabels, err = metav1.LabelSelectorAsMap(cegg.Spec.Egress.PodSelector)
+//			if err != nil {
+//				utilruntime.HandleError(err)
+//				return nil
+//			}
+//		}
+//
+//		//fmt.Println("****************** +++++ checkPodMach podCacheSynced:%t ceggCacheSynced:%t", c.podCacheSynced(), c.podCacheSynced())
+//
+//		c.podyInfoMap.Range(func(key types.NamespacedName, pi *Pody) bool {
+//			selector := matchLabels.AsSelectorPreValidated()
+//			if selector.Matches(labels.Set(pi.Labels)) {
+//				podKeys.Append(key)
+//				//fmt.Println("****************** +++++ checkPodMach key:%v added", key)
+//				return true
+//			}
+//			return true
+//		})
+//
+//		/*
+//			if podKeys.Len() > 0 {
+//				fmt.Println("+++++ checkPodMatch found no matching pod to egg")
+//			} else {
+//
+//				fmt.Println("+++++ checkPodMatch found matching pod to policy")
+//			}*/
+//
+//		return &podKeys
+//	}
+//
 // checkSinglePodMatch matches pod info with cegg PdoSelector and returns true if matches
 func (c *Controller) checkSinglePodMatch(pi Pody, cegg v1alpha1.ClusterEgg) bool {
 	var matchLabels labels.Set
@@ -515,4 +517,21 @@ func (c *Controller) checkSinglePodMatch(pi Pody, cegg v1alpha1.ClusterEgg) bool
 	}
 
 	return false
+}
+
+// checkPodyMatchesEggy searches for all matchings between cegg PodSelector and pods. Returns slice of pod keys (namespace/name)
+func (c *Controller) checkMatchesEggy(podSelector map[string]string) *syncx.SafeSlice[types.NamespacedName] {
+	var matchLabels labels.Set = podSelector
+	podKeys := syncx.SafeSlice[types.NamespacedName]{}
+
+	c.podyInfoMap.Range(func(key types.NamespacedName, py *Pody) bool {
+		selector := matchLabels.AsSelectorPreValidated()
+		if selector.Matches(labels.Set(py.Labels)) {
+			podKeys.Append(key)
+			return true
+		}
+		return true
+	})
+
+	return &podKeys
 }
