@@ -129,7 +129,8 @@ I'll definitely right down here _when_... Not now ;)
 
 # "Big" TODOs (priority)
 - [ ] code refactoring
-- [ ] multi container pod support
+- [x] multi container pod support
+- [ ] init containers not supported
 - [x] ipv6 support
 - [x] applying Egg policy into selected PODs (in progress)
 - [x] traffic shaping mechanism
