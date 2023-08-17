@@ -130,7 +130,7 @@ I'll definitely right down here _when_... Not now ;)
 
 # "Big" TODOs (priority)
 - [x] deep code refactoring
-- [ ] code refactoring
+- [ ] code refactoring (logging, remove fmt.Printf/ln, etc.)
 - [x] multi container pod support
 - [ ] init containers not supported
 - [x] ipv6 support
