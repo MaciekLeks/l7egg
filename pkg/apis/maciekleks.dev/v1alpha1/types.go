@@ -14,8 +14,9 @@ type ClusterEgg struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// +kubebuilder:validation:XValidation:rule="(self.programType == 'tc' && has(self.egress.interfaceName)) || (self.programType == 'cgroup' && !has(self.egress.interfaceName))",message="Egress interfaceName is needed if attachType is 'tc'"
-	// +kubebuilder:validation:XValidation:rule="(self.programType == 'tc' && has(self.ingress.interfaceName)) || (self.programType =='cgroup' && !has(self.ingress.interfaceName))",message="Ingress interfaceName is needed if attachType is 'tc'"
+	// +kubebuilder:validation:XValidation:rule="(self.programType == 'tc' && has(self.egress.interfaceName)) || (self.programType == 'cgroup' && !has(self.egress.interfaceName))",message="Egress interfaceName works only with tc program"
+	// +kubebuilder:validation:XValidation:rule="(self.programType == 'tc' && has(self.ingress.interfaceName)) || (self.programType =='cgroup' && !has(self.ingress.interfaceName))",message="Ingress interfaceName works only with tc program"
+	// +kubebuilder:validation:XValidation:rule="self.programType == 'cgroup' && has(self.egress.podSelector)",message="Cgroup program requires podSelector"
 	Spec   ClusterEggSpec   `json:"spec,omitempty"`
 	Status ClusterEggStatus `json:"status,omitempty"`
 }
@@ -62,7 +63,8 @@ type EgressSpec struct {
 	CIDRs []string `json:"cidrs,omitempty"`
 
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="shaping is immutable in this version"
-	Shaping ShapingSpec `json:"shaping,omitempty"`
+	// +optional
+	Shaping *ShapingSpec `json:"shaping,omitempty"`
 
 	// +optional
 	PodSelector *metav1.LabelSelector `json:"podSelector,omitempty"`

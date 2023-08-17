@@ -210,6 +210,7 @@ static __always_inline int ipv4_check_and_update(struct iphdr *ipv4) {
     }
     //}egress gate
     struct value_t *pval = pv;
+    bpf_printk("[egress]: >>>>>>>>>> daddr:%u status:%d", daddr, pval->status);
     // does not process STALE IPs
     if (pval->status == IP_STALE) {
         ipv4_print_ip("[egress] STALE, DROP", "\n", daddr);
@@ -740,7 +741,7 @@ int tc_ingress(struct __sk_buff *skb) {
 SEC("classifier")
 int tc_egress(struct __sk_buff *skb) {
     //skb->tc_classid = TC_H_MAKE(1,10);
-    skb->tc_classid = 0x10010; //hex classid handle: 1:10
+    skb->tc_classid = 0x10010; //hex classid handl: 1:10
     return process_relative(skb, BPF_HDR_START_MAC, true);
 }
 

@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"github.com/MaciekLeks/l7egg/pkg/common"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/cache"
 )
@@ -18,9 +19,9 @@ func splitNamespaceNameFormKey(key string) (string, string, error) {
 	return namespace, name, nil
 }
 
-func getCtxAssetValue(ctx context.Context) (ctxAssetValue, error) {
+func getCtxAssetValue(ctx context.Context) (common.CtxAssetValue, error) {
 	ctxVal := ctx.Value(ctxAssetKey)
-	v, ok := ctxVal.(ctxAssetValue)
+	v, ok := ctxVal.(common.CtxAssetValue)
 	if !ok {
 		err := fmt.Errorf("expected string in context %s value but got %#v", ctxAssetKey, ctxVal)
 		return v, err

@@ -4,10 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
-	"github.com/MaciekLeks/l7egg/pkg/controller/common"
-	"github.com/MaciekLeks/l7egg/pkg/controller/core"
+	"github.com/MaciekLeks/l7egg/pkg/common"
+	"github.com/MaciekLeks/l7egg/pkg/controller"
+	"github.com/MaciekLeks/l7egg/pkg/core"
 	"github.com/MaciekLeks/l7egg/pkg/utils"
-	"k8s.io/apimachinery/pkg/types"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"os"
 )
 
@@ -28,7 +29,7 @@ func main() {
 	iface := flag.String("iface", "", "Ingress interface to bind TC program to.")
 	eface := flag.String("eface", "", "Egress interface to bind TC program to.")
 	//bpfObjectPath := flag.String("bpfobj", "l7egg.bpf.o", "Kernel module file path to load.")
-	flag.Var(&cidrList, "cidr", "Add net address (CIDR format) to add to the white list.")
+	flag.Var(&cidrList, "cidr", "Add net address (Cidr format) to add to the white list.")
 	flag.Var(&cnList, "cn", "Add Common Name to add to the white list.")
 	flag.Parse()
 	if *iface == "" || *eface == "" {
@@ -36,31 +37,39 @@ func main() {
 		return
 	}
 
-	manager := core.BpfManagerInstance()
-	clientegg, err := core.NewEggInfo(
-		v1alpha1.ClusterEggSpec{
-			string(common.ProgramTypeTC),
-			v1alpha1.EgressSpec{
-				InterfaceName: *eface,
-				CommonNames:   cnList,
-				CIDRs:         cidrList,
-				Shaping:       v1alpha1.ShapingSpec{},
-				PodSelector:   nil,
+	clientegg, err := core.NewEggy(
+		v1alpha1.ClusterEgg{
+			TypeMeta: metav1.TypeMeta{},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "default",
 			},
-			v1alpha1.IngressSpec{*iface},
+			Spec: v1alpha1.ClusterEggSpec{
+				ProgramType: string(common.ProgramTypeTC),
+				Egress: v1alpha1.EgressSpec{
+					InterfaceName: *eface,
+					CommonNames:   cnList,
+					CIDRs:         cidrList,
+					Shaping:       &v1alpha1.ShapingSpec{},
+					PodSelector:   nil,
+				},
+				Ingress: v1alpha1.IngressSpec{
+					InterfaceName: *iface,
+				},
+			},
 		})
 
-	var defaultBoxKey core.BoxKey
-	defaultBoxKey.Egg = types.NamespacedName{Name: "default"}
 	ctx := utils.SetupSignalHandler()
-	manager.BoxStore(ctx, defaultBoxKey, clientegg)
+	nodePod, err := controller.NewNodePody("fake-node")
 
 	if err != nil {
-		fmt.Errorf("Creating client egg.", err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
-	manager.BoxStart(ctx, defaultBoxKey, "", "")
-	manager.Wait()
+	if err := nodePod.RunBoxySet(ctx, clientegg); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 
+	nodePod.WaitBoxySet()
 }

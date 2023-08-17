@@ -13,7 +13,8 @@ TAG ?= latest
 BASE_TAG ?= latest
 DEBUG ?= 1
 
-BUILD_DIR = build
+#BUILD_DIR = build #commented for debug purposes
+BUILD_DIR = .
 TARGET_CLI := $(BUILD_DIR)/$(MAIN)-cli
 TARGET_K8S_STATIC := $(BUILD_DIR)/$(MAIN)-k8s-static
 TARGET_K8S_DYN := $(BUILD_DIR)/$(MAIN)-k8s-dynamic
@@ -43,11 +44,13 @@ CGO_LDFLAGS_STATIC = "-lelf -lz $(LIBBPF_STATIC_LIB)"
 GO_EXTLDFLAGS_STATIC = '-w -extldflags "-static $(LIBBPF_STATIC_LIB) -lelf -lz"'
 
 # inject shared library search path into the executable: -Wl,rpath=...:
-GO_EXTLDFLAGS_DYN = '-w -extldflags "-lelf -lz  -Wl,-rpath=$(LIBBPF_DYN_LIB) -L$(LIBBPF_DYN_LIB) -lbpf"'
+# -w - removed (reason: https://youtrack.jetbrains.com/issue/GO-15231/Remote-debugging-breakpoint-not-reachable-could-not-find-file)
+GO_EXTLDFLAGS_DYN = '-extldflags "-lelf -lz  -Wl,-rpath=$(LIBBPF_DYN_LIB) -L$(LIBBPF_DYN_LIB) -lbpf"'
+
 
 .PHONY: all
-all: $(TARGET_BPF) $(TARGET_CLI) $(TARGET_K8S_STATIC)
-#all: $(TARGET_BPF) $(TARGET_CLI) $(TARGET_K8S_DYN)
+#all: $(TARGET_BPF) $(TARGET_CLI) $(TARGET_K8S_STATIC)
+all: $(TARGET_BPF) $(TARGET_CLI) $(TARGET_K8S_DYN)
 
 
 $(BPF_SRC): $(BPF_HEADERS)
@@ -86,8 +89,8 @@ vmlinuxh:
 
 .PHONY: remote-build2
 remote-build2:
-	rsync -ahv  --delete --exclude '.git' . mlk@ubu-ebpf2:~/dev/ebpf-tests/
-	ssh mlk@ubu-ebpf2 "cd ~/dev/ebpf-tests && make clean && make all"
+	rsync -ahv  --delete --exclude '.git' . mlk@ubu-ebpf2:/home/mlk/go/src/github.com/MaciekLeks/l7egg
+	ssh mlk@ubu-ebpf2 "cd /home/mlk/go/src/github.com/MaciekLeks/l7egg && make clean && make all"
 
 .PHONY: remote-build3
 remote-build3:
@@ -122,16 +125,20 @@ k8s-build-client:
 	"maciekleks.dev:v1alpha1" \
 	--go-header-file $(K8S_CODE_GENERATOR)/hack/boilerplate.go.txt
 
+#-gcflags "all=-N -l" - debug only
 $(TARGET_K8S_STATIC): $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
-	CC=$(CC); CGO_CFLAGS=$(CGO_CFLAGS) \
+	CC=$(CC); CGO_ENABLED=1; CGO_CFLAGS=$(CGO_CFLAGS) \
 	$(GO) build \
+	-trimpath \
 	-tags netgo -ldflags $(GO_EXTLDFLAGS_STATIC) \
+	-gcflags "all=-N -l" \
 	-o $(TARGET_K8S_STATIC) ./cmd/kubernetes/$(MAIN).go
 
 $(TARGET_K8S_DYN): $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
-	CGO_CFLAGS=$(CGO_CFLAGS) \
+	CC=$(CC); CGO_ENABLED=1; CGO_CFLAGS=$(CGO_CFLAGS) \
 	$(GO) build \
 	-tags netgo -ldflags $(GO_EXTLDFLAGS_DYN) \
+	-gcflags "all=-N -l" \
 	-o $(TARGET_K8S_DYN) ./cmd/kubernetes/$(MAIN).go
 
 .PHONY: k8s-build-cmd-dynamic

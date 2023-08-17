@@ -134,7 +134,11 @@ func (in *EgressSpec) DeepCopyInto(out *EgressSpec) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
-	out.Shaping = in.Shaping
+	if in.Shaping != nil {
+		in, out := &in.Shaping, &out.Shaping
+		*out = new(ShapingSpec)
+		**out = **in
+	}
 	if in.PodSelector != nil {
 		in, out := &in.PodSelector, &out.PodSelector
 		*out = new(v1.LabelSelector)

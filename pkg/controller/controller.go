@@ -3,26 +3,27 @@ package controller
 import (
 	"context"
 	"fmt"
+	ceggclientset "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned"
 	ceggscheme "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned/scheme"
-	"github.com/MaciekLeks/l7egg/pkg/controller/core"
+	cegginformer "github.com/MaciekLeks/l7egg/pkg/client/informers/externalversions/maciekleks.dev/v1alpha1"
+	cegglister "github.com/MaciekLeks/l7egg/pkg/client/listers/maciekleks.dev/v1alpha1"
+	"github.com/MaciekLeks/l7egg/pkg/common"
+	"github.com/MaciekLeks/l7egg/pkg/core"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
-	"k8s.io/client-go/tools/record"
-
-	ceggclientset "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned"
-	cegginformer "github.com/MaciekLeks/l7egg/pkg/client/informers/externalversions/maciekleks.dev/v1alpha1"
-	cegglister "github.com/MaciekLeks/l7egg/pkg/client/listers/maciekleks.dev/v1alpha1"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
+	"sync"
 	"time"
 )
 
@@ -39,7 +40,7 @@ const (
 	// is synced successfully
 	MessageResourceSynced = "ClusterEgg synced successfully"
 
-	ctxAssetKey ctxAssetType = "asset"
+	ctxAssetKey common.CtxAssetType = "asset"
 )
 
 type Controller struct {
@@ -59,8 +60,10 @@ type Controller struct {
 
 	recorder record.EventRecorder
 
-	podInfoMap syncx.SafeMap[types.NamespacedName, *PodInfo]
-	eggInfoMap syncx.SafeMap[types.NamespacedName, *core.EggInfo] //namespace not used
+	// podyInfoMap is a map of pody object
+	podyInfoMap       syncx.SafeMap[types.NamespacedName, *Pody]
+	containeryInfoMap syncx.SafeMap[ContainerName, *Containery]
+	eggyInfoMap       syncx.SafeMap[types.NamespacedName, *core.Eggy] //namespace not used
 }
 
 const (
@@ -100,9 +103,9 @@ func NewController(ctx context.Context,
 
 		recorder: recorder,
 
-		//podInfoMap: PodInfoMap{},
-		podInfoMap: syncx.SafeMap[types.NamespacedName, *PodInfo]{},
-		eggInfoMap: syncx.SafeMap[types.NamespacedName, *core.EggInfo]{},
+		//podyInfoMap: PodInfoMap{},
+		podyInfoMap: syncx.SafeMap[types.NamespacedName, *Pody]{},
+		eggyInfoMap: syncx.SafeMap[types.NamespacedName, *core.Eggy]{},
 	}
 
 	logger.Info("Setting up event handlers")
@@ -137,16 +140,10 @@ func NewController(ctx context.Context,
 }
 
 // Run will set up the event handlers for types we are interested in, as well
-// as syncing informer caches and starting workers. It will block until stopCh
-// is closed, at which point it will shut down the ceggQueue and wait for
-// workers to finish processing their current work items.
+// as syncing informer caches and starting workers.
 func (c *Controller) Run(ctx context.Context, ceggWorkers int, podWorkers int) error {
-	defer utilruntime.HandleCrash()
-	defer c.ceggQueue.ShutDown()
-	defer c.podQueue.ShutDown()
 	logger := klog.FromContext(ctx)
-
-	logger.Info("Starting l7egg controller.")
+	logger.Info("Starting controller.")
 
 	// Wait for the caches to be synced before starting workers
 	logger.Info("Waiting for informer caches to sync.")
@@ -160,11 +157,11 @@ func (c *Controller) Run(ctx context.Context, ceggWorkers int, podWorkers int) e
 	logger.Info("Starting cegg workers.", "count", ceggWorkers)
 	// Launch 1..* workers to process ceggs resources
 	for i := 0; i < ceggWorkers; i++ {
-		// Run c.runWorker again after 1 sec only the previous launch ends
+		// Install c.runWorker again after 1 sec only the previous launch ends
 		go func() {
-			fmt.Println("waiting...............................")
-			time.Sleep(5 * time.Second)
-			fmt.Println("waiting.............................../done")
+			//fmt.Println("waiting...............................")
+			//time.Sleep(5 * time.Second)
+			//fmt.Println("waiting.............................../done")
 			wait.UntilWithContext(context.WithValue(ctx, ctxAssetKey, ctxCeggValue), c.runWorker, 1*time.Second)
 		}()
 	}
@@ -172,19 +169,56 @@ func (c *Controller) Run(ctx context.Context, ceggWorkers int, podWorkers int) e
 	logger.Info("Starting pod workers.", "count", podWorkers)
 	// Launch 1..* workers to process pods resources
 	for i := 0; i < podWorkers; i++ {
-		// Run c.runWorker again after 1 sec only the previous launch ends
+		// Install c.runWorker again after 1 sec only the previous launch ends
 		go wait.UntilWithContext(context.WithValue(ctx, ctxAssetKey, ctxPodValue), c.runWorker, 1*time.Second)
 	}
 
-	logger.Info("Started workers.")
-	<-ctx.Done()
-	logger.Info("Shutting down workers.")
+	logger.Info("deep[controller:Install] - workers started")
+	//<-ctx.Done()
+	//logger.Info("deep[controller:Install] - shutting down workers.")
 
 	return nil
 }
 
-func (c *Controller) Wait() {
-	core.BpfManagerInstance().Wait()
+// Wait waits for all workers to be done processing work. It's blocking until ctx channel is closed,
+// at which point it will shut down the ceggQueue and wait for workers to finish processing their current work items.
+func (c *Controller) Wait(ctx context.Context) {
+	defer utilruntime.HandleCrash()
+	defer c.ceggQueue.ShutDown()
+	defer c.podQueue.ShutDown()
+
+	logger := klog.FromContext(ctx)
+	done := ctx.Done()
+	wg := sync.WaitGroup{}
+
+	logger.Info("deep[Waiting] starts\n")
+	//waits until done is closed
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		fmt.Printf("deep[Waiting]before <-done\n")
+		<-done
+		fmt.Printf("deep[Waiting]after <-done\n")
+		c.podyInfoMap.Range(func(podNsNm types.NamespacedName, py *Pody) bool {
+			fmt.Printf("deep[Waiting][range][0] - %s\n", podNsNm)
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				fmt.Printf("deep[Waiting][range][1] - %s\n", podNsNm)
+				if err := py.StopBoxySet(); err != nil {
+					fmt.Printf("deep[Waiting][range][error] - %s - %s\n", podNsNm, err)
+				}
+
+				fmt.Printf("deep[Waiting][range][2] - %s\n", podNsNm)
+			}()
+			return true
+		})
+	}()
+
+	fmt.Printf("deep[Waiting] for all pody finishes\n")
+	wg.Wait()
+	fmt.Printf("deep[Waiting] done.\n")
+
 }
 
 // runWorker is a long-running function that  continually call the
@@ -224,16 +258,18 @@ func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 			utilruntime.HandleError(err)
 		}()
 
-		// Run the syncHandler, passing it the namespace/name string of the
+		// Install the syncHandler, passing it the namespace/name string of the
 		// Foo resource to be synced.
 		if err = c.syncHandler(ctx, key); err != nil {
 			c.queueAddRateLimited(ctx, key)
+			fmt.Printf("deep[processNextWorkItem] after queueAddRateLimited %s\n", err)
 			return fmt.Errorf("error syncing '%s': %s, requeuing", key, err.Error())
 		}
 
 		// Finally, if no error occurs we Forget this item so it does not
 		// get queued again until another change happens.
 		if err = c.queueForget(ctx, key); err != nil {
+			fmt.Printf("deep[processNextWorkItem] after queueForget %s\n", err)
 			return err
 		}
 		logger.Info("Successfully synced.", "resourceName", key)
@@ -242,6 +278,7 @@ func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 	}(key)
 
 	if err != nil {
+		fmt.Printf("deep[processNextWorkItem] before HandleError %s\n", err)
 		utilruntime.HandleError(err)
 		return true
 	}
