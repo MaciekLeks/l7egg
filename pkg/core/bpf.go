@@ -190,6 +190,9 @@ func (eby *ebpfy) updateCIDRs() error {
 
 	// ipv4: Set stale
 	i := eby.ipv4ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
+	if i.Err() != nil {
+		return fmt.Errorf("BPF Map Iterator error", i.Err())
+	}
 	for i.Next() {
 		fmt.Println("%%%>>>4.2")
 		if i.Err() != nil {
@@ -221,6 +224,9 @@ func (eby *ebpfy) updateCIDRs() error {
 	}
 	// ipv6: Set stale
 	i = eby.ipv6ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
+	if i.Err() != nil {
+		return fmt.Errorf("BPF Map Iterator error", i.Err())
+	}
 	for i.Next() {
 		fmt.Println("%%%>>>4.2")
 		if i.Err() != nil {
@@ -276,6 +282,9 @@ func (eby *ebpfy) updateCIDRs() error {
 func (eby *ebpfy) updateCNs() error {
 	// delete
 	i := eby.ipv4ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
+	if i.Err() != nil {
+		return fmt.Errorf("BPF Map Iterator error", i.Err())
+	}
 	for i.Next() {
 		if i.Err() != nil {
 			return fmt.Errorf("BPF Map Iterator error", i.Err())
@@ -305,6 +314,9 @@ func (eby *ebpfy) updateCNs() error {
 	}
 
 	i = eby.ipv6ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
+	if i.Err() != nil {
+		return fmt.Errorf("BPF Map Iterator error", i.Err())
+	}
 	for i.Next() {
 		if i.Err() != nil {
 			return fmt.Errorf("BPF Map Iterator error", i.Err())
