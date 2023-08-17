@@ -1,7 +1,7 @@
 # l7egg
 L7egg - Level 7 Egress Good Gateway 
 
-Simple L7 egress firewall for use either as standalone program or K8s Operator. 
+L7 egress policy and shaping enforcer to use either as standalone program or K8s Operator. 
 
 # Status 
 It is now actively developing hence not stable yet. So, don't try this at home right now.
@@ -36,6 +36,7 @@ LIBBPF_DIR=/ make k8s-build-cmd
 
 # Examples
 ## CLI:
+TODO: add accurate example
 To allow only egress traffic on the declared CIDRs and CNs (works with partial domain names):
 ```bash
 sudo ./l7egg-cli -iface=enp0s3 -eface=enp0s3 \
@@ -63,15 +64,51 @@ For the given example allowed egress Domain Names are (except the full domain na
 - `www.home.com`
 - `www.rome.com`
 
-# Troubleshooting
-## l7egg-static does not restart
+### Troubleshooting
+#### l7egg-static does not restart
 Traffic Control qdisc and filters cleansing is needed first:
 ```bash
 ./tools/tc-cleaner.sh -iface=${iface} -eface=${eface}
 ```
 and run the command again.
+
 ## K8s
-TODO:
+Sample example from the `examples` directory:
+```yml
+apiVersion: maciekleks.dev/v1alpha1
+kind: ClusterEgg
+metadata:
+  name: clusteregg-pod-example-cgroup
+spec:
+  ingress: {}
+  egress:
+    shaping:
+      rate: 1mbit
+      ceil: 1mbit
+    commonNames:
+    - www.interia.pl
+    - cluster.local
+    cidrs:
+    - 10.152.183.0/24
+    - 169.254.1.1/32
+    - 192.168.57.0/24
+    podSelector:
+      matchLabels:
+        app: tester
+```
+By default, ClusterEgg works with `cgroups`. You can change to `tc` with `spec.programType=tc`. Here we not only policying egress traffic by specifing CIDRs, and Common Names. We also, shaping traffic to 1mbit.
+
+# programType - tc or cgroups
+Please find some differences between `tc` and `cgroups` program types:
+
+| Feature                         | tc | cgroup |
+|---------------------------------|:--:| :-: |
+| Works with pods                 | +  | + | 
+| Works with containers           | +  | + |
+| Works with multi container pods | +  | - |
+| Works on nodes                  | +  | - |
+| Shaping                         | +  | + |
+
 
 # Project structure
 - `build` - executable and object files
