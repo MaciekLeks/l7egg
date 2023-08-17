@@ -66,7 +66,7 @@ func (eby *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType commo
 
 	logger.Info("Attaching eBPF program having", programType)
 	if /*len(cgroupPath) == 0*/ programType == common.ProgramTypeTC {
-		time.Sleep(4 * time.Second)
+		//time.Sleep(4 * time.Second)
 
 		//err = attachTcProg(ebpfy.bpfModule, ebpfy.Eggy.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
 		err = attachTcBpfIngressStack(eby.bpfModule, eby.eggy.EgressInterface, netNsPath)

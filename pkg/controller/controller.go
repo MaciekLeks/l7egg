@@ -159,9 +159,9 @@ func (c *Controller) Run(ctx context.Context, ceggWorkers int, podWorkers int) e
 	for i := 0; i < ceggWorkers; i++ {
 		// Install c.runWorker again after 1 sec only the previous launch ends
 		go func() {
-			fmt.Println("waiting...............................")
-			time.Sleep(5 * time.Second)
-			fmt.Println("waiting.............................../done")
+			//fmt.Println("waiting...............................")
+			//time.Sleep(5 * time.Second)
+			//fmt.Println("waiting.............................../done")
 			wait.UntilWithContext(context.WithValue(ctx, ctxAssetKey, ctxCeggValue), c.runWorker, 1*time.Second)
 		}()
 	}
