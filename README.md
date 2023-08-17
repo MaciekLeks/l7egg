@@ -1,7 +1,7 @@
 # l7egg
 L7egg - Level 7 Egress Good Gateway 
 
-L7 egress policy and shaping enforcer to use either as standalone program or K8s Operator. 
+L7 egress policy and shaping enforcer to use either as standalone program or K8s Operator leveraging eBPF technology. 
 
 # Status 
 It is now actively developing hence not stable yet. So, don't try this at home right now.
