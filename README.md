@@ -129,6 +129,7 @@ and run the command again.
 I'll definitely right down here _when_... Not now ;)
 
 # "Big" TODOs (priority)
+- [x] deep code refactoring
 - [ ] code refactoring
 - [x] multi container pod support
 - [ ] init containers not supported
