@@ -156,15 +156,6 @@ func (b *TcBoxy) Stop() error {
 	return b.ebpfy.stopTcNetStack(b.netNsPath)
 }
 
-//func (b *Boxy) EggNamespaceName() types.NamespacedName {
-//	return b.ebpfy.eggy.NamespaceName()
-//}
-
-//func (b *CgroupBoxy) Stop() error {
-//	//_ = b.cgroupNetCls.Delete() //ebpfy should Delete net class cgroup
-//	return b.Stop()
-//}
-
 func (b *Boxy) Wait() {
 	fmt.Println("deep[Boxy:Wait][0]")
 	b.waitGroup.Wait()

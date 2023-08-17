@@ -182,37 +182,6 @@ func NewEggy(cegg v1alpha1.ClusterEgg) (*Eggy, error) {
 	return ey, nil
 }
 
-//func (ey *Eggy) UpdateSpec(cegg v1alpha1.ClusterEgg) error {
-//	ey.Lock()
-//	defer ey.Unlock()
-//
-//	cidrs, err := parseCIDRs(cegg.Spec.Egress.Cidrs)
-//	if err != nil {
-//		fmt.Errorf("Parsing input data %#v", err)
-//		return err
-//	}
-//
-//	cns, err := parseCNs(cegg.Spec.Egress.CommonNames)
-//	if err != nil {
-//		fmt.Errorf("Parsing input data %#v", err)
-//		return err
-//	}
-//
-//	var podLabels map[string]string
-//	if cegg.Spec.Egress.PodSelector.Size() != 0 {
-//		podLabels, err = metav1.LabelSelectorAsMap(cegg.Spec.Egress.PodSelector)
-//		if err != nil {
-//			return fmt.Errorf("bad label selector for cegg [%+v]: %w", cegg.Spec, err)
-//		}
-//	}
-//
-//	ey.CommonNames = cns
-//	ey.Cidrs = cidrs
-//	ey.PodLabels = podLabels
-//
-//	return nil
-//}
-
 func (ey *Eggy) UpdateSpec(ney *Eggy) error {
 	ey.Lock()
 	defer ey.Unlock()

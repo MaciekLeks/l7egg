@@ -16,27 +16,7 @@ const (
 	ProgramTypeCgroup ProgramType = "cgroup"
 )
 
-// ProgramInfo is a struct that holds information about the program type and network namespace path and cgroup path;
-// It's used by eggBox, and it's subject to change, e.g. when box is going to run for a pod
-//type ProgramInfo struct {
-//	ProgramType ProgramType
-//	NetNsPath   string
-//	CgroupPath  string
-//}
-
-//type BoxKey struct {
-//	Egg         types.NamespacedName
-//	Pod         types.NamespacedName
-//	ContainerId string
-//}
-
-//func (bk BoxKey) String() string {
-//	return fmt.Sprintf("%s|%s|%s", bk.Egg.String(), bk.Pod.String(), bk.ContainerId)
-//}
-
-// Generic type X which is comparable and implements Stringer interface
-
-// { For CommonNames, Cidrs,...
+// Asset (Asset[T]) is a generic type for all assets, e.g. CIRDs, Common Names, etc.
 type Asset[T fmt.Stringer] struct {
 	Value  *T
 	Status AssetStatus
@@ -100,15 +80,6 @@ func (l *AssetList[T]) Update(newList AssetList[T]) {
 	}
 }
 
-// Cleans clean ptrAssetList[T] from elements with status common.AssetStale
-//func (l AssetList[T]) Clean() {
-//	for i, e := range l {
-//		if e.Status == AssetStale {
-//			l = append((l)[:i], (l)[i+1:]...)
-//		}
-//	}
-//}
-
 // SetStatus sets status to AssetStatus for all elements except Stale
 func (l *AssetList[T]) SetStatus(status AssetStatus) {
 	for i := range *l {
@@ -117,5 +88,3 @@ func (l *AssetList[T]) SetStatus(status AssetStatus) {
 		}
 	}
 }
-
-// Cleans clean ptrAssetList[T] from elements with status common.AssetStatusDeleted.

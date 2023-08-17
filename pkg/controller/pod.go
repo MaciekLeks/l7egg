@@ -159,21 +159,6 @@ func (c *Controller) syncPodHandler(ctx context.Context, key string) error {
 	return nil
 }
 
-//func getContainerdIDs(css []corev1.ContainerStatus) ([]string, error) {
-//	cids := make([]string, len(css))
-//	var err error
-//	const crn = "containerd://"
-//	for i := range css {
-//		//TODO check Status of the container, e.g. Status, is init container, ...
-//		if !strings.Contains(css[i].ContainerID, crn) {
-//			return cids, fmt.Errorf("only containerd supported")
-//		}
-//		cid := strings.TrimPrefix(css[i].ContainerID, crn)
-//		cids[i] = cid
-//	}
-//	return cids, err
-//}
-
 func (c *Controller) deletePody(ctx context.Context, pod *corev1.Pod) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "namespace", pod.Namespace, "name", pod.Name)
 
@@ -199,108 +184,6 @@ func isPodInStatus(pod *corev1.Pod, podCondType corev1.PodConditionType) bool {
 	}
 	return false
 }
-
-//func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
-//	logger := klog.LoggerWithValues(klog.FromContext(ctx), "namespace", pod.Namespace, "name", pod.Name)
-//	logger.Info("Reconcile pod info.")
-//	podKey := types.NamespacedName{pod.Namespace, pod.Name}
-//
-//	//fmt.Printf("******************* pod %s status: \nPodScheduled:%t\nInitialized:%t\nContainersReady:%t\nPodReady:%t\n",
-//	//	pod.Name,
-//	//	isPodInStatus(pod, corev1.PodScheduled),
-//	//	isPodInStatus(pod, corev1.PodInitialized),
-//	//	isPodInStatus(pod, corev1.ContainersReady),
-//	//	isPodInStatus(pod, corev1.PodReady))
-//	//
-//	//for i := range pod.Status.ContainerStatuses {
-//	//	fmt.Printf("************** POD container statuses: %+v\n", pod.Status.ContainerStatuses[i])
-//	//}
-//
-//	//podJson, err := json.MarshalIndent(pod.Status, "", "    ")
-//	//if err != nil {
-//	//	fmt.Println("Błąd podczas konwersji na JSON:", err)
-//	//	return err
-//	//}
-//	if pb, found := c.podyInfoMap.Load(podKey); found && isPodInStatus(pod, corev1.PodReady) {
-//
-//		//fmt.Println("***************************Reconcile not add ", podKey.String(), pod.Status.Phase, pod.DeletionTimestamp, pb)
-//
-//		wasPaired := pb.PairedWithEgg != nil && len(pb.PairedWithEgg.Name) > 0
-//		fmt.Printf("deep[updatePodnfo] wasPaired: %t, pod:%s \n", wasPaired, podKey.String())
-//
-//		var stillPaired, isMatched bool
-//		var eggi *core.Eggy
-//		if eggKeys := c.checkEggMatch(pod); eggKeys.Len() > 0 {
-//			if eggKeys.Len() > 1 {
-//				logger.Info("More than one egg matched. Choosing the first one", "eggs", eggKeys)
-//			}
-//			eggKey := eggKeys.Get(0)
-//			var ok bool
-//			eggi, ok = c.eggyInfoMap.Load(eggKey)
-//			if !ok {
-//				return fmt.Errorf("egg not found", "egg", eggKey.String())
-//			}
-//
-//			isMatched = true
-//			// all MatchedKeyBoxes must have the same Egg
-//			if pb.PairedWithEgg != nil && eggi.NamespaceName() == *pb.PairedWithEgg {
-//				stillPaired = true
-//				fmt.Printf("deep[updatePodnfo] stillPaired: %t, pod:%s \n", stillPaired, podKey.String())
-//			}
-//		}
-//
-//		if wasPaired && !stillPaired {
-//			// Stop old boxes
-//			fmt.Printf("deep[updatePodnfo] stopping boxes pod:%s \n", podKey.String())
-//			if err := pb.StopBoxySet(); err != nil {
-//				return err
-//			}
-//
-//		}
-//
-//		if isMatched && !stillPaired {
-//			// Install new boxes
-//			fmt.Printf("deep[updatePodnfo] running boxes pod:%s \n", podKey.String())
-//			if err := runBoxySetOnHost(ctx, eggi, pb); err != nil {
-//				return err
-//			}
-//		}
-//
-//		if isMatched && stillPaired {
-//			fmt.Printf("deep[updatePodnfo] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
-//			cpi, err := NewPody(pod)
-//			if err != nil {
-//				return err
-//			}
-//			// Check: Check containers changes
-//			fmt.Printf("deep[updatePodnfo][2] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
-//			if newContainerList, err := pb.Containers.CheckContainers(cpi.Containers); err == nil {
-//				err = pb.Set(func(v *Pody) error {
-//					fmt.Printf("deep[updatePodnfo][3] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
-//					v.Containers = newContainerList
-//					return nil
-//				})
-//				fmt.Printf("deep[updatePodnfo][4] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
-//				if err != nil {
-//					return err
-//				}
-//				fmt.Printf("deep[updatePodnfo][5] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
-//				if err := runBoxySetOnHost(ctx, eggi, pb); err != nil {
-//					return err
-//				}
-//				fmt.Printf("deep[updatePodnfo][6] isMatched:%t stillPaired:%t pod:%s\n", isMatched, stillPaired, podKey.String())
-//			} else {
-//				return err
-//			}
-//		}
-//
-//	} else if isPodInStatus(pod, corev1.PodReady) && !found { //ADD
-//		return c.addPodBox(ctx, pod)
-//	}
-//
-//	return nil
-//}
-//
 
 func (c *Controller) updatePodInfo(ctx context.Context, pod *corev1.Pod) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "namespace", pod.Namespace, "name", pod.Name)
@@ -392,41 +275,6 @@ func (c *Controller) checkReconcileBoxySet(ctx context.Context, pod *corev1.Pod,
 		return err
 	}
 
-	//tbuList, tbdList, update, err := py.Containers.CheckContainers(newpy.Containers)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//if !update {
-	//	return nil
-	//}
-	//
-	//err = py.Set(func(v *Pody) error {
-	//	logger.V(2).Info("updating pody container list", "pod", podKey.String())
-	//	v.Containers = tbuList
-	//	return nil
-	//})
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//logger.V(2).Info("running new boxy set", "pod", podKey.String())
-	////err = runBoxySetOnHost(ctx, ey, py)
-	//err = py.RunBoxySet(ctx, ey)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//// Stops old boxy set
-	//for i := range tbdList {
-	//	// Can't stop boxies on not my host
-	//	err = tbdList[i].Boxer.Stop()
-	//	logger.V(2).Info("Stopping boxy for container", "pod", podKey.String(), "container", tbdList[i].Name)
-	//	if err != nil {
-	//		return fmt.Errorf("failed to stop boxy: %s", err)
-	//	}
-	//}
-
 	if err = py.CheckReconcileBoxySet(ctx, newpy.Containers, ey); err != nil {
 		return err
 	}
@@ -476,23 +324,6 @@ func (c *Controller) addPodBox(ctx context.Context, pod *corev1.Pod) error {
 	}
 	return nil
 }
-
-// RunBoxySetOnHost runs one or many Boxy(s) on the host depends on Eggy.ProgramType and Shaping settings
-//func runBoxySetOnHost(ctx context.Context, eggi *core.Eggy, py *Pody) error {
-//	nodeHostname, err := utils.GetHostname()
-//	if err != nil {
-//		return err
-//	}
-//
-//	fmt.Println("deep[runBoxesOnHost]", nodeHostname, py.NodeName)
-//	if nodeHostname == py.NodeName {
-//		err = py.RunBoxySet(ctx, eggi)
-//		if err != nil {
-//			return err
-//		}
-//	}
-//	return nil
-//}
 
 func (c *Controller) forgetPod(ctx context.Context, key string) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "resourceName", key)

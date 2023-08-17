@@ -153,62 +153,6 @@ func findContainerByContainerId(ctx context.Context, containerId string) (contai
 	return nil, fmt.Errorf("container %s not found", containerId)
 }
 
-//func containerPid(ctx context.Context, containerId string) (uint32, error) {
-//	var pid uint32
-//	logger := klog.FromContext(ctx)
-//
-//	// Creates client to connect to containerd
-//	client, err := containerd.New(containerdSocketFileAbsPath)
-//	defer client.Close()
-//
-//	if err != nil {
-//		return pid, fmt.Errorf("can't connect to containerd socket %s", err)
-//	}
-//	defer client.Close()
-//
-//	// Gets available namespaces
-//	// TODO: do not look after container in all namespaces every call - cache namespaces
-//	nsService := client.NamespaceService()
-//	nsList, err := nsService.List(ctx)
-//	if err != nil {
-//		return pid, fmt.Errorf("can't get containerd namespaces %s", err)
-//	}
-//
-//	// Searches for container in each ns
-//	var container containerd.Container
-//	var found bool
-//
-//	var nsCtx context.Context
-//	for i := range nsList {
-//		nsCtx = namespaces.WithNamespace(ctx, nsList[i])
-//		container, err = client.LoadContainer(nsCtx, containerId)
-//		if err == nil {
-//			fmt.Printf("\n\ndeep[xxx]The sought container %s is in the %s ns\n\n", containerId, nsCtx)
-//			found = true
-//			break
-//		}
-//	}
-//	if !found {
-//		return pid, fmt.Errorf("container %s not found", containerId)
-//	}
-//
-//	logger.V(2).Info("Container loaded")
-//
-//	task, err := container.Task(nsCtx, nil)
-//	if err != nil {
-//		return pid, fmt.Errorf("can't get container task", err)
-//	}
-//
-//	logger.V(2).Info("runEgg-4")
-//
-//	pid = task.Pid()
-//	if err != nil {
-//		return pid, fmt.Errorf("Can't get container task PID", err)
-//	}
-//
-//	return pid, nil
-//}
-
 func createClient() (*containerd.Client, error) {
 	client, err := containerd.New(containerdSocketFileAbsPath)
 	if err != nil {

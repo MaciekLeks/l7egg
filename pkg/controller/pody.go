@@ -114,108 +114,6 @@ func (py *Pody) NamespaceName() types.NamespacedName {
 	return types.NamespacedName{Namespace: py.Namespace, Name: py.Name}
 }
 
-//func (py *Pody) RunBoxySet(ctx context.Context, eggi *core.Eggy) error {
-//	py.Lock()
-//	defer py.Unlock()
-//
-//	// pair with egg
-//	eggKey := eggi.NamespaceName()
-//	py.PairedWithEgg = &eggKey
-//
-//	if len(py.Containers) < 1 {
-//		return fmt.Errorf("no containers in pod %s", py.Name)
-//	}
-//
-//	if py.Boxer != nil {
-//		// py.Boxer for TC must be updated with new pid, the same for cgroup net_cls
-//		container := py.Containers[0]
-//		err := py.Boxer.Upgrade(ctx, core.WithPid(container.Pid))
-//		if err != nil {
-//			return err
-//		}
-//	}
-//
-//	fmt.Println("deep[RunBoxySet][1]")
-//	//TODO: it could be the case - container[0] is restarted abut network is the same :/
-//	if eggi.ProgramType == common.ProgramTypeTC && py.Boxer == nil {
-//		container := py.Containers[0]
-//		if container.Ready == true && container.AssetStatus == common.AssetNew {
-//			// not nil for Node
-//
-//			var err error
-//			if py.Boxer == nil {
-//				py.Boxer, err = core.NewBoxy(eggi, core.WithPid(container.Pid))
-//				if err != nil {
-//					return err
-//				}
-//			}
-//			err = py.Boxer.Install(ctx)
-//			container.AssetStatus = common.AssetSynced
-//			if err != nil {
-//				return err
-//			}
-//
-//		}
-//		return nil
-//	} else if eggi.ProgramType == common.ProgramTypeCgroup {
-//		var err error
-//		fmt.Println("deep[RunBoxySet][2]")
-//
-//		// run TC part of the program - run once
-//		// if py.Boxy != nil && py.Boxy.Options pid != od tego pid-a z contener-a 0 to znaczy ze trzeba go zmienic
-//		if eggi.Shaping != nil && py.Boxer == nil {
-//			// we need net netspace only for TC
-//			py.Boxer, err = core.NewBoxy(eggi, core.WithNetCls(), core.WithPid(py.Containers[0].Pid))
-//			if err != nil {
-//				return err
-//			}
-//
-//			fmt.Println("deep[RunBoxySet][Before Install]")
-//			err := py.Boxer.Install(ctx)
-//			fmt.Println("deep[RunBoxySet][After Install]")
-//			if err != nil {
-//				return err
-//			}
-//
-//		}
-//
-//		for i := range py.Containers {
-//			container := py.Containers[i]
-//			if container.Ready == true && container.AssetStatus == common.AssetNew {
-//
-//				fmt.Println("deep[RunBoxySet][3]")
-//				container.Boxer, err = core.NewBoxy(eggi, core.WithPid(container.Pid))
-//				fmt.Println("deep[RunBoxySet][30]", err)
-//				if err != nil {
-//					return err
-//				}
-//				fmt.Println("deep[RunBoxySet][31]")
-//				err := container.Boxer.Install(ctx)
-//				fmt.Println("deep[RunBoxySet][32]")
-//				if err != nil {
-//					return err
-//				}
-//				fmt.Println("deep[RunBoxySet][33]")
-//				if py.Boxer != nil {
-//					//add process to net_clt cgroup
-//					err := py.Boxer.DoAction(ctx, core.WithPid(container.Pid))
-//					if err != nil {
-//						return err
-//					}
-//				}
-//
-//				container.AssetStatus = common.AssetSynced
-//			}
-//		}
-//
-//	}
-//
-//	//py.PairedWithEgg = &types.NamespacedName{Namespace: "", Name: eggi.Name}
-//
-//	return nil
-//}
-
-// {
 func (py *Pody) handleTCProgramType(ctx context.Context, ey *core.Eggy) error {
 	container := py.Containers[0]
 	if container.Ready == true && container.AssetStatus == common.AssetNew {
@@ -298,8 +196,6 @@ func (py *Pody) RunBoxySet(ctx context.Context, ey *core.Eggy) error {
 
 	return nil
 }
-
-//}
 
 func (py *Pody) StopBoxySet() error {
 	py.Lock()
@@ -386,23 +282,6 @@ func (py *Pody) ReconcileBoxySet(ctx context.Context) error {
 	return resErr
 
 }
-
-//func (nb *NodeBox) StopBoxySet() error {
-//	nb.Lock()
-//	defer nb.Unlock()
-//
-//	var err error
-//	var resErr error
-//	if nb.Boxer != nil {
-//		err = nb.Boxer.Stop()
-//		if err != nil {
-//			return fmt.Errorf("%v\n%v", resErr, err)
-//
-//		}
-//	}
-//
-//	return nil
-//}
 
 // CheckReconcileBoxySet checks if there are new containers to install, or old containers to stop; It's mutating method - it updates container list
 func (py *Pody) CheckReconcileBoxySet(ctx context.Context, newContaineryList ContaineryList, ey *core.Eggy) error {
