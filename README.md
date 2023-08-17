@@ -44,6 +44,7 @@ kind: ClusterEgg
 metadata:
   name: clusteregg-pod-example-cgroup
 spec:
+  #programType: cgroup #default
   ingress: {}
   egress:
     shaping:
