@@ -61,7 +61,7 @@ spec:
       matchLabels:
         app: tester
 ```
-By default, ClusterEgg works with `cgroups`. You can change to `tc` with `spec.programType=tc`. Here we not only policying egress traffic by specifing CIDRs, and Common Names. We also, shaping traffic here applying 1mbit bandwidth.
+By default, ClusterEgg works with `cgroups`. You can change to `tc` with `spec.programType=tc`. Here we not only enforcing policy on egress traffic by specifying CIDRs, and Common Names. We also, shaping traffic applying 1mbit bandwidth.
 
 # programType - tc or cgroups
 Please find some differences between `tc` and `cgroups` program types:

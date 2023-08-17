@@ -14,7 +14,6 @@ BASE_TAG ?= latest
 DEBUG ?= 1
 
 BUILD_DIR = build
-#BUILD_DIR = .
 TARGET_CLI := $(BUILD_DIR)/$(MAIN)-cli
 TARGET_K8S_STATIC := $(BUILD_DIR)/$(MAIN)-k8s-static
 TARGET_K8S_DYN := $(BUILD_DIR)/$(MAIN)-k8s-dynamic
