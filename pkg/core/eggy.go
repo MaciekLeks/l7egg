@@ -120,7 +120,8 @@ func parseAttribute(attrVal string, unitBase string) (retVal uint32, err error) 
 }
 
 // parseShapingInfo parses input ShapingSpec and returns ShapingInfo using parseBytes for rates.
-func parseShapingInfo(shaping *v1alpha1.ShapingSpec) (shapingInfo ShapingInfo, err error) {
+func parseShapingInfo(shaping *v1alpha1.ShapingSpec) (shapingInfo *ShapingInfo, err error) {
+	shapingInfo = &ShapingInfo{}
 	if shapingInfo.Rate, err = parseAttribute(shaping.Rate, "bit"); err != nil {
 		return
 	}
@@ -144,12 +145,13 @@ func NewEggy(cegg v1alpha1.ClusterEgg) (*Eggy, error) {
 		return nil, err
 	}
 
-	fmt.Printf("((((((((((((((((((((((((((((((((((((((((((((((", cegg.Spec.Egress.Shaping)
-	shapingInfo, err := parseShapingInfo(cegg.Spec.Egress.Shaping)
-	if err != nil {
-		return nil, err
+	var shapingInfo *ShapingInfo
+	if cegg.Spec.Egress.Shaping != nil {
+		shapingInfo, err = parseShapingInfo(cegg.Spec.Egress.Shaping)
+		if err != nil {
+			return nil, err
+		}
 	}
-	fmt.Printf("))))))))))))))))))))))))))))))))))))))))))))))), ", shapingInfo)
 
 	var podLabels map[string]string
 	if cegg.Spec.Egress.PodSelector.Size() != 0 {
@@ -175,7 +177,7 @@ func NewEggy(cegg v1alpha1.ClusterEgg) (*Eggy, error) {
 		Cidrs:            cidrs,
 		//BPFObjectPath:    "./l7egg.bpf.o",
 		PodLabels: podLabels,
-		Shaping:   &shapingInfo,
+		Shaping:   shapingInfo,
 	}
 	return ey, nil
 }

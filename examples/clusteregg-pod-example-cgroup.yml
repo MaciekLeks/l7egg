@@ -5,9 +5,9 @@ metadata:
 spec:
   ingress: {}
   egress:
-    shaping:
-      rate: 1mbit
-      ceil: 1mbit
+    #shaping:
+    #  rate: 1mbit
+    #  ceil: 1mbit
     commonNames:
     - www.onet.pl
     - www.interia.pl
