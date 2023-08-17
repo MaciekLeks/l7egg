@@ -35,6 +35,46 @@ LIBBPF_DIR=/ make k8s-build-cmd
 ```
 
 # Examples
+
+## K8s
+Sample example from the `examples` directory:
+```yml
+apiVersion: maciekleks.dev/v1alpha1
+kind: ClusterEgg
+metadata:
+  name: clusteregg-pod-example-cgroup
+spec:
+  ingress: {}
+  egress:
+    shaping:
+      rate: 1mbit
+      ceil: 1mbit
+    commonNames:
+    - www.interia.pl
+    - cluster.local
+    cidrs:
+    - 10.152.183.0/24
+    - 169.254.1.1/32
+    - 192.168.57.0/24
+    podSelector:
+      matchLabels:
+        app: tester
+```
+By default, ClusterEgg works with `cgroups`. You can change to `tc` with `spec.programType=tc`. Here we not only policying egress traffic by specifing CIDRs, and Common Names. We also, shaping traffic here applying 1mbit bandwidth.
+
+# programType - tc or cgroups
+Please find some differences between `tc` and `cgroups` program types:
+
+| Feature                         | tc | cgroup |
+|---------------------------------|:--:| :-: |
+| Works with pods                 | +  | + | 
+| Works with containers           | +  | + |
+| Works with multi container pods | +  | - |
+| Works on nodes                  | +  | - |
+| Shaping                         | +  | + |
+
+
+
 ## CLI:
 TODO: add accurate example
 To allow only egress traffic on the declared CIDRs and CNs (works with partial domain names):
@@ -71,43 +111,6 @@ Traffic Control qdisc and filters cleansing is needed first:
 ./tools/tc-cleaner.sh -iface=${iface} -eface=${eface}
 ```
 and run the command again.
-
-## K8s
-Sample example from the `examples` directory:
-```yml
-apiVersion: maciekleks.dev/v1alpha1
-kind: ClusterEgg
-metadata:
-  name: clusteregg-pod-example-cgroup
-spec:
-  ingress: {}
-  egress:
-    shaping:
-      rate: 1mbit
-      ceil: 1mbit
-    commonNames:
-    - www.interia.pl
-    - cluster.local
-    cidrs:
-    - 10.152.183.0/24
-    - 169.254.1.1/32
-    - 192.168.57.0/24
-    podSelector:
-      matchLabels:
-        app: tester
-```
-By default, ClusterEgg works with `cgroups`. You can change to `tc` with `spec.programType=tc`. Here we not only policying egress traffic by specifing CIDRs, and Common Names. We also, shaping traffic to 1mbit.
-
-# programType - tc or cgroups
-Please find some differences between `tc` and `cgroups` program types:
-
-| Feature                         | tc | cgroup |
-|---------------------------------|:--:| :-: |
-| Works with pods                 | +  | + | 
-| Works with containers           | +  | + |
-| Works with multi container pods | +  | - |
-| Works on nodes                  | +  | - |
-| Shaping                         | +  | + |
 
 
 # Project structure
