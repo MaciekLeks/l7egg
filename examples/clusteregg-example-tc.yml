@@ -4,10 +4,8 @@ metadata:
   name: clusteregg-example-tc
 spec:
   programType: tc
-
   ingress:
     interfaceName: enp0s3
-
   egress:
     interfaceName: enp0s3
     commonNames:

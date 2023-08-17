@@ -66,13 +66,14 @@ By default, ClusterEgg works with `cgroups`. You can change to `tc` with `spec.p
 # programType - tc or cgroups
 Please find some differences between `tc` and `cgroups` program types:
 
-| Feature                         | tc | cgroup |
-|---------------------------------|:--:| :-: |
-| Works with pods                 | +  | + | 
-| Works with containers           | +  | + |
-| Works with multi container pods | +  | - |
-| Works on nodes                  | +  | - |
-| Shaping                         | +  | + |
+| Feature                      | tc | cgroup |
+|------------------------------|:--:|:-:|
+| Works with pods              | +  | + | 
+| Works with containers        | +  | + |
+| Works with multi container pods | +  | + |
+| Works on nodes               | +  | - |
+| Shaping                      | +  | + |
+| Specifyinginterface name     | +  | - |
 
 
 
