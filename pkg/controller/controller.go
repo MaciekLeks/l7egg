@@ -120,16 +120,6 @@ func NewController(ctx context.Context,
 
 	podInformer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
-			//AddFunc: c.handleObject,
-			//UpdateFunc: func(old, new interface{}) {
-			//	newPod := new.(*corev1.Pod)
-			//	oldPod := old.(*corev1.Pod)
-			//	if newPod.ResourceVersion == oldPod.ResourceVersion {
-			//		return
-			//	}
-			//	c.handleObject(new)
-			//},
-			//DeleteFunc: c.handleObject,
 			AddFunc:    c.handlePodAdd,
 			UpdateFunc: c.handlePodUpdate,
 			DeleteFunc: c.handlePodDelete,
@@ -159,9 +149,6 @@ func (c *Controller) Run(ctx context.Context, ceggWorkers int, podWorkers int) e
 	for i := 0; i < ceggWorkers; i++ {
 		// Install c.runWorker again after 1 sec only the previous launch ends
 		go func() {
-			//fmt.Println("waiting...............................")
-			//time.Sleep(5 * time.Second)
-			//fmt.Println("waiting.............................../done")
 			wait.UntilWithContext(context.WithValue(ctx, ctxAssetKey, ctxCeggValue), c.runWorker, 1*time.Second)
 		}()
 	}
@@ -191,33 +178,30 @@ func (c *Controller) Wait(ctx context.Context) {
 	done := ctx.Done()
 	wg := sync.WaitGroup{}
 
-	logger.Info("deep[Waiting] starts\n")
+	logger.Info("stopping all pody sets")
 	//waits until done is closed
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		fmt.Printf("deep[Waiting]before <-done\n")
 		<-done
-		fmt.Printf("deep[Waiting]after <-done\n")
 		c.podyInfoMap.Range(func(podNsNm types.NamespacedName, py *Pody) bool {
-			fmt.Printf("deep[Waiting][range][0] - %s\n", podNsNm)
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				fmt.Printf("deep[Waiting][range][1] - %s\n", podNsNm)
+				logger.V(2).Info("Pody %s stopping", podNsNm)
 				if err := py.StopBoxySet(); err != nil {
-					fmt.Printf("deep[Waiting][range][error] - %s - %s\n", podNsNm, err)
+					utilruntime.HandleError(err)
+				} else {
+					logger.V(2).Info("Pody %s stopped", podNsNm)
 				}
-
-				fmt.Printf("deep[Waiting][range][2] - %s\n", podNsNm)
 			}()
 			return true
 		})
 	}()
 
-	fmt.Printf("deep[Waiting] for all pody finishes\n")
+	logger.Info("waiting for all pody stop finished")
 	wg.Wait()
-	fmt.Printf("deep[Waiting] done.\n")
+	logger.Info("stop all pody sets done")
 
 }
 
@@ -262,14 +246,12 @@ func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 		// Foo resource to be synced.
 		if err = c.syncHandler(ctx, key); err != nil {
 			c.queueAddRateLimited(ctx, key)
-			fmt.Printf("deep[processNextWorkItem] after queueAddRateLimited %s\n", err)
 			return fmt.Errorf("error syncing '%s': %s, requeuing", key, err.Error())
 		}
 
 		// Finally, if no error occurs we Forget this item so it does not
 		// get queued again until another change happens.
 		if err = c.queueForget(ctx, key); err != nil {
-			fmt.Printf("deep[processNextWorkItem] after queueForget %s\n", err)
 			return err
 		}
 		logger.Info("Successfully synced.", "resourceName", key)
@@ -278,7 +260,6 @@ func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 	}(key)
 
 	if err != nil {
-		fmt.Printf("deep[processNextWorkItem] before HandleError %s\n", err)
 		utilruntime.HandleError(err)
 		return true
 	}
