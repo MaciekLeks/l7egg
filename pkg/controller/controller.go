@@ -199,7 +199,7 @@ func (c *Controller) Wait(ctx context.Context) {
 		})
 	}()
 
-	logger.Info("waiting for all pody stop finished")
+	logger.Info("waiting for all pody set stop finished")
 	wg.Wait()
 	logger.Info("stop all pody sets done")
 
