@@ -134,18 +134,19 @@ func (c *Controller) updateEgg(ctx context.Context, cegg v1alpha1.ClusterEgg) er
 	eggNsNm := types.NamespacedName{Namespace: cegg.Namespace, Name: cegg.Name}
 
 	if ey, ok := c.eggyInfoMap.Load(eggNsNm); ok {
-		err := c.updateExistingEggy(ctx, logger, ey, cegg, eggNsNm)
+		logger.Info("updating existing egg")
+		err := c.updateExistingEggy(ctx, ey, cegg, eggNsNm)
+		logger.Info("updating existing egg done")
 		return err
 	} else {
+		logger.Info("adding new egg")
 		err := c.addNewEggy(ctx, logger, eggNsNm, cegg)
+		logger.Info("adding new egg done")
 		return err
 	}
 }
 
-func (c *Controller) updateExistingEggy(ctx context.Context, logger logr.Logger, ey *core.Eggy, cegg v1alpha1.ClusterEgg, eggNsNm types.NamespacedName) error {
-	logger.Info("tbd - 1")
-	fmt.Println("tbd - 1p")
-
+func (c *Controller) updateExistingEggy(ctx context.Context, ey *core.Eggy, cegg v1alpha1.ClusterEgg, eggNsNm types.NamespacedName) error {
 	ney, err := core.NewEggy(cegg)
 	if err != nil {
 		return fmt.Errorf("failed to create new egg info: %w", err)
@@ -153,7 +154,7 @@ func (c *Controller) updateExistingEggy(ctx context.Context, logger logr.Logger,
 
 	var labelsChanged = !reflect.DeepEqual(ney.PodLabels, ey.PodLabels)
 	if labelsChanged {
-		err = c.stopNotMatchingBoxySets(ctx, logger, ey, eggNsNm, ney)
+		err = c.stopNotMatchingBoxySets(ctx, ey, eggNsNm)
 		if err != nil {
 			return err
 		}
@@ -207,20 +208,20 @@ func (c *Controller) addNewEggy(ctx context.Context, logger logr.Logger, eggNsNm
 	return nil
 }
 
-func (c *Controller) stopNotMatchingBoxySets(ctx context.Context, logger logr.Logger, ey *core.Eggy, eggNsNm types.NamespacedName, newey *core.Eggy) error {
+func (c *Controller) stopNotMatchingBoxySets(ctx context.Context, ey *core.Eggy, eggNsNm types.NamespacedName) error {
+	logger := klog.LoggerWithValues(klog.FromContext(ctx), "resourceName", ey.Name)
 	var err error
-	c.podyInfoMap.Range(func(podNsnm types.NamespacedName, pb *Pody) bool {
-		fmt.Printf("deep[handleLabelChanges] %s\n", podNsnm)
-		if pb.PairedWithEgg != nil && *pb.PairedWithEgg == eggNsNm {
+	c.podyInfoMap.Range(func(podNsnm types.NamespacedName, py *Pody) bool {
+		if py.PairedWithEgg != nil && *py.PairedWithEgg == eggNsNm {
 			// Labels changed, perform your logic here
 			// Stop the box if needed
-			logger.Info("Stopping box", "pod", pb)
-			err = pb.StopBoxySet()
+			logger.Info("Stopping box", "pod", py)
+			err = py.StopBoxySet()
 			if err != nil {
-				err = fmt.Errorf("can't stop boxy set for pod %s", pb)
+				err = fmt.Errorf("can't stop boxy set for pod %s", py)
 				return false
 			}
-			logger.Info("box stopped", "pb", pb)
+			logger.Info("boxy set stopped", "pody", py)
 		}
 		return true
 	})

@@ -93,8 +93,8 @@ remote-build2:
 
 .PHONY: remote-build3
 remote-build3:
-	rsync -ahv  --delete --exclude '.git' . mlk@ubu-ebpf3:~/dev/ebpf-tests/
-	ssh mlk@ubu-ebpf3 "cd ~/dev/ebpf-tests && make clean && make all"
+	rsync -ahv  --delete --exclude '.git' . mlk@ubu-ebpf3:/home/mlk/go/src/github.com/MaciekLeks/l7egg
+	ssh mlk@ubu-ebpf3 "cd /home/mlk/go/src/github.com/MaciekLeks/l7egg && make clean && make all"
 
 .PHONY: remote-build-all
 remote-build-all: remote-build2 remote-build3
