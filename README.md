@@ -118,12 +118,12 @@ and run the command again.
 # Project structure
 - `build` - executable and object files
 - `cmd` - GO commands source files
+- `crds` - Custom Resource Definitions for ClusterEgg
 - `examples` - k8s example manifests
 - `kernel` - eBPF kernel space C source files
-- `manifests` - k8s CRDs manifests
+- `manifests` - k8s manifests for the operator
 - `pkg` - k8s operator and controller reusable GO packages
 - `tools` - common tools 
-- `user` - eBPF user space GO source files
 
 # When (Status)
 I'll definitely right down here _when_... Not now ;)
@@ -132,7 +132,7 @@ I'll definitely right down here _when_... Not now ;)
 - [x] deep code refactoring
 - [ ] code refactoring (logging, remove fmt.Printf/ln, etc.)
 - [x] multi container pod support
-- [ ] init containers not supported
+- [ ] init containers support
 - [x] ipv6 support
 - [x] applying Egg policy into selected PODs (in progress)
 - [x] traffic shaping mechanism
