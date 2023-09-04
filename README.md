@@ -136,7 +136,7 @@ I'll definitely right down here _when_... Not now ;)
 - [ ] init containers support
 - [x] ipv6 support
 - [x] applying Egg policy into selected PODs (in progress)
-- [x] traffic shaping mechanism
+- [x] traffic shaping mechanism some features, e.g. bandwidth, ceil, burst, etc.
 - [x] CRD refactoring
 - [ ] tests needed :)
 - [ ] ingress policies
