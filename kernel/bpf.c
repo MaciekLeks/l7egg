@@ -408,7 +408,7 @@ process_relative(struct __sk_buff *skb, enum bpf_hdr_start_off hdr_start_off, bo
             if (ret != TC_MOVE_ONE)
                 return ret;
         }
-        return 0;
+        return TC_ACT_OK;
 
     }
 
@@ -464,7 +464,7 @@ process_relative(struct __sk_buff *skb, enum bpf_hdr_start_off hdr_start_off, bo
         struct packet *valp;
         valp = bpf_ringbuf_reserve(&packets, sizeof(struct packet), ringbuffer_flags);
         if (!valp) {
-            return 0;
+            return TC_ACT_OK;
         }
 
         //bpf_printk("[###] data[0]:%x,%x, len: %d", eth->h_dest[0], eth->h_dest[1], data_end - data);
@@ -490,7 +490,7 @@ process_relative(struct __sk_buff *skb, enum bpf_hdr_start_off hdr_start_off, bo
         }
         if (err) { //!err -> err
             bpf_ringbuf_discard(valp, ringbuffer_flags); //memory not consumed
-            return 0;
+            return TC_ACT_OK;
         }
 
 
@@ -502,7 +502,7 @@ process_relative(struct __sk_buff *skb, enum bpf_hdr_start_off hdr_start_off, bo
         bpf_ringbuf_submit(valp, ringbuffer_flags);
     }
 
-    return 0;
+    return TC_ACT_OK;
 }
 
 SEC("tc")

@@ -131,7 +131,7 @@ func newCgroupNetClsBoxy(boxy *Boxy) (*CgroupNetClsBoxy, error) {
 }
 
 func (b *Boxy) Stop() error {
-	fmt.Println("deep[Boxy:Stop][0]")
+	fmt.Printf("deep[Boxy:Stop][0] %+v", b)
 	b.stopFunc()
 	fmt.Println("deep[Boxy:Stop][1]")
 	b.waitGroup.Wait()
