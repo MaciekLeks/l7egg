@@ -312,9 +312,12 @@ func (py *Pody) CheckReconcileBoxySet(ctx context.Context, newContaineryList Con
 
 	// Stops old boxy set
 	for i := range tbdList {
-		err = tbdList[i].Boxer.Stop()
-		if err != nil {
-			return fmt.Errorf("failed to stop boxy: %s", err)
+		// only cgroup programs are stopped here, cause only cgroup programs are started at the container
+		if tbdList[i].Boxer != nil {
+			err = tbdList[i].Boxer.Stop()
+			if err != nil {
+				return fmt.Errorf("failed to stop boxy: %s", err)
+			}
 		}
 	}
 
