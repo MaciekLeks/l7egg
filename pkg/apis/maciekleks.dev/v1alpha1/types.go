@@ -16,7 +16,7 @@ type ClusterEgg struct {
 
 	// +kubebuilder:validation:XValidation:rule="(self.programType == 'tc' && has(self.egress.interfaceName)) || (self.programType == 'cgroup' && !has(self.egress.interfaceName))",message="Egress interfaceName works only with tc program"
 	// +kubebuilder:validation:XValidation:rule="(self.programType == 'tc' && has(self.ingress.interfaceName)) || (self.programType =='cgroup' && !has(self.ingress.interfaceName))",message="Ingress interfaceName works only with tc program"
-	// +kubebuilder:validation:XValidation:rule="self.programType == 'cgroup' && has(self.egress.podSelector)",message="Cgroup program requires podSelector"
+	// +kubebuilder:validation:XValidation:rule="(self.programType == 'cgroup' && has(self.egress.podSelector)) || (self.programType == 'tc')",message="Cgroup program requires podSelector"
 	Spec   ClusterEggSpec   `json:"spec,omitempty"`
 	Status ClusterEggStatus `json:"status,omitempty"`
 }

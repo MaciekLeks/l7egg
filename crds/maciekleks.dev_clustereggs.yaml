@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.12.1
+    controller-gen.kubebuilder.io/version: v0.13.0
   name: clustereggs.maciekleks.dev
 spec:
   group: maciekleks.dev
@@ -140,7 +140,8 @@ spec:
               rule: (self.programType == 'tc' && has(self.ingress.interfaceName))
                 || (self.programType =='cgroup' && !has(self.ingress.interfaceName))
             - message: Cgroup program requires podSelector
-              rule: self.programType == 'cgroup' && has(self.egress.podSelector)
+              rule: (self.programType == 'cgroup' && has(self.egress.podSelector))
+                || (self.programType == 'tc')
           status:
             properties:
               ready:
