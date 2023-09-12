@@ -1,18 +1,10 @@
 //+build ignore
 #include "vmlinux.h"
-//#include <vmlinux.h>
 
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
 #include <bpf/bpf_core_read.h>
 #include <bpf/bpf_endian.h>
-
-//#include <linux/if_ether.h>
-//#include <linux/in.h>
-//#include <linux/ip.h>
-//#include <linux/udp.h>
-//#include <linux/tcp.h>
-//#include <linux/filter.h>
 
 #define ETH_HLEN 14        /* Total octets in header.	 */
 #define ETH_P_IPv4 0x0800
