@@ -98,14 +98,6 @@ struct {
     __uint(max_entries, 255);
 } ipv6_lpm_map SEC(".maps");
 
-
-//struct {
-//    __uint(type, BPF_MAP_TYPE_RINGBUF);
-//    //__type(value, struct packet);
-//    __uint(max_entries, 1 << 24);
-//} events_dns SEC(".maps");
-//
-
 long ringbuffer_flags = 0;
 
 static __always_inline void *ipv4_lookup(__u32 ipaddr) {
@@ -276,10 +268,6 @@ process_relative(struct __sk_buff *skb, enum bpf_hdr_start_off hdr_start_off, bo
     bool is_ipv6 = false;
     __u8 protocol;
 
-    // specific class for the
-    //skb->tc_classid = TC_H_MAKE(10,10);
-    //skb->tc_classid = 0xA000A;
-
     //L2
     bpf_printk("[process] /1");
 
@@ -342,10 +330,6 @@ process_relative(struct __sk_buff *skb, enum bpf_hdr_start_off hdr_start_off, bo
     }
 
     bpf_printk("[process] /4");
-//    //TODO done to this place
-//    if (is_ipv6) {
-//        return 0; //TODO REMOVE
-//    }
 
     // ip header pointer to either iphdr or ipv6hdr
     struct iphdr *ip = (data + off);
@@ -405,11 +389,6 @@ process_relative(struct __sk_buff *skb, enum bpf_hdr_start_off hdr_start_off, bo
     }
 
     bpf_printk("[process] /7");
-//    // Reserve space on the ringbuffer for the sample
-//    __u32 len = skb->len;
-////    if (len > ETH_FRAME_LEN)
-////        return 0;
-//    __u32  len_size =sizeof(skb->len);
 
 //    check only for dnq query
     if (is_egress && dport == 53) { //only answers matters
@@ -437,7 +416,6 @@ process_relative(struct __sk_buff *skb, enum bpf_hdr_start_off hdr_start_off, bo
     if (!is_egress && sport == 53) { //only answers matters
         __u32 len = skb->len;
 
-
         //{dns deep dive
         if (data + off + sizeof(struct dnshdr) > data_end)
             return 0;
@@ -458,8 +436,6 @@ process_relative(struct __sk_buff *skb, enum bpf_hdr_start_off hdr_start_off, bo
         if (!valp) {
             return TC_ACT_OK;
         }
-
-        //bpf_printk("[###] data[0]:%x,%x, len: %d", eth->h_dest[0], eth->h_dest[1], data_end - data);
 
         long err;
         if (hdr_start_off == BPF_HDR_START_MAC) {
