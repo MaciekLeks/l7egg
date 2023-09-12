@@ -308,8 +308,11 @@ func (c *Controller) deleteEgg(ctx context.Context, eggNamespaceName types.Names
 		return err
 	}
 
-	logger.Info("Egg deleted.")
-	c.eggyInfoMap.Delete(eggNamespaceName)
+	logger.Info("egg deleted.", "egg", eggNamespaceName)
+	ey, ok := c.eggyInfoMap.LoadAndDelete(eggNamespaceName)
+	if ok {
+		ey.Stop()
+	}
 
 	return nil
 }

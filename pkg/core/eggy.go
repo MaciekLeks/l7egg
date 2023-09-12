@@ -5,6 +5,7 @@ import (
 	"github.com/MaciekLeks/l7egg/pkg/apis/maciekleks.dev/v1alpha1"
 	"github.com/MaciekLeks/l7egg/pkg/common"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
+	bpf "github.com/aquasecurity/libbpfgo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"net"
@@ -55,6 +56,7 @@ type Eggy struct {
 	//BPFObjectPath    string
 	PodLabels map[string]string
 	Shaping   *ShapingInfo
+	bpfModule *bpf.Module
 }
 
 func (ey *Eggy) Set(fn func(v *Eggy) error) error {
@@ -202,6 +204,14 @@ func (ey *Eggy) UpdateDone() {
 
 	ey.CommonNames.RemoveStale()
 	ey.CommonNames.SetStatus(common.AssetSynced)
+}
+
+// Stop stops and destroys any external resource
+func (ey *Eggy) Stop() {
+	ey.Lock()
+	defer ey.Unlock()
+
+	ey.bpfModule.Close()
 }
 
 func parseCIDR(cidrS string) (Cidr, error) {
