@@ -431,47 +431,10 @@ func (eby *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, net
 								fmt.Println("DROP")
 							}
 						}
-						//} else if a.Type == layers.DNSTypeAAAA {
-						//	fmt.Println("!!!Answer.Type:", a.Type)
-						//	cn := string(a.Name)
-						//	ip := a.IP
-						//	ttlSec := a.TTL //!!! remove * 5
-						//
-						//	key := ipv6LPMKey{128, [16]uint8(ip[0:16])}
-						//	//val := time.Now().Unix() + int64(ttl) //Now + ttl
-						//	ttlNs := uint64(ttlSec) * 1000000000
-						//	bootTtlNs := uint64(C.get_nsecs()) + ttlNs //boot time[ns] + ttl[ns]
-						//	//fmt.Println("key size:", unsafe.Sizeof(key))
-						//	//fmt.Println("key data:", key.data)
-						//
-						//	if cn, found := containsCN(ebpfy.CommonNames, cn); found {
-						//		val := ipLPMVal{
-						//			ttl:     bootTtlNs,
-						//			counter: 0, //zero existsing elements :/
-						//			id:      cn.id,
-						//			status:  uint8(assetSynced),
-						//		}
-						//		err := updateACLValueNew(ebpfy.ipv6ACL, key, val)
-						//		must(err, "Can't update ACL.")
-						//		fmt.Printf("Updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", cn, ip, ttlSec, ttlNs, bootTtlNs)
-						//
-						//	} else {
-						//		fmt.Println("DROP")
-						//	}
-						//
-						//}
-
 					}
 				} else {
 					fmt.Println("This is not a DNS packet!:/")
 				}
-
-				//numberOfEventsReceived++
-				//
-				//fmt.Println("[10]")
-				//if numberOfEventsReceived > 3 {
-				//	break recvLoop
-				//}
 			}
 		}
 	}()
