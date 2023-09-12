@@ -52,8 +52,10 @@ GO_EXTLDFLAGS_DYN = '-extldflags "-lelf -lz  -Wl,-rpath=$(LIBBPF_DYN_LIB) -L$(LI
 all: $(TARGET_BPF) $(TARGET_CLI) $(TARGET_K8S_DYN)
 
 
-$(BPF_SRC): $(BPF_HEADERS)
+$(BPF_SRC): $(BPF_HEADERS) vmlinux.h
 
+
+# -D__TARGET_ARCH_$(ARCH) - removed - needed only for tracing
 $(TARGET_BPF): $(BPF_SRC)
 	echo "EBPF:" >&2
 	$(CC) \
@@ -62,7 +64,6 @@ $(TARGET_BPF): $(BPF_SRC)
 	    -Wall \
 	    -fpie \
 		-I$(LIBBPF_INCLUDES) \
-		-D__TARGET_ARCH_$(ARCH) \
 		-DDEBUG=$(DEBUG) \
 		-O2 \
 		-target bpf \
@@ -81,8 +82,7 @@ clean:
 	rm $(TARGET_BPF) $(TARGET_CLI) $(TARGET_K8S_STATIC) $(TARGET_K8S_DYN) compile_commands.json  2> /dev/null || true
 
 .PHONY: vmlinuxh
-vmlinuxh:
-	echo "vmlinuxh"
+vmlinux.h:
 	bpftool btf dump file /sys/kernel/btf/vmlinux format c > ./kernel/vmlinux.h
 
 

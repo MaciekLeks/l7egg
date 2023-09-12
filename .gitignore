@@ -10,6 +10,7 @@ l7egg.bpf.o
 l7egg-static
 l7egg-k8s
 compile_commands.json
+vmlinux.h
 
 # temp to be changed
 build/
