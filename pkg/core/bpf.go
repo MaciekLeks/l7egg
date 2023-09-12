@@ -31,13 +31,10 @@ import (
 
 // ebpfy holds Eggy (extracted from ClusterEggSpec) and ebpf related structures, e.g. maps, channels operating on that maps
 type ebpfy struct {
-	eggy      *Eggy
-	bpfModule *bpf.Module
-	ipv4ACL   *bpf.BPFMap
-	ipv6ACL   *bpf.BPFMap
-	packets   chan []byte
-	//cgroupNetCls cgroup1.Cgroup //cgroup net_cls for cgroup programs
-	//aclLoock  sync.RWMutex
+	eggy    *Eggy
+	ipv4ACL *bpf.BPFMap
+	ipv6ACL *bpf.BPFMap
+	packets chan []byte
 }
 
 func newEbpfy(eggi *Eggy) *ebpfy {
@@ -46,100 +43,80 @@ func newEbpfy(eggi *Eggy) *ebpfy {
 	return &egg
 }
 
+// loadModule loads one eBPF per one egg
+func (eby *ebpfy) loadModule(ctx context.Context) error {
+	var err error
+
+	logger := klog.FromContext(ctx)
+	if eby.eggy.bpfModule == nil {
+		logger.V(2).Info("Loading eBPF module", "file", BpfObjectFileName, "egg", eby.eggy.Name)
+
+		eby.eggy.Lock()
+		defer eby.eggy.Unlock()
+
+		eby.eggy.bpfModule, err = bpf.NewModuleFromFile(BpfObjectFileName)
+		if err != nil {
+			return err
+		}
+		err = eby.eggy.bpfModule.BPFLoadObject()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to load BPF object: %s\n", err)
+			return err
+		}
+		logger.V(2).Info("eBPF module loaded", "file", BpfObjectFileName, "egg", eby.eggy.Name)
+	}
+
+	return nil
+}
+
 // run runs the ebpfy, and if neither nsNetPath nor cgroupPath is Set, it will run the ebpfy in the current network netspace (tc over cgroup
 func (eby *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType common.ProgramType, netNsPath string, cgroupPath string, pid uint32) error {
 	var err error
-
-	fmt.Println("deep[ebpfy:run]Starting ebpfy...")
-	eby.bpfModule, err = bpf.NewModuleFromFile(BpfObjectFileName)
-	if err != nil {
-		return err
-	}
-
-	err = eby.bpfModule.BPFLoadObject()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "deep[pbf:run]Failed to load BPF object: %v\n", err)
-		return err
-	}
-
 	logger := klog.FromContext(ctx)
 
-	logger.Info("Attaching eBPF program having", programType)
-	if /*len(cgroupPath) == 0*/ programType == common.ProgramTypeTC {
-		//time.Sleep(4 * time.Second)
-
-		//err = attachTcProg(ebpfy.bpfModule, ebpfy.Eggy.IngressInterface, bpf.BPFTcIngress, "tc_ingress")
-		err = attachTcBpfIngressStack(eby.bpfModule, eby.eggy.EgressInterface, netNsPath)
-		must(err, "Can't attach TC hook.")
-		//err = attachTcProg(ebpfy.bpfModule, ebpfy.Eggy.EgressInterface, bpf.BPFTcEgress, "tc_egress")
-		err = attachTcBpfEgressStack(eby.bpfModule, eby.eggy.EgressInterface, netNsPath, eby.eggy.Shaping)
-		must(err, "Can't attach TC hook.")
-		logger.Info("Attached eBPF program to tc hooks")
-
-		//tools.ShapeEgressInterface(netNsPath, ebpfy.EgressInterface)
-
-	} else {
-		//err = attachTcCgroupEgressStack(eby.Eggy.EgressInterface, eby.cgroupNetCls, eby.Eggy.Shaping, netNsPath, pid)
-		//must(err, "can't attach tc cgroup stack")
-		fmt.Println("deep[bpf:run][cgroupPath]", cgroupPath)
-		err = attachCgroupProg(eby.bpfModule, "cgroup__skb_egress", bpf.BPFAttachTypeCgroupInetEgress, cgroupPath)
-		must(err, "can't attach cgroup hook")
-		err = attachCgroupProg(eby.bpfModule, "cgroup__skb_ingress", bpf.BPFAttachTypeCgroupInetIngress, cgroupPath)
-		must(err, "can't attach cgroup hook")
-		logger.Info("Attached eBPF program to cgroup hooks")
-		//err = attachCgroupProg(ebpfy.bpfModule, "cgroup__sock", bpf.BPFAttachTypeCgroupSockOps)
-		//must(err, "can't attach cgroup hook")
-
+	err = eby.loadModule(ctx)
+	if err != nil {
+		return err
 	}
 
-	eby.packets = make(chan []byte) //TODO need Close() on this channel
+	eby.eggy.RLock()
+	defer eby.eggy.RUnlock()
 
-	rb, err := eby.bpfModule.InitRingBuf("packets", eby.packets)
-	must(err, "Can't initialize ring buffer map.")
+	logger.Info("attaching eBPF program having", programType)
+	if programType == common.ProgramTypeTC {
+		err = attachTcBpfIngressStack(eby.eggy.bpfModule, eby.eggy.EgressInterface, netNsPath)
+		must(err, "Can't attach TC hook.") //TODO: refactor
+		err = attachTcBpfEgressStack(eby.eggy.bpfModule, eby.eggy.EgressInterface, netNsPath, eby.eggy.Shaping)
+		must(err, "Can't attach TC hook.") //TODO: refactor
+		logger.Info("Attached eBPF program to tc hooks")
+	} else {
+		fmt.Println("deep[bpf:run][cgroupPath]", cgroupPath)
+		err = attachCgroupProg(eby.eggy.bpfModule, "cgroup__skb_egress", bpf.BPFAttachTypeCgroupInetEgress, cgroupPath)
+		must(err, "can't attach cgroup hook") //TODO: refactor
+		err = attachCgroupProg(eby.eggy.bpfModule, "cgroup__skb_ingress", bpf.BPFAttachTypeCgroupInetIngress, cgroupPath)
+		must(err, "can't attach cgroup hook") //TODO: refactor
+		logger.Info("Attached eBPF program to cgroup hooks")
+	}
 
-	//rb.Start()
+	eby.packets = make(chan []byte)
+
+	rb, err := eby.eggy.bpfModule.InitRingBuf("packets", eby.packets)
+	must(err, "Can't initialize ring buffer map.") //TODO: refactor
+
 	rb.Poll(300)
-	//TODO: remove this:
-	//go func() {
-	//	time.Sleep(3 * time.Second)
-	//	//_, err := exec.Command("curl", "https://www.onet.pl").Output()
-	//	//_, err := exec.Command("curl", "-g", "-6", "https://bbc.com").Output()
-	//	_, err := exec.Command("curl", "-g", "https://bbc.com").Output()
-	//	if err != nil {
-	//		fmt.Fprintln(os.Stderr, err)
-	//		os.Exit(-1)
-	//	}
-	//}()
 
-	eby.ipv4ACL, err = eby.bpfModule.GetMap("ipv4_lpm_map")
-	eby.ipv6ACL, err = eby.bpfModule.GetMap("ipv6_lpm_map")
-	must(err, "Can't get map") //TODO remove Must
+	eby.ipv4ACL, err = eby.eggy.bpfModule.GetMap("ipv4_lpm_map")
+	eby.ipv6ACL, err = eby.eggy.bpfModule.GetMap("ipv6_lpm_map")
+	must(err, "Can't get map") //TODO refactor
 
 	eby.initCIDRs()
 	eby.initCNs()
 
 	wg.Add(1)
 	go func() {
-		//LIFO
-		defer wg.Done() //added with new tc filter approach via go-tc
-		defer eby.bpfModule.Close()
-		//defer func() {
-		//	//if /*len(cgroupPath) == 0*/ programType == common.ProgramTypeTC {
-		//	//	//tools.CleanInterfaces(netNsPath, ebpfy.IngressInterface, ebpfy.EgressInterface)
-		//	//	if err := net.CleanIngressTcNetStack(netNsPath, eby.eggy.IngressInterface); err != nil {
-		//	//		fmt.Println(err)
-		//	//	}
-		//	//	if err := net.CleanEgressTcNetStack(netNsPath, eby.eggy.EgressInterface); err != nil {
-		//	//		fmt.Println(err)
-		//	//	}
-		//	//}
-		//	//} else {
-		//	//	// TODO add condition on shaping
-		//	//	if err := net.CleanEgressTcNetStack(netNsPath, eby.Eggy.EgressInterface); err != nil {
-		//	//		fmt.Println(err)
-		//	//	}
-		//	//}
-		//}()
+		defer wg.Done()          //added with new tc filter approach via go-tc
+		defer close(eby.packets) //TODO observe if this is needed
+		//defer eby.bpfModule.Close() -> moved to eggy
 
 		var lwg sync.WaitGroup
 		//runMapLooper(ctx, ebpfy.ipv4ACL, ebpfy.CommonNames, ipv4, &lwg, netNsPath, cgroupPath)
@@ -147,10 +124,10 @@ func (eby *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType commo
 		eby.runPacketsLooper(ctx, &lwg, netNsPath, cgroupPath)
 		lwg.Wait()
 
-		fmt.Println("///Stopping recvLoop.")
+		fmt.Println("///Stopping recvLoop.") //TODO: refactor
 		rb.Stop()
 		rb.Close()
-		fmt.Println("recvLoop stopped.")
+		fmt.Println("recvLoop stopped.") //TODO: refactor
 	}()
 
 	return nil
@@ -187,7 +164,6 @@ func (eby *ebpfy) initCNs() {
 }
 
 func (eby *ebpfy) updateCIDRs() error {
-
 	// ipv4: Set stale
 	i := eby.ipv4ACL.Iterator() //determineHost Endian search by Itertaot in libbfpgo
 	if i.Err() != nil {
