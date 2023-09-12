@@ -14,7 +14,8 @@ BASE_TAG ?= latest
 DEBUG ?= 1
 
 BUILD_DIR = build
-TARGET_CLI := $(BUILD_DIR)/$(MAIN)-cli
+TARGET_CLI_STATIC := $(BUILD_DIR)/$(MAIN)-cli-static
+TARGET_CLI_DYN := $(BUILD_DIR)/$(MAIN)-cli-dynamic
 TARGET_K8S_STATIC := $(BUILD_DIR)/$(MAIN)-k8s-static
 TARGET_K8S_DYN := $(BUILD_DIR)/$(MAIN)-k8s-dynamic
 TARGET_BPF := $(BUILD_DIR)/$(MAIN).bpf.o
@@ -49,15 +50,12 @@ GO_EXTLDFLAGS_DYN = '-extldflags "-lelf -lz  -Wl,-rpath=$(LIBBPF_DYN_LIB) -L$(LI
 
 .PHONY: all
 #all: $(TARGET_BPF) $(TARGET_CLI) $(TARGET_K8S_STATIC)
-all: $(TARGET_BPF) $(TARGET_CLI) $(TARGET_K8S_DYN)
-
+all: $(TARGET_BPF) $(TARGET_CLI_DYN) $(TARGET_K8S_DYN)
 
 $(BPF_SRC): $(BPF_HEADERS) vmlinux.h
 
-
 # -D__TARGET_ARCH_$(ARCH) - removed - needed only for tracing
 $(TARGET_BPF): $(BPF_SRC)
-	echo "EBPF:" >&2
 	$(CC) \
 		-MJ compile_commands.json \
 	    -g \
@@ -70,11 +68,15 @@ $(TARGET_BPF): $(BPF_SRC)
 		-c $^ \
 		-o $@
 
-$(TARGET_CLI): $(CMD_CLI_GO_SRC) $(TARGET_BPF)
-	echo "GO:" >&2
+$(TARGET_CLI_STATIC): $(CMD_CLI_GO_SRC) $(TARGET_BPF)
 	CGO_CFLAGS=$(CGO_CFLAGS) $(GO) build \
 	-tags netgo -ldflags $(GO_EXTLDFLAGS_STATIC) \
-	-o $(TARGET_CLI) ./cmd/cli/$(MAIN).go
+	-o $@ ./cmd/cli/$(MAIN).go
+
+$(TARGET_CLI_DYN): $(CMD_CLI_GO_SRC) $(TARGET_BPF)
+	CGO_CFLAGS=$(CGO_CFLAGS) $(GO) build \
+	-tags netgo -ldflags $(GO_EXTLDFLAGS_DYN) \
+	-o $@ ./cmd/cli/$(MAIN).go
 
 .PHONY: clean
 clean:
@@ -131,14 +133,14 @@ $(TARGET_K8S_STATIC): $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
 	-trimpath \
 	-tags netgo -ldflags $(GO_EXTLDFLAGS_STATIC) \
 	-gcflags "all=-N -l" \
-	-o $(TARGET_K8S_STATIC) ./cmd/kubernetes/$(MAIN).go
+	-o $@ ./cmd/kubernetes/$(MAIN).go
 
 $(TARGET_K8S_DYN): $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
 	CC=$(CC); CGO_ENABLED=1; CGO_CFLAGS=$(CGO_CFLAGS) \
 	$(GO) build \
 	-tags netgo -ldflags $(GO_EXTLDFLAGS_DYN) \
 	-gcflags "all=-N -l" \
-	-o $(TARGET_K8S_DYN) ./cmd/kubernetes/$(MAIN).go
+	-o $@ ./cmd/kubernetes/$(MAIN).go
 
 .PHONY: k8s-build-cmd-dynamic
 k8s-build-cmd-dynamic: $(TARGET_K8S_DYN)

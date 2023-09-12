@@ -31,6 +31,8 @@
 
 #if defined DEBUG && DEBUG == 0
 #define bpf_printk(fmt,...)
+#define ipv6_print_ip(char *str, const __u8 *ipv6)
+#define ipv4_print_ip(char *prefix, char *suffix, __u32 ip)
 #endif
 
 //DNS header structure
