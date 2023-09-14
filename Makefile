@@ -35,15 +35,10 @@ BPF_HEADERS := $(wildcard ./kernel/*.h)
 CFLAGS = -g -O2 -Wall -fpie
 
 CGO_CFLAGS = "-I$(abspath $(LIBBPF_INCLUDES))"
-CGO_LDFLAGS_STATIC = "-lelf -lz -L$(LIBBPF_STATIC_LIB) -lbpf"
-#CGO_EXTLDFLAGS_STATIC = '-w -extldflags "-static"'
-# librabbry order is important for GO_EXTLDFLAGS_STATIC:
-#GO_EXTLDFLAGS_STATIC = '-w -extldflags "-static $(LIBBPF_STATIC_LIB) -lelf -lz"'
-GO_EXTLDFLAGS_STATIC = '-w -extldflags "-static"'
+CGO_LDFLAGS_STATIC = "-static -lelf -lz -L$(LIBBPF_STATIC_LIB) -lbpf"
 
 # inject shared library search path into the executable: -Wl,rpath=...:
 # -w - removed (reason: https://youtrack.jetbrains.com/issue/GO-15231/Remote-debugging-breakpoint-not-reachable-could-not-find-file)
-#CGO_EXTLDFLAGS_DYN = '-extldflags "-lelf -lz  -Wl,-rpath=$(LIBBPF_DYN_LIB) -L$(LIBBPF_DYN_LIB) -lbpf"'
 CGO_LDFLAGS_DYN = '-lelf -lz  -Wl,-rpath=$(LIBBPF_DYN_LIB) -L$(LIBBPF_DYN_LIB) -lbpf'
 
 
@@ -79,7 +74,7 @@ $(TARGET_CLI_STATIC): $(LIBBPF_STATIC_LIB) $(CMD_CLI_GO_SRC) $(TARGET_BPF)
 	CGO_CFLAGS=$(CGO_CFLAGS) \
 	CGO_LDFLAGS=$(CGO_LDFLAGS_STATIC) \
 	$(GO) build \
-	-tags netgo -ldflags $(GO_EXTLDFLAGS_STATIC) \
+	-tags netgo \
 	-o $@ ./cmd/cli/$(MAIN).go
 
 $(TARGET_CLI_DYN): $(LIBBPF_DYN_LIB) $(CMD_CLI_GO_SRC) $(TARGET_BPF)
@@ -92,7 +87,7 @@ $(TARGET_CLI_DYN): $(LIBBPF_DYN_LIB) $(CMD_CLI_GO_SRC) $(TARGET_BPF)
 .PHONY: clean
 clean:
 	$(GO) clean -i
-	rm $(TARGET_BPF) $(TARGET_CLI) $(TARGET_K8S_STATIC) $(TARGET_K8S_DYN) compile_commands.json  2> /dev/null || true
+	rm $(TARGET_BPF) $(TARGET_CLI) $(TARGET_K8S_STATIC) $(TARGET_CLI_STATIC) $(TARGET_K8S_DYN) $(TARGET_CLI_DYN) compile_commands.json  2> /dev/null || true
 
 vmlinux.h:
 	bpftool btf dump file /sys/kernel/btf/vmlinux format c > ./kernel/vmlinux.h
@@ -144,7 +139,7 @@ $(TARGET_K8S_STATIC): $(LIBBPF_STATIC_LIB) $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
 	CGO_LDFLAGS=$(CGO_LDFLAGS_STATIC) \
 	$(GO) build \
 	-trimpath \
-	-tags netgo -ldflags $(GO_EXTLDFLAGS_STATIC) \
+	-tags netgo \
 	-gcflags "all=-N -l" \
 	-o $@ ./cmd/kubernetes/$(MAIN).go
 

@@ -7,31 +7,13 @@ L7 egress policy and shaping enforcer to use either as standalone program or K8s
 It is now actively developing hence not stable yet. So, don't try this at home right now.
 
 # Building 
-## Prerequisites
-You need static or shared libpf installed. 
-1. Clone [libpf](https://github.com/libbpf/libbpf) upstream
-2. Build your static `libbpf.a` and shared `libbpf.so`, e.g.
-```bash
-cd src
-mkdir build
-sudo OBJDIR=build DESTDIR=/ make install
+Dynamically linked
 ```
-, then 
-from your root directory you can find outcomes here:
+make dynamic
 ```
-/usr/includes
-/usr/lib64
+Statically linked:
 ```
-
-## CLI:
-```
-make clean
-LIBBPF_DIR=/ make all
-```
-## K8s operator/controller:
-```
-make clean
-LIBBPF_DIR=/ make k8s-build-cmd
+make static
 ```
 
 # Examples
