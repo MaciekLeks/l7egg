@@ -23,7 +23,7 @@ make static
 # Examples
 
 ## K8s
-Sample example from the `examples` directory:
+Below is one of the usage examples from the 'examples' directory:
 ```yml
 apiVersion: maciekleks.dev/v1alpha1
 kind: ClusterEgg
