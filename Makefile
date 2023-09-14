@@ -77,7 +77,7 @@ $(TARGET_CLI_STATIC): $(LIBBPF_STATIC_LIB) $(CMD_CLI_GO_SRC) $(TARGET_BPF)
 	CGO_CFLAGS=$(CGO_CFLAGS) \
 	CGO_LDFLAGS=$(CGO_LDFLAGS_STATIC) \
 	$(GO) build \
-	-tags netgo \
+	-tags osusergo,netgo,dlopen \
 	-ldflags $(CGO_EXTLDFLAGS_STATIC) \
 	-o $@ ./cmd/cli/$(MAIN).go
 
@@ -142,7 +142,7 @@ $(TARGET_K8S_STATIC): $(LIBBPF_STATIC_LIB) $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
 	CGO_LDFLAGS=$(CGO_LDFLAGS_STATIC) \
 	$(GO) build \
 	-trimpath \
-	-tags netgo \
+	-tags osusergo,netgo \
 	-ldflags $(CGO_EXTLDFLAGS_STATIC) \
 	-gcflags "all=-N -l" \
 	-o $@ ./cmd/kubernetes/$(MAIN).go
