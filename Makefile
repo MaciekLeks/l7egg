@@ -33,10 +33,9 @@ BPF_SRC := $(wildcard ./kernel/*.c)
 BPF_HEADERS := $(wildcard ./kernel/*.h)
 
 CFLAGS = -g -O2 -Wall -fpie
-LDFLAGS = $(LDFLAGS)
 
 CGO_CFLAGS = "-I$(abspath $(LIBBPF_INCLUDES))"
-CGO_LDFLAGS_STATIC = "-lelf -lz $(LIBBPF_STATIC_LIB)"
+CGO_LDFLAGS_STATIC = "-lelf -lz -L$(LIBBPF_STATIC_LIB) -lbpf"
 #CGO_EXTLDFLAGS_STATIC = '-w -extldflags "-static"'
 # librabbry order is important for GO_EXTLDFLAGS_STATIC:
 #GO_EXTLDFLAGS_STATIC = '-w -extldflags "-static $(LIBBPF_STATIC_LIB) -lelf -lz"'
@@ -44,7 +43,8 @@ GO_EXTLDFLAGS_STATIC = '-w -extldflags "-static"'
 
 # inject shared library search path into the executable: -Wl,rpath=...:
 # -w - removed (reason: https://youtrack.jetbrains.com/issue/GO-15231/Remote-debugging-breakpoint-not-reachable-could-not-find-file)
-GO_EXTLDFLAGS_DYN = '-extldflags "-lelf -lz  -Wl,-rpath=$(LIBBPF_DYN_LIB) -L$(LIBBPF_DYN_LIB) -lbpf"'
+#CGO_EXTLDFLAGS_DYN = '-extldflags "-lelf -lz  -Wl,-rpath=$(LIBBPF_DYN_LIB) -L$(LIBBPF_DYN_LIB) -lbpf"'
+CGO_LDFLAGS_DYN = '-lelf -lz  -Wl,-rpath=$(LIBBPF_DYN_LIB) -L$(LIBBPF_DYN_LIB) -lbpf'
 
 
 .PHONY: dynamic
@@ -83,8 +83,10 @@ $(TARGET_CLI_STATIC): $(LIBBPF_STATIC_LIB) $(CMD_CLI_GO_SRC) $(TARGET_BPF)
 	-o $@ ./cmd/cli/$(MAIN).go
 
 $(TARGET_CLI_DYN): $(LIBBPF_DYN_LIB) $(CMD_CLI_GO_SRC) $(TARGET_BPF)
-	CGO_CFLAGS=$(CGO_CFLAGS) $(GO) build \
-	-tags netgo -ldflags $(GO_EXTLDFLAGS_DYN) \
+	CGO_CFLAGS=$(CGO_CFLAGS) \
+	CGO_LDFLAGS=$(CGO_LDFLAGS_DYN) \
+	$(GO) build \
+	-tags netgo \
 	-o $@ ./cmd/cli/$(MAIN).go
 
 .PHONY: clean
@@ -147,9 +149,12 @@ $(TARGET_K8S_STATIC): $(LIBBPF_STATIC_LIB) $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
 	-o $@ ./cmd/kubernetes/$(MAIN).go
 
 $(TARGET_K8S_DYN): $(LIBBPF_DYN_LIB) $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
-	CC=$(CC); CGO_ENABLED=1; CGO_CFLAGS=$(CGO_CFLAGS) \
+	CC=$(CC) \
+	CGO_ENABLED=1 \
+	CGO_CFLAGS=$(CGO_CFLAGS) \
+	CGO_LDFLAGS=$(CGO_LDFLAGS_DYN) \
 	$(GO) build \
-	-tags netgo -ldflags $(GO_EXTLDFLAGS_DYN) \
+	-tags netgo \
 	-gcflags "all=-N -l" \
 	-o $@ ./cmd/kubernetes/$(MAIN).go
 
