@@ -3,14 +3,14 @@ module github.com/MaciekLeks/l7egg
 go 1.20
 
 require (
-	github.com/aquasecurity/libbpfgo v0.4.9-libbpf-1.2.0
+	github.com/aquasecurity/libbpfgo v0.5.0-libbpf-1.2
 	github.com/containerd/cgroups v1.1.0
 	github.com/containerd/cgroups/v3 v3.0.2
 	github.com/containerd/containerd v1.7.1
 	github.com/containernetworking/plugins v1.2.0
 	github.com/florianl/go-tc v0.4.2
+	github.com/go-logr/logr v1.2.3
 	github.com/google/gopacket v1.1.19
-	github.com/google/gops v0.3.27
 	github.com/opencontainers/runtime-spec v1.1.0-rc.1
 	golang.org/x/sys v0.7.0
 	k8s.io/api v0.26.3
@@ -36,7 +36,6 @@ require (
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/emicklei/go-restful/v3 v3.10.1 // indirect
 	github.com/evanphx/json-patch v4.12.0+incompatible // indirect
-	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
 	github.com/go-openapi/jsonreference v0.20.0 // indirect

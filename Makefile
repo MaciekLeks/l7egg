@@ -7,7 +7,6 @@ CC = clang
 GO = /usr/local/go/bin/go
 
 MAIN = l7egg
-GO = /usr/local/go/bin/go
 
 TAG ?= latest
 BASE_TAG ?= latest
@@ -20,19 +19,18 @@ TARGET_K8S_STATIC := $(BUILD_DIR)/$(MAIN)-k8s-static
 TARGET_K8S_DYN := $(BUILD_DIR)/$(MAIN)-k8s-dynamic
 TARGET_BPF := $(BUILD_DIR)/$(MAIN).bpf.o
 
-# clone https://github.com/libbpf/libbpf
-# then, go to src dir and run e.g.
-# OBJDIR=build DESTDIR=root make install
-LIBBPF_DIR ?= /home/mlk/dev/github/libbpf/src/root/usr
-LIBBPF_STATIC_LIB = $(LIBBPF_DIR)/lib64/libbpf.a
-LIBBPF_INCLUDES = $(LIBBPF_DIR)/include
-LIBBPF_DYN_LIB = $(LIBBPF_DIR)/lib64
+# $make in libbpf/src will create libbpf.a, libbpf.so
+PRJ_DIR := $(shell pwd)
+LIBBPF_DIR ?= $(PRJ_DIR)/libbpf/src
+LIBBPF_STATIC_LIB = $(LIBBPF_DIR)/libbpf.a
+LIBBPF_INCLUDES = $(LIBBPF_DIR)
+LIBBPF_DYN_LIB_PATH = $(LIBBPF_DIR)
+LIBBPF_DYN_LIB = $(LIBBPF_DIR)/libbpf.so
 
 CMD_CLI_GO_SRC := ./cmd/cli/*.go
 CMD_K8S_GO_SRC := ./cmd/kubernetes/*.go
 BPF_SRC := $(wildcard ./kernel/*.c)
 BPF_HEADERS := $(wildcard ./kernel/*.h)
-
 
 CFLAGS = -g -O2 -Wall -fpie
 LDFLAGS = $(LDFLAGS)
@@ -41,18 +39,27 @@ CGO_CFLAGS = "-I$(abspath $(LIBBPF_INCLUDES))"
 CGO_LDFLAGS_STATIC = "-lelf -lz $(LIBBPF_STATIC_LIB)"
 #CGO_EXTLDFLAGS_STATIC = '-w -extldflags "-static"'
 # librabbry order is important for GO_EXTLDFLAGS_STATIC:
-GO_EXTLDFLAGS_STATIC = '-w -extldflags "-static $(LIBBPF_STATIC_LIB) -lelf -lz"'
+#GO_EXTLDFLAGS_STATIC = '-w -extldflags "-static $(LIBBPF_STATIC_LIB) -lelf -lz"'
+GO_EXTLDFLAGS_STATIC = '-w -extldflags "-static"'
 
 # inject shared library search path into the executable: -Wl,rpath=...:
 # -w - removed (reason: https://youtrack.jetbrains.com/issue/GO-15231/Remote-debugging-breakpoint-not-reachable-could-not-find-file)
 GO_EXTLDFLAGS_DYN = '-extldflags "-lelf -lz  -Wl,-rpath=$(LIBBPF_DYN_LIB) -L$(LIBBPF_DYN_LIB) -lbpf"'
 
 
-.PHONY: all
-#all: $(TARGET_BPF) $(TARGET_CLI) $(TARGET_K8S_STATIC)
-all: $(TARGET_BPF) $(TARGET_CLI_DYN) $(TARGET_K8S_DYN)
+.PHONY: dynamic
+dynamic: $(LIBBPF_DYN_LIB) $(TARGET_BPF) $(TARGET_CLI_DYN) $(TARGET_K8S_DYN)
+
+.PHONY: static
+static: $(LIBBPF_STATIC_LIB) $(TARGET_BPF) $(TARGET_CLI_STATIC) $(TARGET_K8S_STATIC)
 
 $(BPF_SRC): $(BPF_HEADERS) vmlinux.h
+
+$(LIBBPF_STATIC_LIB): $(wildcard $(LIBBPF_DIR)/*.c) $(wildcard $(LIBBPF_DIR)/*.h)
+	BUILD_STATIC_ONLY=y $(MAKE) -C $(LIBBPF_DIR)
+
+$(LIBBPF_DYN_LIB): $(wildcard $(LIBBPF_DIR)/*.c) $(wildcard $(LIBBPF_DIR)/*.h)
+	$(MAKE) -C $(LIBBPF_DIR)
 
 # -D__TARGET_ARCH_$(ARCH) - removed - needed only for tracing
 $(TARGET_BPF): $(BPF_SRC)
@@ -68,12 +75,14 @@ $(TARGET_BPF): $(BPF_SRC)
 		-c $^ \
 		-o $@
 
-$(TARGET_CLI_STATIC): $(CMD_CLI_GO_SRC) $(TARGET_BPF)
-	CGO_CFLAGS=$(CGO_CFLAGS) $(GO) build \
+$(TARGET_CLI_STATIC): $(LIBBPF_STATIC_LIB) $(CMD_CLI_GO_SRC) $(TARGET_BPF)
+	CGO_CFLAGS=$(CGO_CFLAGS) \
+	CGO_LDFLAGS=$(CGO_LDFLAGS_STATIC) \
+	$(GO) build \
 	-tags netgo -ldflags $(GO_EXTLDFLAGS_STATIC) \
 	-o $@ ./cmd/cli/$(MAIN).go
 
-$(TARGET_CLI_DYN): $(CMD_CLI_GO_SRC) $(TARGET_BPF)
+$(TARGET_CLI_DYN): $(LIBBPF_DYN_LIB) $(CMD_CLI_GO_SRC) $(TARGET_BPF)
 	CGO_CFLAGS=$(CGO_CFLAGS) $(GO) build \
 	-tags netgo -ldflags $(GO_EXTLDFLAGS_DYN) \
 	-o $@ ./cmd/cli/$(MAIN).go
@@ -83,7 +92,6 @@ clean:
 	$(GO) clean -i
 	rm $(TARGET_BPF) $(TARGET_CLI) $(TARGET_K8S_STATIC) $(TARGET_K8S_DYN) compile_commands.json  2> /dev/null || true
 
-.PHONY: vmlinuxh
 vmlinux.h:
 	bpftool btf dump file /sys/kernel/btf/vmlinux format c > ./kernel/vmlinux.h
 
@@ -91,12 +99,12 @@ vmlinux.h:
 .PHONY: remote-build2
 remote-build2:
 	rsync -ahv  --delete --exclude '.git' . mlk@ubu-ebpf2:/home/mlk/go/src/github.com/MaciekLeks/l7egg
-	ssh mlk@ubu-ebpf2 "cd /home/mlk/go/src/github.com/MaciekLeks/l7egg && make clean && make all"
+	ssh mlk@ubu-ebpf2 "cd /home/mlk/go/src/github.com/MaciekLeks/l7egg && make clean && make dynamic"
 
 .PHONY: remote-build3
 remote-build3:
 	rsync -ahv  --delete --exclude '.git' . mlk@ubu-ebpf3:/home/mlk/go/src/github.com/MaciekLeks/l7egg
-	ssh mlk@ubu-ebpf3 "cd /home/mlk/go/src/github.com/MaciekLeks/l7egg && make clean && make all"
+	ssh mlk@ubu-ebpf3 "cd /home/mlk/go/src/github.com/MaciekLeks/l7egg && make clean && make dynamic"
 
 .PHONY: remote-build-all
 remote-build-all: remote-build2 remote-build3
@@ -127,15 +135,18 @@ k8s-build-client:
 	--go-header-file $(K8S_CODE_GENERATOR)/hack/boilerplate.go.txt
 
 #-gcflags "all=-N -l" - debug only
-$(TARGET_K8S_STATIC): $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
-	CC=$(CC); CGO_ENABLED=1; CGO_CFLAGS=$(CGO_CFLAGS) \
+$(TARGET_K8S_STATIC): $(LIBBPF_STATIC_LIB) $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
+	CC=$(CC) \
+	CGO_ENABLED=1 \
+ 	CGO_CFLAGS=$(CGO_CFLAGS) \
+	CGO_LDFLAGS=$(CGO_LDFLAGS_STATIC) \
 	$(GO) build \
 	-trimpath \
 	-tags netgo -ldflags $(GO_EXTLDFLAGS_STATIC) \
 	-gcflags "all=-N -l" \
 	-o $@ ./cmd/kubernetes/$(MAIN).go
 
-$(TARGET_K8S_DYN): $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
+$(TARGET_K8S_DYN): $(LIBBPF_DYN_LIB) $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
 	CC=$(CC); CGO_ENABLED=1; CGO_CFLAGS=$(CGO_CFLAGS) \
 	$(GO) build \
 	-tags netgo -ldflags $(GO_EXTLDFLAGS_DYN) \
@@ -144,8 +155,6 @@ $(TARGET_K8S_DYN): $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
 
 .PHONY: k8s-build-cmd-dynamic
 k8s-build-cmd-dynamic: $(TARGET_K8S_DYN)
-
-#CGO_LDFLAGS=$(CGO_LDFLAGS_DYNAMIC) \
 
 # K8S_CONTROLLER_GEN ?= ${GOPATH}/src/github.com/kubernetes-sigs/controller-tools/cmd/controller-gen
 # before use build controller-gen in  $K8S_CONTROLLER_GEN using command `go build -o controller-gen`
