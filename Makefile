@@ -162,9 +162,3 @@ k8s-build-cmd-dynamic: $(TARGET_K8S_DYN)
 .PHONY: k8s-build-crds
 k8s-build-crds:
 	$(GO) generate ./...
-	#$(K8S_CONTROLLER_GEN)/controller-gen crd \
-	#paths=./pkg/apis/... \
-	#output:crd:dir=manifests \
-
-#tools/tc-cleaner: tools/tc-cleaner.go
-#	$(GO) build -o $@ $<

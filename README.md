@@ -7,7 +7,7 @@ L7 egress policy and shaping enforcer to use either as standalone program or K8s
 It is now actively developing hence not stable yet. So, don't try this at home right now.
 
 # Building 
-Dynamically linked
+Dynamically linked:
 ```
 make dynamic
 ```
