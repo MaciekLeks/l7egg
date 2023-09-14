@@ -35,7 +35,7 @@ BPF_HEADERS := $(wildcard ./kernel/*.h)
 CFLAGS = -g -O2 -Wall -fpie
 
 CGO_CFLAGS = "-I$(abspath $(LIBBPF_INCLUDES))"
-CGO_LDFLAGS_STATIC = "-Wl,-Bstatic -L$(LIBBPF_STATIC_LIB) -lbpf -Wl,-Bdynamic -lz -elf"
+CGO_LDFLAGS_STATIC = "-Wl,-Bstatic -L$(LIBBPF_STATIC_LIB) -lbpf -Wl,-Bdynamic -lz -lelf"
 
 # inject shared library search path into the executable: -Wl,rpath=...:
 # -w - removed (reason: https://youtrack.jetbrains.com/issue/GO-15231/Remote-debugging-breakpoint-not-reachable-could-not-find-file)
