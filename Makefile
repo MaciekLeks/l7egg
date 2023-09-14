@@ -19,6 +19,8 @@ TARGET_K8S_STATIC := $(BUILD_DIR)/$(MAIN)-k8s-static
 TARGET_K8S_DYN := $(BUILD_DIR)/$(MAIN)-k8s-dynamic
 TARGET_BPF := $(BUILD_DIR)/$(MAIN).bpf.o
 
+VMLINUX_H := ./kernel/vmlinux.h
+
 # $make in libbpf/src will create libbpf.a, libbpf.so
 PRJ_DIR := $(shell pwd)
 LIBBPF_DIR ?= $(PRJ_DIR)/libbpf/src
@@ -51,7 +53,7 @@ dynamic: $(LIBBPF_DYN_LIB) $(TARGET_BPF) $(TARGET_CLI_DYN) $(TARGET_K8S_DYN)
 .PHONY: static
 static: $(LIBBPF_STATIC_LIB) $(TARGET_BPF) $(TARGET_CLI_STATIC) $(TARGET_K8S_STATIC)
 
-$(BPF_SRC): $(BPF_HEADERS) vmlinux.h
+$(BPF_SRC): $(BPF_HEADERS) $(VMLINUX_H)
 
 $(LIBBPF_STATIC_LIB): $(wildcard $(LIBBPF_DIR)/*.c) $(wildcard $(LIBBPF_DIR)/*.h)
 	BUILD_STATIC_ONLY=y $(MAKE) -C $(LIBBPF_DIR)
@@ -92,7 +94,7 @@ clean:
 	$(GO) clean -i
 	rm $(TARGET_BPF) $(TARGET_CLI) $(TARGET_K8S_STATIC) $(TARGET_CLI_STATIC) $(TARGET_K8S_DYN) $(TARGET_CLI_DYN) compile_commands.json  2> /dev/null || true
 
-vmlinux.h:
+$(VMLINUX_H):
 	bpftool btf dump file /sys/kernel/btf/vmlinux format c > ./kernel/vmlinux.h
 
 
