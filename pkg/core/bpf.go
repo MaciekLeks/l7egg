@@ -114,8 +114,8 @@ func (eby *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType commo
 
 	wg.Add(1)
 	go func() {
-		defer wg.Done()          //added with new tc filter approach via go-tc
-		defer close(eby.packets) //TODO observe if this is needed
+		defer wg.Done() //added with new tc filter approach via go-tc
+		//defer close(eby.packets) //TODO observe if this is needed
 		//defer eby.bpfModule.Close() -> moved to eggy
 
 		var lwg sync.WaitGroup
