@@ -15,7 +15,7 @@ Dynamic linking for already installed libbpf.so:
 ```
 LIBBPF_DIR=/usr/lib64 make dynamic 
 ```
-Statically linked (not recommended)
+Statically linked (not recommended):
 ```
 make static
 ```
