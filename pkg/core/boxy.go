@@ -7,6 +7,7 @@ import (
 	"github.com/MaciekLeks/l7egg/pkg/net"
 	cgroupsv2 "github.com/containerd/cgroups/v2"
 	"github.com/containerd/cgroups/v3/cgroup1"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog/v2"
 	"sync"
 )
@@ -146,14 +147,24 @@ func (b *CgroupNetClsBoxy) Stop() error {
 	}
 	err = b.cgroupNetCls.Delete()
 	if err != nil {
-		return fmt.Errorf("failed to delete net cls cgroup: %v", err)
+		fmt.Printf("can't delete cgroupNetCls - we'are good with that", b) //TODO - are we good?
+		return nil
+		//return fmt.Errorf("failed to delete net cls cgroup: %v", err)
 	}
 	return nil
 }
 
-func (b *TcBoxy) Stop() error {
-	_ = b.Boxy.Stop()
-	return b.ebpfy.stopTcNetStack(b.netNsPath)
+func (b *CgroupBoxy) Stop() error {
+	var err error
+	err = b.ebpfy.stop()
+	if err != nil {
+		utilruntime.HandleError(err)
+	}
+	err = b.Boxy.Stop()
+	if err != nil {
+		utilruntime.HandleError(err)
+	}
+	return err
 }
 
 func (b *Boxy) Wait() {

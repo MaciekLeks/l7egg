@@ -294,7 +294,7 @@ func (c *Controller) deleteEgg(ctx context.Context, eggNamespaceName types.Names
 	logger.Info("Deleting egg's boxes")
 	var err error
 	c.podyInfoMap.Range(func(key types.NamespacedName, pb *Pody) bool {
-		if *pb.PairedWithEgg == eggNamespaceName {
+		if pb.PairedWithEgg != nil && *pb.PairedWithEgg == eggNamespaceName {
 			logger.Info("Stopping box", "pod", key)
 			if err = pb.StopBoxySet(); err != nil {
 				logger.Error(err, "stopping box failed", "pod", key)

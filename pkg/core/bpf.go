@@ -31,16 +31,35 @@ import (
 
 // ebpfy holds Eggy (extracted from ClusterEggSpec) and ebpf related structures, e.g. maps, channels operating on that maps
 type ebpfy struct {
-	eggy    *Eggy
-	ipv4ACL *bpf.BPFMap
-	ipv6ACL *bpf.BPFMap
-	packets chan []byte
+	eggy        *Eggy
+	ipv4ACL     *bpf.BPFMap
+	ipv6ACL     *bpf.BPFMap
+	packets     chan []byte
+	ingressLink *bpf.BPFLink
+	egressLink  *bpf.BPFLink
 }
 
 func newEbpfy(eggi *Eggy) *ebpfy {
 	var egg ebpfy
 	egg.eggy = eggi
 	return &egg
+}
+
+func (eby *ebpfy) stop() error {
+	var ierr, eerr error
+
+	if eby.ingressLink != nil {
+		ierr = eby.ingressLink.Destroy()
+	}
+	if eby.egressLink != nil {
+		eerr = eby.egressLink.Destroy()
+	}
+
+	if ierr != nil || eerr != nil {
+		return fmt.Errorf("Can't destroy BPF link: ingress: %s, egress: %s", ierr, eerr)
+	}
+
+	return nil
 }
 
 // loadModule loads one eBPF per one egg
@@ -90,12 +109,19 @@ func (eby *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType commo
 		must(err, "Can't attach TC hook.") //TODO: refactor
 		logger.Info("Attached eBPF program to tc hooks")
 	} else {
-		fmt.Println("deep[bpf:run][cgroupPath]", cgroupPath)
-		err = attachCgroupProg(eby.eggy.bpfModule, "cgroup__skb_egress", bpf.BPFAttachTypeCgroupInetEgress, cgroupPath)
-		must(err, "can't attach cgroup hook") //TODO: refactor
-		err = attachCgroupProg(eby.eggy.bpfModule, "cgroup__skb_ingress", bpf.BPFAttachTypeCgroupInetIngress, cgroupPath)
-		must(err, "can't attach cgroup hook") //TODO: refactor
-		logger.Info("Attached eBPF program to cgroup hooks")
+		var link *bpf.BPFLink
+		link, err = attachCgroupProg(ctx, eby.eggy.bpfModule, "cgroup__skb_egress", bpf.BPFAttachTypeCgroupInetEgress, cgroupPath)
+		if err != nil {
+			return fmt.Errorf("can't attach egress cgroup hook: %s", err)
+		}
+		eby.egressLink = link
+		link, err = attachCgroupProg(ctx, eby.eggy.bpfModule, "cgroup__skb_ingress", bpf.BPFAttachTypeCgroupInetIngress, cgroupPath)
+		if err != nil {
+			return fmt.Errorf("can't attach ingress cgroup hook: %s", err)
+		}
+		eby.ingressLink = link
+
+		logger.Info("eBPF program to cgroup hooks")
 	}
 
 	eby.packets = make(chan []byte)

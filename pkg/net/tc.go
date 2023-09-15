@@ -438,7 +438,9 @@ func CleanIngressTcNetStack(netNsPath string, iface string) error {
 
 	netNs, err := NetNamespace(netNsPath)
 	if err != nil {
-		return err
+		//return err
+		fmt.Printf("CleanIngressTcNetStack - netNs not exists - we're good\n")
+		return nil //not critical if netns not exists we do not have to clean it
 	}
 	defer netNs.Close()
 
@@ -464,7 +466,9 @@ func CleanEgressTcNetStack(netNsPath string, iface string) error {
 
 	netNs, err := NetNamespace(netNsPath)
 	if err != nil {
-		return err
+		//return err
+		fmt.Printf("CleanEgressTcNetStack - netNs not exists - we're good\n")
+		return nil //not critical if netns not exists we do not have to clean it
 	}
 	defer netNs.Close()
 

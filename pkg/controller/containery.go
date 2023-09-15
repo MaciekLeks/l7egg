@@ -59,6 +59,12 @@ func NewContainery(cs *corev1.ContainerStatus) (*Containery, error) {
 	}, nil
 }
 
+// Reset resets Containery to AssetNew state and nils Boxer
+func (ci *Containery) Reset() {
+	ci.AssetStatus = common.AssetNew
+	ci.Boxer = nil
+}
+
 // Update updates Containery with ContainerStatus based on deep equality of Containery
 func (ci *Containery) Update(cs *corev1.ContainerStatus) (bool, error) {
 	var changed bool

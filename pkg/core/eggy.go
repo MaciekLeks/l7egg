@@ -211,7 +211,10 @@ func (ey *Eggy) Stop() {
 	ey.Lock()
 	defer ey.Unlock()
 
-	ey.bpfModule.Close()
+	if ey.bpfModule != nil {
+		ey.bpfModule.Close()
+		ey.bpfModule = nil //we
+	} // need to set it to nil
 }
 
 func parseCIDR(cidrS string) (Cidr, error) {

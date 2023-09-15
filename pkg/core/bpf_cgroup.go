@@ -1,20 +1,27 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	bpf "github.com/aquasecurity/libbpfgo"
+	"k8s.io/klog/v2"
 	"os"
 	"regexp"
 )
 
 var reCgroup2Mount = regexp.MustCompile(`(?m)^cgroup2\s(/\S+)\scgroup2\s`)
 
-func attachCgroupProg(bpfModule *bpf.Module, progName string, attachType bpf.BPFAttachType, cgroupPath string) error {
-	cgroupRootDir := getCgroupV2RootDir()
+// attachCgroupProg attaches a BPF program to a cgroup v2 and return the link between them.
+func attachCgroupProg(ctx context.Context, bpfModule *bpf.Module, progName string, attachType bpf.BPFAttachType, cgroupPath string) (*bpf.BPFLink, error) {
+	logger := klog.FromContext(ctx)
+	cgroupRootDir, err := getCgroupV2RootDir()
+	if err != nil {
+		return nil, err
+	}
 	//cgroupDir := cgroupRootDir + filepath.Dir(cgroupPath)
 	cgroupDir := cgroupRootDir + cgroupPath
 
-	fmt.Println("\n\n\n-------getCgroupV2Dir:", cgroupDir)
+	logger.V(2).Info("cgroup directory", "dir", cgroupDir)
 
 	prog, err := bpfModule.GetProgram(progName)
 	if err != nil {
@@ -25,27 +32,24 @@ func attachCgroupProg(bpfModule *bpf.Module, progName string, attachType bpf.BPF
 	//link, err := prog.AttachCgroup(cgroupDir)
 	link, err := prog.AttachCgroupLegacy(cgroupDir, attachType)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(-1)
+		return nil, err
 	}
 	if link.FileDescriptor() == 0 {
-		os.Exit(-1)
+		return nil, fmt.Errorf("link fd is 0")
 	}
 
-	return nil
+	return link, nil
 }
 
-func getCgroupV2RootDir() string {
+func getCgroupV2RootDir() (string, error) {
 	data, err := os.ReadFile("/proc/mounts")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "read /proc/mounts failed: %+v\n", err)
-		os.Exit(-1)
+		return "", fmt.Errorf("read /proc/mounts failed: %+s", err)
 	}
 	items := reCgroup2Mount.FindStringSubmatch(string(data))
 	if len(items) < 2 {
-		fmt.Fprintln(os.Stderr, "cgroupv2 is not mounted")
-		os.Exit(-1)
+		return "", fmt.Errorf("cgroupv2 is not mounted")
 	}
 
-	return items[1]
+	return items[1], nil
 }
