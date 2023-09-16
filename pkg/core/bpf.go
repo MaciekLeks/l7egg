@@ -107,6 +107,58 @@ func (eby *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType commo
 	defer eby.eggy.RUnlock()
 
 	logger.Info("attaching eBPF program having", programType)
+	err = eby.attachProgram(ctx, programType, netNsPath, cgroupPath)
+	if err != nil {
+		return err
+	}
+
+	eby.packets = make(chan []byte)
+
+	rb, err := eby.eggy.bpfModule.InitRingBuf("packets", eby.packets)
+	if err != nil {
+		return fmt.Errorf("can't init ring buffer: %s", err)
+	}
+
+	rb.Poll(300)
+
+	eby.ipv4ACL, err = eby.eggy.bpfModule.GetMap("ipv4_lpm_map")
+	if err != nil {
+		return fmt.Errorf("can't get map: %s", err)
+	}
+	eby.ipv6ACL, err = eby.eggy.bpfModule.GetMap("ipv6_lpm_map")
+	if err != nil {
+		return fmt.Errorf("can't get map: %s", err)
+	}
+
+	eby.initCIDRs()
+	eby.initCNs()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done() //added with new tc filter approach via go-tc
+		//defer close(eby.packets) //TODO observe if this is needed
+		//defer eby.bpfModule.Close() -> moved to eggy
+
+		var lwg sync.WaitGroup
+		//runMapLooper(ctx, ebpfy.ipv4ACL, ebpfy.CommonNames, ipv4, &lwg, netNsPath, cgroupPath)
+		//runMapLooper(ctx, ebpfy.ipv6ACL, ebpfy.CommonNames, ipv6, &lwg, netNsPath, cgroupPath)
+		eby.runPacketsLooper(ctx, &lwg, netNsPath, cgroupPath)
+		lwg.Wait()
+
+		fmt.Println("///Stopping recvLoop.") //TODO: refactor
+		rb.Stop()
+		rb.Close()
+		fmt.Println("recvLoop stopped.") //TODO: refactor
+	}()
+
+	return nil
+}
+
+// attachProgram attaches eBPF program to either tc hook or cgroup hook
+func (eby *ebpfy) attachProgram(ctx context.Context, programType common.ProgramType, netNsPath string, cgroupPath string) error {
+	var err error
+	logger := klog.FromContext(ctx)
+
 	if programType == common.ProgramTypeTC {
 		err = attachTcBpfIngressStack(eby.eggy.bpfModule, eby.eggy.EgressInterface, netNsPath)
 		if err != nil {
@@ -132,40 +184,7 @@ func (eby *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType commo
 
 		logger.Info("eBPF program of cgroup type hooked")
 	}
-
-	eby.packets = make(chan []byte)
-
-	rb, err := eby.eggy.bpfModule.InitRingBuf("packets", eby.packets)
-	must(err, "Can't initialize ring buffer map.") //TODO: refactor
-
-	rb.Poll(300)
-
-	eby.ipv4ACL, err = eby.eggy.bpfModule.GetMap("ipv4_lpm_map")
-	eby.ipv6ACL, err = eby.eggy.bpfModule.GetMap("ipv6_lpm_map")
-	must(err, "Can't get map") //TODO refactor
-
-	eby.initCIDRs()
-	eby.initCNs()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done() //added with new tc filter approach via go-tc
-		//defer close(eby.packets) //TODO observe if this is needed
-		//defer eby.bpfModule.Close() -> moved to eggy
-
-		var lwg sync.WaitGroup
-		//runMapLooper(ctx, ebpfy.ipv4ACL, ebpfy.CommonNames, ipv4, &lwg, netNsPath, cgroupPath)
-		//runMapLooper(ctx, ebpfy.ipv6ACL, ebpfy.CommonNames, ipv6, &lwg, netNsPath, cgroupPath)
-		eby.runPacketsLooper(ctx, &lwg, netNsPath, cgroupPath)
-		lwg.Wait()
-
-		fmt.Println("///Stopping recvLoop.") //TODO: refactor
-		rb.Stop()
-		rb.Close()
-		fmt.Println("recvLoop stopped.") //TODO: refactor
-	}()
-
-	return nil
+	return err
 }
 
 func (eby *ebpfy) initCIDRs() {
