@@ -154,6 +154,18 @@ func (b *CgroupNetClsBoxy) Stop() error {
 	return nil
 }
 
+func (b *TcBoxy) Stop() error {
+	err := b.ebpfy.stopTcNetStack(b.netNsPath)
+	if err != nil {
+		utilruntime.HandleError(err)
+	}
+	err = b.Boxy.Stop()
+	if err != nil {
+		utilruntime.HandleError(err)
+	}
+	return nil
+}
+
 func (b *CgroupBoxy) Stop() error {
 	var err error
 	err = b.ebpfy.stop()

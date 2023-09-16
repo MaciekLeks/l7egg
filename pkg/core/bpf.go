@@ -31,12 +31,17 @@ import (
 
 // ebpfy holds Eggy (extracted from ClusterEggSpec) and ebpf related structures, e.g. maps, channels operating on that maps
 type ebpfy struct {
-	eggy        *Eggy
-	ipv4ACL     *bpf.BPFMap
-	ipv6ACL     *bpf.BPFMap
-	packets     chan []byte
+	eggy *Eggy
+	// Longest Match Prefix Map for ipv4
+	ipv4ACL *bpf.BPFMap
+	// Longest Match Prefix Map for ipv6
+	ipv6ACL *bpf.BPFMap
+	// DNS packets channel from kernel space
+	packets chan []byte
+	// link between ingress program and either tc or cgroup hook
 	ingressLink *bpf.BPFLink
-	egressLink  *bpf.BPFLink
+	// link between egress program and either tc or cgroup hook
+	egressLink *bpf.BPFLink
 }
 
 func newEbpfy(eggi *Eggy) *ebpfy {
@@ -103,6 +108,7 @@ func (eby *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType commo
 
 	logger.Info("attaching eBPF program having", programType)
 	if programType == common.ProgramTypeTC {
+		//TODO refactor this:
 		err = attachTcBpfIngressStack(eby.eggy.bpfModule, eby.eggy.EgressInterface, netNsPath)
 		must(err, "Can't attach TC hook.") //TODO: refactor
 		err = attachTcBpfEgressStack(eby.eggy.bpfModule, eby.eggy.EgressInterface, netNsPath, eby.eggy.Shaping)

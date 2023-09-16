@@ -220,8 +220,8 @@ func (py *Pody) StopBoxySet() error {
 				// append err to existing resErr if not nil
 				resErr = fmt.Errorf("%v\n%v", resErr, err)
 			}
-			py.Containers[i].Reset() //could be used once again e.g. a new ClusterEgg on the same pod
 		}
+		py.Containers[i].Reset() //could be used once again e.g. a new ClusterEgg on the same pod for tc only container[0] is important
 	}
 
 	py.PairedWithEgg = nil
