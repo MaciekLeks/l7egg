@@ -108,12 +108,15 @@ func (eby *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType commo
 
 	logger.Info("attaching eBPF program having", programType)
 	if programType == common.ProgramTypeTC {
-		//TODO refactor this:
 		err = attachTcBpfIngressStack(eby.eggy.bpfModule, eby.eggy.EgressInterface, netNsPath)
-		must(err, "Can't attach TC hook.") //TODO: refactor
+		if err != nil {
+			return fmt.Errorf("can't attach egress tc hook: %s", err)
+		}
 		err = attachTcBpfEgressStack(eby.eggy.bpfModule, eby.eggy.EgressInterface, netNsPath, eby.eggy.Shaping)
-		must(err, "Can't attach TC hook.") //TODO: refactor
-		logger.Info("Attached eBPF program to tc hooks")
+		if err != nil {
+			return fmt.Errorf("can't attach egress tc hook: %s", err)
+		}
+		logger.Info("eBPF program of tc type hooked")
 	} else {
 		var link *bpf.BPFLink
 		link, err = attachCgroupProg(ctx, eby.eggy.bpfModule, "cgroup__skb_egress", bpf.BPFAttachTypeCgroupInetEgress, cgroupPath)
@@ -127,7 +130,7 @@ func (eby *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType commo
 		}
 		eby.ingressLink = link
 
-		logger.Info("eBPF program to cgroup hooks")
+		logger.Info("eBPF program of cgroup type hooked")
 	}
 
 	eby.packets = make(chan []byte)
