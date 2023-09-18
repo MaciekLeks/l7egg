@@ -16,7 +16,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/common"
-	"github.com/MaciekLeks/l7egg/pkg/net"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	bpf "github.com/aquasecurity/libbpfgo"
 	"github.com/google/gopacket"
@@ -621,33 +620,6 @@ func removeACLKey(acl *bpf.BPFMap, key ipv4LPMKey) error {
 	err := acl.DeleteKey(upKey)
 	if err != nil { //update in any cases
 		fmt.Printf("Key not exists %v", key)
-	}
-
-	return nil
-}
-
-func attachTcBpfEgressStack(bpfModule *bpf.Module, iface, netNsPath string, shaping *ShapingInfo) error {
-	tcProg, err := bpfModule.GetProgram(BpfEgressProgram)
-	if err != nil {
-		return err
-	}
-
-	if err := net.AttachEgressTcBpfNetStack(netNsPath, iface, tcProg.FileDescriptor(), "./"+BpfObjectFileName, BpfEgressSection, net.TcShaping(*shaping)); err != nil {
-
-		return err
-	}
-
-	return nil
-}
-
-func attachTcBpfIngressStack(bpfModule *bpf.Module, iface, netNsPath string) error {
-	tcProg, err := bpfModule.GetProgram(BpfIngressProgram)
-	if err != nil {
-		return err
-	}
-
-	if err := net.AttachIngressTcBpfNetStack(netNsPath, iface, tcProg.FileDescriptor(), BpfObjectFileName, BpfIngressSection); err != nil {
-		return err
 	}
 
 	return nil
