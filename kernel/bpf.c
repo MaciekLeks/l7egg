@@ -225,7 +225,7 @@ static __always_inline int ipv4_check_and_update(struct iphdr *ipv4) {
 static __always_inline int ipv6_check_and_update(struct ipv6hdr *ipv6) {
     struct in6_addr daddr = ipv6->daddr;
     struct in6_addr saddr = ipv6->saddr;
-    // bpf_printk("[egress]: daddr:%u, saddr:%u", daddr.in6_u.u6_addr8, saddr.in6_u.u6_addr8);
+    bpf_printk("[egress]: daddr:%u, saddr:%u", daddr.in6_u.u6_addr8, saddr.in6_u.u6_addr8);
     void *pv = ipv6_lookup(daddr.in6_u.u6_addr8);
     if (!pv) {
         //   bpf_printk("[egress]: drop:%u", daddr.in6_u.u6_addr8);

@@ -6,7 +6,7 @@ import (
 )
 
 func attachTcBpfEgressStack(bpfModule *bpf.Module, iface, netNsPath string, shaping *ShapingInfo) error {
-	tcProg, err := bpfModule.GetProgram(BpfEgressProgram)
+	tcProg, err := bpfModule.GetProgram(BpfTcEgressProgram)
 	if err != nil {
 		return err
 	}
@@ -20,7 +20,7 @@ func attachTcBpfEgressStack(bpfModule *bpf.Module, iface, netNsPath string, shap
 }
 
 func attachTcBpfIngressStack(bpfModule *bpf.Module, iface, netNsPath string) error {
-	tcProg, err := bpfModule.GetProgram(BpfIngressProgram)
+	tcProg, err := bpfModule.GetProgram(BpfTcIngressProgram)
 	if err != nil {
 		return err
 	}

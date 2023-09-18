@@ -170,12 +170,12 @@ func (eby *ebpfy) attachProgram(ctx context.Context, programType common.ProgramT
 		logger.Info("eBPF program of tc type hooked")
 	} else {
 		var link *bpf.BPFLink
-		link, err = attachCgroupProg(ctx, eby.eggy.bpfModule, "cgroup__skb_egress", bpf.BPFAttachTypeCgroupInetEgress, cgroupPath)
+		link, err = attachCgroupProg(ctx, eby.eggy.bpfModule, BpfCgroupIngressProgram, bpf.BPFAttachTypeCgroupInetEgress, cgroupPath)
 		if err != nil {
 			return fmt.Errorf("can't attach egress cgroup hook: %s", err)
 		}
 		eby.egressLink = link
-		link, err = attachCgroupProg(ctx, eby.eggy.bpfModule, "cgroup__skb_ingress", bpf.BPFAttachTypeCgroupInetIngress, cgroupPath)
+		link, err = attachCgroupProg(ctx, eby.eggy.bpfModule, BpfCgroupEgressProgram, bpf.BPFAttachTypeCgroupInetIngress, cgroupPath)
 		if err != nil {
 			return fmt.Errorf("can't attach ingress cgroup hook: %s", err)
 		}
