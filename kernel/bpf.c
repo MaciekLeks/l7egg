@@ -100,19 +100,12 @@ struct {
     __uint(max_entries, 255);
 } ipv6_lpm_map SEC(".maps");
 
-struct port_map {
-        __uint(type, BPF_MAP_TYPE_DEVMAP);
-        __uint(max_entries, 65535);
-        __type(key, __u32);
-        __type(value, __u32);
-} SEC(".maps");
-
 struct port_array {
     __uint(type, BPF_MAP_TYPE_ARRAY);
     __uint(max_entries, 1);
     __type(key, __u32);
     __type(value, __u32);
-} zero_port_array SEC(".maps")
+} zero_port_array SEC(".maps");
 
 // map of array of ports, key: 1, value: [80, 443], key:10, value: [22, 10001]
 struct {
