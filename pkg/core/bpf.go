@@ -573,7 +573,7 @@ func unmarshalIpv4ACLKey(bytes []byte) ipv4LPMKey {
 }
 
 func unmarshalIpv6ACLKey(bytes []byte) ipv6LPMKey {
-	prefixLen := binary.LittleEndian.Uint32(bytes[0:4])
+	prefixLen := endian.Uint32(bytes[0:4])
 	ipBytes := bytes[4:20]
 
 	return ipv6LPMKey{prefixLen, [16]uint8(ipBytes)}
