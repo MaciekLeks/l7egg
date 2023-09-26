@@ -43,6 +43,14 @@ type ebpfy struct {
 	egressLink *bpf.BPFLink
 }
 
+var (
+	endian binary.ByteOrder
+)
+
+func init() {
+	endian = hostEndian()
+}
+
 func newEbpfy(eggi *Eggy) *ebpfy {
 	var egg ebpfy
 	egg.eggy = eggi
@@ -397,7 +405,7 @@ func (eby *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, net
 					break recvLoop
 				}
 
-				skbLen := binary.LittleEndian.Uint32(b[0:4])
+				skbLen := endian.Uint32(b[0:4])
 
 				//fmt.Printf("\n\nskb.len:%d, skb.", skbLen)
 				data := b[4:(skbLen + 4)]
@@ -513,7 +521,7 @@ func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns *syncx.SafeSlice[Co
 						fatal("Iterator error", i.Err())
 					}
 					keyBytes := i.Key()
-					prefixLen := binary.LittleEndian.Uint32(keyBytes[0:4])
+					prefixLen := endian.Uint32(keyBytes[0:4])
 
 					var key ILPMKey
 					var ipB []byte
@@ -558,7 +566,7 @@ func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns *syncx.SafeSlice[Co
 }
 
 func unmarshalIpv4ACLKey(bytes []byte) ipv4LPMKey {
-	prefixLen := binary.LittleEndian.Uint32(bytes[0:4])
+	prefixLen := endian.Uint32(bytes[0:4])
 	ipB := bytes[4:8]
 
 	return ipv4LPMKey{prefixLen, [4]uint8(ipB)}
@@ -580,9 +588,9 @@ func getACLValue(acl *bpf.BPFMap, ikey ILPMKey) ipLPMVal {
 
 func unmarshalValue(bytes []byte) ipLPMVal {
 	return ipLPMVal{
-		ttl:     binary.LittleEndian.Uint64(bytes[0:8]),
-		counter: binary.LittleEndian.Uint64(bytes[8:16]),
-		id:      binary.LittleEndian.Uint16(bytes[16:18]),
+		ttl:     endian.Uint64(bytes[0:8]),
+		counter: endian.Uint64(bytes[8:16]),
+		id:      endian.Uint16(bytes[16:18]),
 		status:  bytes[18:19][0],
 	}
 }
@@ -650,4 +658,16 @@ func containsCN(cns common.AssetList[CommonName], cnS string) (common.Asset[Comm
 	}
 	fmt.Printf(" ^ not-found\n")
 	return current, false
+}
+
+func hostEndian() binary.ByteOrder {
+	var i int32 = 0x01020304
+	u := unsafe.Pointer(&i)
+	pb := (*byte)(u)
+	b := *pb
+	if b == 0x04 {
+		return binary.LittleEndian
+	}
+
+	return binary.BigEndian
 }

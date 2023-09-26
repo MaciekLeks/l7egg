@@ -13,9 +13,18 @@ spec:
     - .ubuntu.com
     - bbc.com
     cidrs:
-    - 172.172.34.3/32
-    - 10.0.0.0/24
-    - 2a04:4e42:200::81/128
+    - cidr: 172.172.34.3/32
+      ports:
+      - port: 443
+        protocol: TCP
+    - cidr: 10.0.0.0/24
+      ports:
+      - port: 80
+        protocol: TCP
+    - cidr: 2a04:4e42:200::81/128
+      ports:
+      - port: 22
+        protocol: TCP
     #shaping:
     #  rate: 1mbit
     #  ceil: 1mbit
