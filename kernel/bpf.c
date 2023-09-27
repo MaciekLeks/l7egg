@@ -105,21 +105,21 @@ struct {
 
 long ringbuffer_flags = 0;
 
-static __always_inline void *ipv4_lookup(__u32 ipaddr) {
+static __always_inline void *ipv4_lookup(__u32 ipaddr, __u16 port) {
     struct ipv4_lpm_key key = {
             .prefixlen = 32,
-            .port = 443,
+            .port = port,
             .data = ipaddr
     };
 
     return bpf_map_lookup_elem(&ipv4_lpm_map, &key);
 }
 
-static __always_inline void *ipv6_lookup(__u8 ipaddr[16]) {
+static __always_inline void *ipv6_lookup(__u8 ipaddr[16], __u16 port) {
     long err;
     struct ipv6_lpm_key key = {
             .prefixlen = 128,
-            .port = 443
+            .port = port
     };
 
     //TODO: do we need deep copy of the ipaddr for searching?
@@ -191,11 +191,11 @@ static __always_inline void ipv6_print_ip(char *str, const __u8 *ipv6) {
     bpf_printk(":%d%d:%d%d\n", bytes[12], bytes[13], bytes[14], bytes[15]);
 }
 
-static __always_inline int ipv4_check_and_update(struct iphdr *ipv4) {
+static __always_inline int ipv4_check_and_update(struct iphdr *ipv4, __u16 port) {
     __u32 daddr = ipv4->daddr;
     __u32 saddr = ipv4->saddr;
     bpf_printk("[egress]: daddr:%u, saddr:%u", daddr, saddr);
-    void *pv = ipv4_lookup(daddr);
+    void *pv = ipv4_lookup(daddr, port);
     if (!pv) {
         bpf_printk("[egress]: drop:%u", daddr);
         ipv4_print_ip("[egress] DROP", "\n", daddr);
@@ -229,11 +229,11 @@ static __always_inline int ipv4_check_and_update(struct iphdr *ipv4) {
     return TC_MOVE_ONE; //process further inside bpf
 }
 
-static __always_inline int ipv6_check_and_update(struct ipv6hdr *ipv6) {
+static __always_inline int ipv6_check_and_update(struct ipv6hdr *ipv6, __u16 port) {
     struct in6_addr daddr = ipv6->daddr;
     struct in6_addr saddr = ipv6->saddr;
     bpf_printk("[egress]: daddr:%u, saddr:%u", daddr.in6_u.u6_addr8, saddr.in6_u.u6_addr8);
-    void *pv = ipv6_lookup(daddr.in6_u.u6_addr8);
+    void *pv = ipv6_lookup(daddr.in6_u.u6_addr8, port);
     if (!pv) {
         //   bpf_printk("[egress]: drop:%u", daddr.in6_u.u6_addr8);
         ipv6_print_ip("[egress] DROP", daddr.in6_u.u6_addr8);
@@ -385,9 +385,9 @@ process_relative(struct __sk_buff *skb, enum bpf_hdr_start_off hdr_start_off, bo
         if (is_egress) {
             int ret;
             if (!is_ipv6) {
-                ret = ipv4_check_and_update((struct iphdr *) ip);
+                ret = ipv4_check_and_update((struct iphdr *) ip, dport);
             } else {
-                ret = ipv6_check_and_update((struct ipv6hdr *) ip);
+                ret = ipv6_check_and_update((struct ipv6hdr *) ip, dport);
             }
 
             if (ret != TC_MOVE_ONE)

@@ -12,6 +12,7 @@ spec:
     - www.onet.pl
     - www.interia.pl
     - cluster.local
+    - info.cern.ch # http only
     cidrs:
     - 10.152.183.0/24
     - 169.254.1.1/32
