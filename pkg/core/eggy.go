@@ -228,9 +228,9 @@ func parseCIDR(cidrS string) (Cidr, error) {
 
 	prefix, _ := ipNet.Mask.Size()
 	if ipv4 := ip.To4(); ipv4 != nil {
-		return Cidr{cidrS, syncx.Sequencer().Next(), ipv4LPMKey{uint32(prefix), [4]uint8(ipv4)}}, nil
+		return Cidr{cidrS, syncx.Sequencer().Next(), ipv4LPMKey{uint32(prefix), 443, [4]uint8(ipv4)}}, nil
 	} else if ipv6 := ip.To16(); ipv6 != nil {
-		return Cidr{cidrS, syncx.Sequencer().Next(), ipv6LPMKey{uint32(prefix), [16]uint8(ipv6)}}, nil
+		return Cidr{cidrS, syncx.Sequencer().Next(), ipv6LPMKey{uint32(prefix), 443, [16]uint8(ipv6)}}, nil
 	}
 
 	return Cidr{}, fmt.Errorf("can't converts Cidr to IPv4/IPv6 %s", cidrS)

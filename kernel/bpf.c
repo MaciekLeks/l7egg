@@ -69,13 +69,13 @@ struct {
 
 struct ipv4_lpm_key {
     __u32 prefixlen;
-    //__u32 port;
+    __u16 port;
     __u32 data;
 }  __attribute__((packed));
 
 struct ipv6_lpm_key {
     __u32 prefixlen;
-    //__u32 port;
+    __u16 port;
     __u8 data[16];
 }  __attribute__((packed));
 
@@ -108,6 +108,7 @@ long ringbuffer_flags = 0;
 static __always_inline void *ipv4_lookup(__u32 ipaddr) {
     struct ipv4_lpm_key key = {
             .prefixlen = 32,
+            .port = 443,
             .data = ipaddr
     };
 
@@ -118,6 +119,7 @@ static __always_inline void *ipv6_lookup(__u8 ipaddr[16]) {
     long err;
     struct ipv6_lpm_key key = {
             .prefixlen = 128,
+            .port = 443
     };
 
     //TODO: do we need deep copy of the ipaddr for searching?
@@ -133,6 +135,7 @@ static __always_inline void *ipv6_lookup(__u8 ipaddr[16]) {
 static __always_inline long ipv4_update(__u32 ipaddr, struct value_t val) {
     struct ipv4_lpm_key key = {
             .prefixlen = 32,
+            .port = 443,
             .data = ipaddr
     };
 
@@ -143,6 +146,7 @@ static __always_inline long ipv6_update(__u8 ipaddr[16], struct value_t val) {
     long err;
     struct ipv6_lpm_key key = {
             .prefixlen = 128,
+            .port = 443
             //   .data = ipaddr
     };
 
