@@ -202,8 +202,8 @@ func (eby *ebpfy) initCIDRs() {
 		val := ipLPMVal{
 			ttl:     0,
 			counter: 0,
-			//id:      cidr.id, //test
-			status: uint8(common.AssetSynced),
+			id:      cidr.Value.id, //test
+			status:  uint8(common.AssetSynced),
 		}
 
 		var err error

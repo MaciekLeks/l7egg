@@ -69,11 +69,13 @@ struct {
 
 struct ipv4_lpm_key {
     __u32 prefixlen;
+    //__u32 port;
     __u32 data;
 }  __attribute__((packed));
 
 struct ipv6_lpm_key {
     __u32 prefixlen;
+    //__u32 port;
     __u8 data[16];
 }  __attribute__((packed));
 
@@ -100,24 +102,6 @@ struct {
     __uint(max_entries, 255);
 } ipv6_lpm_map SEC(".maps");
 
-struct port_array {
-    __uint(type, BPF_MAP_TYPE_ARRAY);
-    __uint(max_entries, 1);
-    __type(key, __u32);
-    __type(value, __u32);
-} zero_port_array SEC(".maps");
-
-// map of array of ports, key: 1, value: [80, 443], key:10, value: [22, 10001]
-struct {
-        __uint(type, BPF_MAP_TYPE_HASH_OF_MAPS);
-        __uint(max_entries, 100); //TODO: 100 if the highest number of cidrs in the map_of_cidrs
-        __type(key, __u32); //id from value_t
-        __array(values, struct port_array);
-} map_of_ports SEC(".maps") = {
-        .values = {
-            [0] = &zero_port_array, //ids start from 1, it's only upload map
-        }
-};
 
 long ringbuffer_flags = 0;
 
