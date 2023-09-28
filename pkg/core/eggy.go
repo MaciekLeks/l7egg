@@ -301,9 +301,12 @@ func parseCIDRs(cidrsS []string, ports common.AssetList[Port]) (common.AssetList
 		if err != nil {
 			return cidrs, err
 		}
-		for _, cidr := range cidrWithPorts {
-			cidrCopy := cidr
-			_ = cidrs.Add(&cidrCopy) //can't use &cidr cause it points to the same address over the loop
+		//for _, cidr := range cidrWithPorts {
+		//	cidrCopy := cidr
+		//	_ = cidrs.Add(&cidrCopy) //can't use &cidr cause it points to the same address over the loop
+		//}
+		for i := range cidrWithPorts {
+			_ = cidrs.Add(&cidrWithPorts[i])
 		}
 	}
 
