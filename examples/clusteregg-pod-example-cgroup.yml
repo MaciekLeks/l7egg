@@ -15,8 +15,13 @@ spec:
     - info.cern.ch # http only
     cidrs:
     - 10.152.183.0/24
-    - 169.254.1.1/32
-    - 192.168.57.0/24
+    #- 169.254.1.1/32
+    #- 192.168.57.0/24
     podSelector:
       matchLabels:
         app: tester
+    ports:
+    - port: 80
+      protocol: TCP
+    - port: 443
+      protocol: TCP

@@ -6,6 +6,7 @@ import (
 	"github.com/MaciekLeks/l7egg/pkg/common"
 	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	bpf "github.com/aquasecurity/libbpfgo"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"net"
@@ -18,15 +19,33 @@ const (
 	IfaceDefault = "eth0"
 )
 
-type Cidr struct {
+type CidrWithPort struct {
 	//TODO ipv6 needed
 	cidr   string
 	id     uint16 //test
+	port   uint16
 	lpmKey ILPMKey
 }
 
-func (c Cidr) String() string {
-	return c.cidr
+func (c CidrWithPort) String() string {
+	// return cidr with id (siince ports we need compount key)
+	return fmt.Sprintf("cidr:%s:port:%d", c.cidr, c.port)
+}
+
+type protocol uint16
+
+const (
+	ProtocolTCP protocol = 6
+	ProtocolUDP protocol = 17
+)
+
+type Port struct {
+	port  uint16
+	proto protocol
+}
+
+func (p Port) String() string {
+	return fmt.Sprintf("port:%d:proto:%d", p.port, p.proto)
 }
 
 type CommonName struct {
@@ -50,7 +69,8 @@ type Eggy struct {
 	Name             string
 	ProgramType      common.ProgramType
 	CommonNames      common.AssetList[CommonName]
-	Cidrs            common.AssetList[Cidr]
+	Cidrs            common.AssetList[CidrWithPort]
+	Ports            common.AssetList[Port]
 	IngressInterface string
 	EgressInterface  string
 	//BPFObjectPath    string
@@ -135,7 +155,14 @@ func parseShapingInfo(shaping *v1alpha1.ShapingSpec) (shapingInfo *ShapingInfo, 
 }
 
 func NewEggy(cegg v1alpha1.ClusterEgg) (*Eggy, error) {
-	cidrs, err := parseCIDRs(cegg.Spec.Egress.CIDRs)
+
+	ports, err := parsePorts(cegg.Spec.Egress.Ports)
+	if err != nil {
+		fmt.Errorf("Parsing ports data %#v", err)
+		return nil, err
+	}
+
+	cidrs, err := parseCIDRs(cegg.Spec.Egress.CIDRs, ports)
 	if err != nil {
 		fmt.Errorf("Parsing input data %#v", err)
 		return nil, err
@@ -177,11 +204,26 @@ func NewEggy(cegg v1alpha1.ClusterEgg) (*Eggy, error) {
 		EgressInterface:  eiface,
 		CommonNames:      cns,
 		Cidrs:            cidrs,
+		Ports:            ports,
 		//BPFObjectPath:    "./l7egg.bpf.o",
 		PodLabels: podLabels,
 		Shaping:   shapingInfo,
 	}
 	return ey, nil
+}
+
+// parsePorts parses input ports and returns Port list.
+func parsePorts(ports []v1alpha1.PortSpec) (common.AssetList[Port], error) {
+	var retPorts common.AssetList[Port]
+	for _, port := range ports {
+		switch port.Protocol {
+		case corev1.ProtocolTCP:
+			retPorts.Add(&Port{port.Port, ProtocolTCP})
+		case corev1.ProtocolUDP:
+			retPorts.Add(&Port{port.Port, ProtocolUDP})
+		}
+	}
+	return retPorts, nil
 }
 
 func (ey *Eggy) UpdateSpec(ney *Eggy) error {
@@ -217,34 +259,52 @@ func (ey *Eggy) Stop() {
 	} // need to set it to nil
 }
 
-func parseCIDR(cidrS string) (Cidr, error) {
+func parseCIDR(cidrS string, ports common.AssetList[Port]) ([]CidrWithPort, error) {
 	ip, ipNet, err := net.ParseCIDR(cidrS)
 	must(err, "Can't parse ipv4 Net.")
 	if err != nil {
-		return Cidr{}, fmt.Errorf("can't parse Cidr %s", cidrS)
+		return nil, fmt.Errorf("can't parse CidrWithPort %s", cidrS)
 	}
 
 	fmt.Println("#### parseCID ", ip, " ipNEt", ipNet)
 
 	prefix, _ := ipNet.Mask.Size()
-	if ipv4 := ip.To4(); ipv4 != nil {
-		return Cidr{cidrS, syncx.Sequencer().Next(), ipv4LPMKey{uint32(prefix), 443, [4]uint8(ipv4)}}, nil
-	} else if ipv6 := ip.To16(); ipv6 != nil {
-		return Cidr{cidrS, syncx.Sequencer().Next(), ipv6LPMKey{uint32(prefix), 443, [16]uint8(ipv6)}}, nil
+
+	if len(ports) == 0 {
+		ports.Add(&Port{0, 0})
+	}
+	retCidrs := make([]CidrWithPort, len(ports))
+
+	//iterate over ports and create lpmKey for each port, or add port 0 if ports is empty
+	for i, port := range ports {
+		if ipv4 := ip.To4(); ipv4 != nil {
+			retCidrs[i] = CidrWithPort{cidrS, syncx.Sequencer().Next(), port.Value.port, ipv4LPMKey{uint32(prefix), port.Value.port, [4]uint8(ipv4)}}
+		} else if ipv6 := ip.To16(); ipv6 != nil {
+			retCidrs[i] = CidrWithPort{cidrS, syncx.Sequencer().Next(), port.Value.port, ipv6LPMKey{uint32(prefix), port.Value.port, [16]uint8(ipv6)}}
+		}
 	}
 
-	return Cidr{}, fmt.Errorf("can't converts Cidr to IPv4/IPv6 %s", cidrS)
+	//if ipv4 := ip.To4(); ipv4 != nil {
+	//	return CidrWithPort{cidrS, syncx.Sequencer().Next(), ipv4LPMKey{uint32(prefix), 443, [4]uint8(ipv4)}}, nil
+	//} else if ipv6 := ip.To16(); ipv6 != nil {
+	//	return CidrWithPort{cidrS, syncx.Sequencer().Next(), ipv6LPMKey{uint32(prefix), 443, [16]uint8(ipv6)}}, nil
+	//}
+
+	return retCidrs, nil
 }
 
 // ParseCIDRs TODO: only ipv4
-func parseCIDRs(cidrsS []string) (common.AssetList[Cidr], error) {
-	var cidrs common.AssetList[Cidr]
+func parseCIDRs(cidrsS []string, ports common.AssetList[Port]) (common.AssetList[CidrWithPort], error) {
+	var cidrs common.AssetList[CidrWithPort]
 	for _, cidrS := range cidrsS {
-		cidr, err := parseCIDR(cidrS)
+		cidrWithPorts, err := parseCIDR(cidrS, ports)
 		if err != nil {
 			return cidrs, err
 		}
-		_ = cidrs.Add(&cidr)
+		for _, cidr := range cidrWithPorts {
+			cidrCopy := cidr
+			_ = cidrs.Add(&cidrCopy) //can't use &cidr cause it points to the same address over the loop
+		}
 	}
 
 	return cidrs, nil

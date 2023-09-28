@@ -240,7 +240,7 @@ func (eby *ebpfy) updateCIDRs() error {
 		key := unmarshalIpv4ACLKey(keyBytes)
 		val := getACLValue(eby.ipv4ACL, key)
 
-		//we control Cidr with ttl=0 only
+		//we control CidrWithPort with ttl=0 only
 		if val.ttl == 0 {
 			for i := 0; i < len(eby.eggy.Cidrs); i++ {
 				cidr := eby.eggy.Cidrs[i]
@@ -274,7 +274,7 @@ func (eby *ebpfy) updateCIDRs() error {
 		key := unmarshalIpv6ACLKey(keyBytes)
 		val := getACLValue(eby.ipv6ACL, key)
 
-		//we control Cidr with ttl=0 only
+		//we control CidrWithPort with ttl=0 only
 		if val.ttl == 0 {
 			for i := 0; i < len(eby.eggy.Cidrs); i++ {
 				cidr := eby.eggy.Cidrs[i]
