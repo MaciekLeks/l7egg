@@ -456,37 +456,40 @@ func (eby *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, net
 						fmt.Printf("@@@@Type: %s, Answer: IP:%s Name:%s CName:%s\n", a.Type, a.IP, string(a.Name), string(a.CNAME))
 						if a.Type == layers.DNSTypeA || a.Type == layers.DNSTypeAAAA {
 
-							cn := string(a.Name)
-							ip := a.IP
-							ttlSec := a.TTL //!!! remove * 5
-							var key ILPMKey
+							commonName := string(a.Name)
+							if cn, found := containsCN(eby.eggy.CommonNames, commonName); found {
+								ip := a.IP
+								ttlSec := a.TTL //!!! remove * 5
+								var key ILPMKey
 
-							if a.Type == layers.DNSTypeA {
-								key = ipv4LPMKey{32, 443, [4]uint8(ip[0:4])}
-							} else {
-								key = ipv6LPMKey{128, 443, [16]uint8(ip[0:16])}
-							}
-							//val := time.Now().Unix() + int64(ttl) //Now + ttl
-							ttlNs := uint64(ttlSec) * 1000000000
-							bootTtlNs := uint64(C.get_nsecs()) + ttlNs //boot time[ns] + ttl[ns]
-							//fmt.Println("key size:", unsafe.Sizeof(key))
-							//fmt.Println("key data:", key.data)
+								for i := range eby.eggy.Ports {
+									port := eby.eggy.Ports[i].Value.port
+									if a.Type == layers.DNSTypeA {
+										key = ipv4LPMKey{32, port, [4]uint8(ip[0:4])}
+									} else {
+										key = ipv6LPMKey{128, port, [16]uint8(ip[0:16])}
+									}
+									//val := time.Now().Unix() + int64(ttl) //Now + ttl
+									ttlNs := uint64(ttlSec) * 1000000000
+									bootTtlNs := uint64(C.get_nsecs()) + ttlNs //boot time[ns] + ttl[ns]
+									//fmt.Println("key size:", unsafe.Sizeof(key))
+									//fmt.Println("key data:", key.data)
 
-							if cn, found := containsCN(eby.eggy.CommonNames, cn); found {
-								val := ipLPMVal{
-									ttl:     bootTtlNs,
-									counter: 0, //zero existsing elements :/ //TODO why 0?
-									id:      cn.Value.id,
-									status:  uint8(common.AssetSynced),
+									val := ipLPMVal{
+										ttl:     bootTtlNs,
+										counter: 0, //zero existsing elements :/ //TODO why 0?
+										id:      cn.Value.id,
+										status:  uint8(common.AssetSynced),
+									}
+									var err error
+									if a.Type == layers.DNSTypeA {
+										err = updateACLValueNew(eby.ipv4ACL, key, val)
+									} else {
+										err = updateACLValueNew(eby.ipv6ACL, key, val)
+									}
+									must(err, "Can't update ACL.")
+									fmt.Printf("ebpfy-ref: %p, netNsPath: %s cgroupPath: %s - updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", eby, netNsPath, cgroupPath, cn, ip, ttlSec, ttlNs, bootTtlNs)
 								}
-								var err error
-								if a.Type == layers.DNSTypeA {
-									err = updateACLValueNew(eby.ipv4ACL, key, val)
-								} else {
-									err = updateACLValueNew(eby.ipv6ACL, key, val)
-								}
-								must(err, "Can't update ACL.")
-								fmt.Printf("ebpfy-ref: %p, netNsPath: %s cgroupPath: %s - updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", eby, netNsPath, cgroupPath, cn, ip, ttlSec, ttlNs, bootTtlNs)
 
 							} else {
 								fmt.Println("DROP")
