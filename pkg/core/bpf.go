@@ -243,20 +243,21 @@ func (eby *ebpfy) updateCIDRs() error {
 		if val.ttl == 0 {
 			for i := 0; i < len(eby.eggy.Cidrs); i++ {
 				cidr := eby.eggy.Cidrs[i]
-				ipv4Key, ok := cidr.Value.lpmKey.(ipv4LPMKey)
-				if ok {
-					if key.prefixLen == ipv4Key.prefixLen &&
-						key.port == ipv4Key.port &&
-						key.data == ipv4Key.data {
-						if cidr.Status == common.AssetStale {
-							val.status = uint8(common.AssetStale)
-							err := updateACLValueNew(eby.ipv4ACL, key, val)
-							if err != nil {
-								return fmt.Errorf("Updating value status", eby)
-							}
+				//ipv4Key, ok := cidr.Value.lpmKey.(ipv4LPMKey) //!!!
+				//if ok {
+				//if key.prefixLen == ipv4Key.prefixLen && //!!!!
+				//	key.port == ipv4Key.port &&
+				//	key.data == ipv4Key.data {
+				if val.id == cidr.Value.id {
+					if cidr.Status == common.AssetStale {
+						val.status = uint8(common.AssetStale)
+						err := updateACLValueNew(eby.ipv4ACL, key, val)
+						if err != nil {
+							return fmt.Errorf("Updating value status", eby)
 						}
 					}
 				}
+				//}
 			}
 		}
 	}
@@ -278,21 +279,22 @@ func (eby *ebpfy) updateCIDRs() error {
 		if val.ttl == 0 {
 			for i := 0; i < len(eby.eggy.Cidrs); i++ {
 				cidr := eby.eggy.Cidrs[i]
-				ipv6Key, ok := cidr.Value.lpmKey.(ipv6LPMKey)
-				if ok {
-					if key.prefixLen == ipv6Key.prefixLen &&
-						key.port == ipv6Key.port &&
-						key.data == ipv6Key.data {
-						if cidr.Status == common.AssetStale {
+				//ipv6Key, ok := cidr.Value.lpmKey.(ipv6LPMKey) //!!!
+				//if ok { //!!!
+				//if key.prefixLen == ipv6Key.prefixLen && ///!!!
+				//	key.port == ipv6Key.port &&
+				//	key.data == ipv6Key.data {
+				if val.id == cidr.Value.id {
+					if cidr.Status == common.AssetStale {
 
-							val.status = uint8(common.AssetStale)
-							err := updateACLValueNew(eby.ipv6ACL, key, val)
-							if err != nil {
-								return fmt.Errorf("Updating value status", eby)
-							}
+						val.status = uint8(common.AssetStale)
+						err := updateACLValueNew(eby.ipv6ACL, key, val)
+						if err != nil {
+							return fmt.Errorf("Updating value status", eby)
 						}
 					}
 				}
+				//}
 			}
 		}
 	}
