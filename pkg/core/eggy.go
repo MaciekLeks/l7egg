@@ -230,6 +230,7 @@ func (ey *Eggy) UpdateSpec(ney *Eggy) error {
 	ey.Lock()
 	defer ey.Unlock()
 
+	ey.Ports.Update(ney.Ports)
 	ey.CommonNames.Update(ney.CommonNames)
 	ey.Cidrs.Update(ney.Cidrs)
 	ey.PodLabels = ney.PodLabels
@@ -240,6 +241,9 @@ func (ey *Eggy) UpdateSpec(ney *Eggy) error {
 func (ey *Eggy) UpdateDone() {
 	ey.Lock()
 	defer ey.Unlock()
+
+	ey.Ports.RemoveStale()
+	ey.Ports.SetStatus(common.AssetSynced)
 
 	ey.Cidrs.RemoveStale()
 	ey.Cidrs.SetStatus(common.AssetSynced)

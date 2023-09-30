@@ -12,11 +12,11 @@ spec:
     - www.onet.pl
     - www.interia.pl
     - cluster.local
-    - info.cern.ch # http only
+    - .cern.ch # http only
     cidrs:
     - 10.152.183.0/24
-    #- 169.254.1.1/32
-    #- 192.168.57.0/24
+    - 169.254.1.1/32
+    - 192.168.57.0/24
     podSelector:
       matchLabels:
         app: tester
@@ -24,4 +24,6 @@ spec:
     - port: 80
       protocol: TCP
     - port: 443
+      protocol: TCP
+    - port: 8080 #iperf
       protocol: TCP

@@ -231,7 +231,6 @@ func (eby *ebpfy) updateCIDRs() error {
 		return fmt.Errorf("BPF Map Iterator error", i.Err())
 	}
 	for i.Next() {
-		fmt.Println("%%%>>>4.2")
 		if i.Err() != nil {
 			return fmt.Errorf("BPF Map Iterator error", i.Err())
 		}
@@ -246,7 +245,9 @@ func (eby *ebpfy) updateCIDRs() error {
 				cidr := eby.eggy.Cidrs[i]
 				ipv4Key, ok := cidr.Value.lpmKey.(ipv4LPMKey)
 				if ok {
-					if key.prefixLen == ipv4Key.prefixLen && key.data == ipv4Key.data {
+					if key.prefixLen == ipv4Key.prefixLen &&
+						key.port == ipv4Key.port &&
+						key.data == ipv4Key.data {
 						if cidr.Status == common.AssetStale {
 							val.status = uint8(common.AssetStale)
 							err := updateACLValueNew(eby.ipv4ACL, key, val)
@@ -265,7 +266,6 @@ func (eby *ebpfy) updateCIDRs() error {
 		return fmt.Errorf("BPF Map Iterator error", i.Err())
 	}
 	for i.Next() {
-		fmt.Println("%%%>>>4.2")
 		if i.Err() != nil {
 			return fmt.Errorf("BPF Map Iterator error", i.Err())
 		}
@@ -280,7 +280,9 @@ func (eby *ebpfy) updateCIDRs() error {
 				cidr := eby.eggy.Cidrs[i]
 				ipv6Key, ok := cidr.Value.lpmKey.(ipv6LPMKey)
 				if ok {
-					if key.prefixLen == ipv6Key.prefixLen && key.data == ipv6Key.data {
+					if key.prefixLen == ipv6Key.prefixLen &&
+						key.port == ipv6Key.port &&
+						key.data == ipv6Key.data {
 						if cidr.Status == common.AssetStale {
 
 							val.status = uint8(common.AssetStale)
@@ -304,7 +306,13 @@ func (eby *ebpfy) updateCIDRs() error {
 				status:  uint8(common.AssetSynced),
 			}
 
-			err := updateACLValueNew(eby.ipv4ACL, cidr.Value.lpmKey, val)
+			var err error
+			switch cidr.Value.lpmKey.(type) {
+			case ipv4LPMKey:
+				err = updateACLValueNew(eby.ipv4ACL, cidr.Value.lpmKey, val)
+			case ipv6LPMKey:
+				err = updateACLValueNew(eby.ipv6ACL, cidr.Value.lpmKey, val)
+			}
 			if err != nil {
 				return fmt.Errorf("Can't update ACL %#v", err)
 			}
@@ -333,12 +341,10 @@ func (eby *ebpfy) updateCNs() error {
 
 		//we control CommonNames with ttl!=0 only
 		if val.ttl != 0 {
-			fmt.Println("%%%>>> Found ttl!=0")
 			for i := 0; i < len(eby.eggy.CommonNames); i++ {
 				current := eby.eggy.CommonNames[i]
 				if val.id == current.Value.id {
 					if current.Status == common.AssetStale {
-						fmt.Println("%%%>>> current.Status is Stale")
 						val.status = uint8(common.AssetStale)
 						err := updateACLValueNew(eby.ipv4ACL, key, val) //invalidate all IPs for stale CommonNames
 						if err != nil {
@@ -360,19 +366,17 @@ func (eby *ebpfy) updateCNs() error {
 		}
 
 		keyBytes := i.Key()
-		key := unmarshalIpv4ACLKey(keyBytes)
-		val := getACLValue(eby.ipv4ACL, key)
+		key := unmarshalIpv6ACLKey(keyBytes)
+		val := getACLValue(eby.ipv6ACL, key)
 
 		//we control CommonNames with ttl!=0 only
 		if val.ttl != 0 {
-			fmt.Println("%%%>>> Found ttl!=0")
 			for i := 0; i < len(eby.eggy.CommonNames); i++ {
 				current := eby.eggy.CommonNames[i]
 				if val.id == current.Value.id {
 					if current.Status == common.AssetStale {
-						fmt.Println("%%%>>> current.Status is Stale")
 						val.status = uint8(common.AssetStale)
-						err := updateACLValueNew(eby.ipv4ACL, key, val) //invalidate all IPs for stale CommonNames
+						err := updateACLValueNew(eby.ipv6ACL, key, val) //invalidate all IPs for stale CommonNames
 						if err != nil {
 							return fmt.Errorf("Updating value status", eby)
 						}
