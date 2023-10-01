@@ -100,6 +100,23 @@ spec:
                         type: object
                     type: object
                     x-kubernetes-map-type: atomic
+                  ports:
+                    items:
+                      description: PortSpec is a tuple that describes a single port.
+                      properties:
+                        port:
+                          description: The port number of the endpoint.
+                          type: integer
+                        protocol:
+                          default: TCP
+                          description: The IP protocol for this port. Must be UDP,
+                            TCP, or SCTP. Default is TCP.
+                          type: string
+                      required:
+                      - port
+                      type: object
+                      x-kubernetes-map-type: atomic
+                    type: array
                   shaping:
                     properties:
                       ceil:

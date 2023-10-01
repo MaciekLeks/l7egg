@@ -8,6 +8,8 @@ type ILPMKey interface {
 
 type ipv4LPMKey struct {
 	prefixLen uint32
+	port      uint16
+	protocol  uint8
 	data      [4]uint8
 }
 
@@ -17,6 +19,8 @@ func (k ipv4LPMKey) GetPointer() unsafe.Pointer {
 
 type ipv6LPMKey struct {
 	prefixLen uint32
+	port      uint16
+	protocol  uint8
 	data      [16]uint8
 }
 

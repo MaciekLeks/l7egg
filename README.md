@@ -43,6 +43,11 @@ spec:
     - 10.152.183.0/24
     - 169.254.1.1/32
     - 192.168.57.0/24
+    ports:
+    - port: 80
+      #protocol: TCP #default is TCP
+    - port: 443
+      protocol: TCP
     podSelector:
       matchLabels:
         app: tester

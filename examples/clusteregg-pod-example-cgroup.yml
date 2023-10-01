@@ -9,13 +9,21 @@ spec:
       rate: 1mbit
       ceil: 1mbit
     commonNames:
-    - www.onet.pl
-    - www.interia.pl
-    - cluster.local
+    #- www.onet.pl
+    #- www.interia.pl
+    #- cluster.local
+    - .cern.ch # http only
     cidrs:
     - 10.152.183.0/24
-    - 169.254.1.1/32
-    - 192.168.57.0/24
+    #- 169.254.1.1/32
+    #- 192.168.57.0/24
     podSelector:
       matchLabels:
         app: tester
+    ports:
+    - port: 80
+      #protocol: TCP #default is TCP
+#    - port: 443
+#      protocol: TCP
+#    - port: 8080 #iperf
+#      protocol: TCP

@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -67,6 +68,9 @@ type EgressSpec struct {
 	Shaping *ShapingSpec `json:"shaping,omitempty"`
 
 	// +optional
+	Ports []PortSpec `json:"ports,omitempty"`
+
+	// +optional
 	PodSelector *metav1.LabelSelector `json:"podSelector,omitempty"`
 }
 
@@ -77,4 +81,18 @@ type ShapingSpec struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Pattern=`^\d+[k|m]bit$`
 	Ceil string `json:"ceil,omitempty"`
+}
+
+// PortSpec is a tuple that describes a single port.
+// +structType=atomic
+type PortSpec struct {
+	// The port number of the endpoint.
+	Port uint16 `json:"port" `
+
+	// The IP protocol for this port.
+	// Must be UDP, TCP, or SCTP.
+	// Default is TCP.
+	// +optional
+	// +default="TCP"
+	Protocol corev1.Protocol `json:"protocol,omitempty"`
 }

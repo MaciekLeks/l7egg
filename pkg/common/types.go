@@ -32,6 +32,9 @@ func (l *AssetList[T]) Len() int {
 // Returns true if element was added, false otherwise.
 func (l *AssetList[T]) Add(element *T) bool {
 	for _, e := range *l {
+		str1 := (*e.Value).String()
+		str2 := (*element).String()
+		fmt.Println("----------------------str1", str1, "str2", str2)
 		if (*e.Value).String() == (*element).String() {
 			return false
 		}

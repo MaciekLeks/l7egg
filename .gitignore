@@ -18,3 +18,8 @@ build/
 #temporary
 /tools/tc-cleaner
 /tools/tc-cleaner.go
+
+#clion files
+kernel/CMakeLists.txt
+kernel/cmake-build-debug/
+kernel/.idea/
