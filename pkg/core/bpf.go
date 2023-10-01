@@ -239,16 +239,16 @@ func (eby *ebpfy) updateCIDRs() error {
 		key := unmarshalIpv4ACLKey(keyBytes)
 		val := getACLValue(eby.ipv4ACL, key)
 
-		//we control CidrWithPort with ttl=0 only
+		//we control CidrWithProtoPort with ttl=0 only
 		if val.ttl == 0 {
 			for i := 0; i < len(eby.eggy.Cidrs); i++ {
 				cidr := eby.eggy.Cidrs[i]
-				//ipv4Key, ok := cidr.Value.lpmKey.(ipv4LPMKey) //!!!
+				//ipv4Key, ok := cidr.Value.lpmKey.(ipv4LPMKey)
 				//if ok {
-				//if key.prefixLen == ipv4Key.prefixLen && //!!!!
-				//	key.port == ipv4Key.port &&
-				//	key.data == ipv4Key.data {
-				if val.id == cidr.Value.id {
+				if cidr.Value.id == val.id {
+					//	if key.prefixLen == ipv4Key.prefixLen &&
+					//		key.port == ipv4Key.port &&
+					//		key.data == ipv4Key.data {
 					if cidr.Status == common.AssetStale {
 						val.status = uint8(common.AssetStale)
 						err := updateACLValueNew(eby.ipv4ACL, key, val)
@@ -256,8 +256,8 @@ func (eby *ebpfy) updateCIDRs() error {
 							return fmt.Errorf("Updating value status", eby)
 						}
 					}
+					//}
 				}
-				//}
 			}
 		}
 	}
@@ -275,16 +275,16 @@ func (eby *ebpfy) updateCIDRs() error {
 		key := unmarshalIpv6ACLKey(keyBytes)
 		val := getACLValue(eby.ipv6ACL, key)
 
-		//we control CidrWithPort with ttl=0 only
+		//we control CidrWithProtoPort with ttl=0 only
 		if val.ttl == 0 {
 			for i := 0; i < len(eby.eggy.Cidrs); i++ {
 				cidr := eby.eggy.Cidrs[i]
-				//ipv6Key, ok := cidr.Value.lpmKey.(ipv6LPMKey) //!!!
+				//ipv6Key, ok := cidr.Value.lpmKey.(ipv6LPMKey)
 				//if ok { //!!!
-				//if key.prefixLen == ipv6Key.prefixLen && ///!!!
-				//	key.port == ipv6Key.port &&
-				//	key.data == ipv6Key.data {
-				if val.id == cidr.Value.id {
+				//	if key.prefixLen == ipv6Key.prefixLen &&
+				//		key.port == ipv6Key.port &&
+				//		key.data == ipv6Key.data {
+				if cidr.Value.id == val.id {
 					if cidr.Status == common.AssetStale {
 
 						val.status = uint8(common.AssetStale)
@@ -468,8 +468,8 @@ func (eby *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, net
 								ttlSec := a.TTL //!!! remove * 5
 								var key ILPMKey
 
-								for i := range eby.eggy.Ports {
-									port := eby.eggy.Ports[i].Value.port
+								for i := range eby.eggy.ProtoPorts {
+									port := eby.eggy.ProtoPorts[i].Value.port
 									if a.Type == layers.DNSTypeA {
 										key = ipv4LPMKey{32, port, [4]uint8(ip[0:4])}
 									} else {
@@ -510,7 +510,7 @@ func (eby *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, net
 	}()
 }
 
-func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns *syncx.SafeSlice[CommonName], ipv ipProtocolVersion, lwg *sync.WaitGroup, netNsPath string, cgroupPath string) {
+func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns *syncx.SafeSlice[CommonNameWithProtoPort], ipv ipProtocolVersion, lwg *sync.WaitGroup, netNsPath string, cgroupPath string) {
 	lwg.Add(1)
 	go func() {
 		defer lwg.Done()
@@ -658,8 +658,8 @@ func fatal(format string, args ...interface{}) {
 	panic(err)
 }
 
-func containsCN(cns common.AssetList[CommonName], cnS string) (common.Asset[CommonName], bool) {
-	var current common.Asset[CommonName]
+func containsCN(cns common.AssetList[CommonNameWithProtoPort], cnS string) (common.Asset[CommonNameWithProtoPort], bool) {
+	var current common.Asset[CommonNameWithProtoPort]
 	for i := 0; i < cns.Len(); i++ {
 		current = cns[i]
 		fmt.Printf("))) current=%#v cnS=%s\n", current, cnS)

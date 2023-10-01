@@ -29,7 +29,7 @@ func main() {
 	iface := flag.String("iface", "", "Ingress interface to bind TC program to.")
 	eface := flag.String("eface", "", "Egress interface to bind TC program to.")
 	//bpfObjectPath := flag.String("bpfobj", "l7egg.bpf.o", "Kernel module file path to load.")
-	flag.Var(&cidrList, "cidr", "Add net address (CidrWithPort format) to add to the white list.")
+	flag.Var(&cidrList, "cidr", "Add net address (CidrWithProtoPort format) to add to the white list.")
 	flag.Var(&cnList, "cn", "Add Common Name to add to the white list.")
 	flag.Parse()
 	if *iface == "" || *eface == "" {

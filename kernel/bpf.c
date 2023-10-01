@@ -114,7 +114,17 @@ static __always_inline void *ipv4_lookup(__u32 ipaddr, __u16 port) {
 
     // try to find exact match first
     void *valp = bpf_map_lookup_elem(&ipv4_lpm_map, &key);
-    if (!valp) {
+
+
+    bool is_stale = false;
+    if (valp)   {
+        struct value_t *vp = valp;
+        if (vp->status == IP_STALE) {
+            is_stale = true;
+        }
+    }
+
+    if (!valp || is_stale) {
         // find a wildcard port match
         key.port = 0;
         valp = bpf_map_lookup_elem(&ipv4_lpm_map, &key);
@@ -145,7 +155,16 @@ static __always_inline void *ipv6_lookup(__u8 ipaddr[16], __u16 port) {
 
     // try to find exact match first
     void *valp = bpf_map_lookup_elem(&ipv6_lpm_map, &key);
-    if (!valp) {
+
+    bool is_stale = false;
+    if (valp)   {
+        struct value_t *vp = valp;
+        if (vp->status == IP_STALE) {
+            is_stale = true;
+        }
+    }
+
+    if (!valp || is_stale) {
         // find a wildcard port match
         key.port = 0;
         valp = bpf_map_lookup_elem(&ipv6_lpm_map, &key);

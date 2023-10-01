@@ -19,17 +19,17 @@ const (
 	IfaceDefault = "eth0"
 )
 
-type CidrWithPort struct {
+type CidrWithProtoPort struct {
 	//TODO ipv6 needed
 	cidr   string
 	id     uint16 //test
-	port   uint16
+	pp     protoport
 	lpmKey ILPMKey
 }
 
-func (c CidrWithPort) String() string {
+func (c CidrWithProtoPort) String() string {
 	// return cidr with id (siince ports we need compount key)
-	return fmt.Sprintf("cidr:%s:port:%d", c.cidr, c.port)
+	return fmt.Sprintf("cidr:%s;pp:%s", c.cidr, c.pp)
 }
 
 type protocol uint16
@@ -39,22 +39,23 @@ const (
 	ProtocolUDP protocol = 17
 )
 
-type Port struct {
+type protoport struct {
 	port  uint16
 	proto protocol
 }
 
-func (p Port) String() string {
+func (p protoport) String() string {
 	return fmt.Sprintf("port:%d:proto:%d", p.port, p.proto)
 }
 
-type CommonName struct {
+type CommonNameWithProtoPort struct {
 	cn string
-	id uint16 //test
+	id uint16
+	pp protoport
 }
 
-func (c CommonName) String() string {
-	return c.cn
+func (c CommonNameWithProtoPort) String() string {
+	return fmt.Sprintf("cn:%s;pp:%s", c.cn, c.pp)
 }
 
 type ShapingInfo struct {
@@ -68,9 +69,9 @@ type Eggy struct {
 	sync.RWMutex
 	Name             string
 	ProgramType      common.ProgramType
-	CommonNames      common.AssetList[CommonName]
-	Cidrs            common.AssetList[CidrWithPort]
-	Ports            common.AssetList[Port]
+	CommonNames      common.AssetList[CommonNameWithProtoPort]
+	Cidrs            common.AssetList[CidrWithProtoPort]
+	ProtoPorts       common.AssetList[protoport]
 	IngressInterface string
 	EgressInterface  string
 	//BPFObjectPath    string
@@ -156,21 +157,21 @@ func parseShapingInfo(shaping *v1alpha1.ShapingSpec) (shapingInfo *ShapingInfo, 
 
 func NewEggy(cegg v1alpha1.ClusterEgg) (*Eggy, error) {
 
-	ports, err := parsePorts(cegg.Spec.Egress.Ports)
+	pps, err := parseProtoPorts(cegg.Spec.Egress.Ports)
 	if err != nil {
-		fmt.Errorf("Parsing ports data %#v", err)
+		fmt.Errorf("parsing protocols and ports data %#v", err)
 		return nil, err
 	}
 
-	cidrs, err := parseCIDRs(cegg.Spec.Egress.CIDRs, ports)
+	cidrs, err := parseCIDRs(cegg.Spec.Egress.CIDRs, pps)
 	if err != nil {
-		fmt.Errorf("Parsing input data %#v", err)
+		fmt.Errorf("parsing input data %#v", err)
 		return nil, err
 	}
 
-	cns, err := parseCNs(cegg.Spec.Egress.CommonNames)
+	cns, err := parseCNs(cegg.Spec.Egress.CommonNames, pps)
 	if err != nil {
-		fmt.Errorf("Parsing input data %#v", err)
+		fmt.Errorf("parsing input data %#v", err)
 		return nil, err
 	}
 
@@ -204,7 +205,7 @@ func NewEggy(cegg v1alpha1.ClusterEgg) (*Eggy, error) {
 		EgressInterface:  eiface,
 		CommonNames:      cns,
 		Cidrs:            cidrs,
-		Ports:            ports,
+		ProtoPorts:       pps,
 		//BPFObjectPath:    "./l7egg.bpf.o",
 		PodLabels: podLabels,
 		Shaping:   shapingInfo,
@@ -212,16 +213,19 @@ func NewEggy(cegg v1alpha1.ClusterEgg) (*Eggy, error) {
 	return ey, nil
 }
 
-// parsePorts parses input ports and returns Port list.
-func parsePorts(ports []v1alpha1.PortSpec) (common.AssetList[Port], error) {
-	var retPorts common.AssetList[Port]
+// parseProtoPorts parses input ports and returns protoport list.
+func parseProtoPorts(ports []v1alpha1.PortSpec) (common.AssetList[protoport], error) {
+	var retPorts common.AssetList[protoport]
 	for _, port := range ports {
 		switch port.Protocol {
 		case corev1.ProtocolTCP:
-			retPorts.Add(&Port{port.Port, ProtocolTCP})
+			retPorts.Add(&protoport{port.Port, ProtocolTCP})
 		case corev1.ProtocolUDP:
-			retPorts.Add(&Port{port.Port, ProtocolUDP})
+			retPorts.Add(&protoport{port.Port, ProtocolUDP})
 		}
+	}
+	if len(retPorts) == 0 {
+		retPorts.Add(&protoport{0, 0})
 	}
 	return retPorts, nil
 }
@@ -230,7 +234,7 @@ func (ey *Eggy) UpdateSpec(ney *Eggy) error {
 	ey.Lock()
 	defer ey.Unlock()
 
-	ey.Ports.Update(ney.Ports)
+	ey.ProtoPorts.Update(ney.ProtoPorts)
 	ey.CommonNames.Update(ney.CommonNames)
 	ey.Cidrs.Update(ney.Cidrs)
 	ey.PodLabels = ney.PodLabels
@@ -242,8 +246,8 @@ func (ey *Eggy) UpdateDone() {
 	ey.Lock()
 	defer ey.Unlock()
 
-	ey.Ports.RemoveStale()
-	ey.Ports.SetStatus(common.AssetSynced)
+	ey.ProtoPorts.RemoveStale()
+	ey.ProtoPorts.SetStatus(common.AssetSynced)
 
 	ey.Cidrs.RemoveStale()
 	ey.Cidrs.SetStatus(common.AssetSynced)
@@ -263,45 +267,42 @@ func (ey *Eggy) Stop() {
 	} // need to set it to nil
 }
 
-func parseCIDR(cidrS string, ports common.AssetList[Port]) ([]CidrWithPort, error) {
+func parseCIDR(cidrS string, pps common.AssetList[protoport]) ([]CidrWithProtoPort, error) {
 	ip, ipNet, err := net.ParseCIDR(cidrS)
 	must(err, "Can't parse ipv4 Net.")
 	if err != nil {
-		return nil, fmt.Errorf("can't parse CidrWithPort %s", cidrS)
+		return nil, fmt.Errorf("can't parse CidrWithProtoPort %s", cidrS)
 	}
 
 	fmt.Println("#### parseCID ", ip, " ipNEt", ipNet)
 
 	prefix, _ := ipNet.Mask.Size()
 
-	if len(ports) == 0 {
-		ports.Add(&Port{0, 0})
-	}
-	retCidrs := make([]CidrWithPort, len(ports))
+	retCidrs := make([]CidrWithProtoPort, len(pps))
 
-	//iterate over ports and create lpmKey for each port, or add port 0 if ports is empty
-	for i, port := range ports {
+	//iterate over pps and create lpmKey for each port, or add port 0 if pps is empty
+	for i, pp := range pps {
 		if ipv4 := ip.To4(); ipv4 != nil {
-			retCidrs[i] = CidrWithPort{cidrS, syncx.Sequencer().Next(), port.Value.port, ipv4LPMKey{uint32(prefix), port.Value.port, [4]uint8(ipv4)}}
+			retCidrs[i] = CidrWithProtoPort{cidrS, syncx.Sequencer().Next(), *pp.Value, ipv4LPMKey{uint32(prefix), pp.Value.port, [4]uint8(ipv4)}}
 		} else if ipv6 := ip.To16(); ipv6 != nil {
-			retCidrs[i] = CidrWithPort{cidrS, syncx.Sequencer().Next(), port.Value.port, ipv6LPMKey{uint32(prefix), port.Value.port, [16]uint8(ipv6)}}
+			retCidrs[i] = CidrWithProtoPort{cidrS, syncx.Sequencer().Next(), *pp.Value, ipv6LPMKey{uint32(prefix), pp.Value.port, [16]uint8(ipv6)}}
 		}
 	}
 
 	//if ipv4 := ip.To4(); ipv4 != nil {
-	//	return CidrWithPort{cidrS, syncx.Sequencer().Next(), ipv4LPMKey{uint32(prefix), 443, [4]uint8(ipv4)}}, nil
+	//	return CidrWithProtoPort{cidrS, syncx.Sequencer().Next(), ipv4LPMKey{uint32(prefix), 443, [4]uint8(ipv4)}}, nil
 	//} else if ipv6 := ip.To16(); ipv6 != nil {
-	//	return CidrWithPort{cidrS, syncx.Sequencer().Next(), ipv6LPMKey{uint32(prefix), 443, [16]uint8(ipv6)}}, nil
+	//	return CidrWithProtoPort{cidrS, syncx.Sequencer().Next(), ipv6LPMKey{uint32(prefix), 443, [16]uint8(ipv6)}}, nil
 	//}
 
 	return retCidrs, nil
 }
 
 // ParseCIDRs TODO: only ipv4
-func parseCIDRs(cidrsS []string, ports common.AssetList[Port]) (common.AssetList[CidrWithPort], error) {
-	var cidrs common.AssetList[CidrWithPort]
+func parseCIDRs(cidrsS []string, ports common.AssetList[protoport]) (common.AssetList[CidrWithProtoPort], error) {
+	var cidrs common.AssetList[CidrWithProtoPort]
 	for _, cidrS := range cidrsS {
-		cidrWithPorts, err := parseCIDR(cidrS, ports)
+		cidrPps, err := parseCIDR(cidrS, ports)
 		if err != nil {
 			return cidrs, err
 		}
@@ -309,31 +310,34 @@ func parseCIDRs(cidrsS []string, ports common.AssetList[Port]) (common.AssetList
 		//	cidrCopy := cidr
 		//	_ = cidrs.Add(&cidrCopy) //can't use &cidr cause it points to the same address over the loop
 		//}
-		for i := range cidrWithPorts {
-			_ = cidrs.Add(&cidrWithPorts[i])
+		for i := range cidrPps {
+			_ = cidrs.Add(&cidrPps[i])
 		}
 	}
 
 	return cidrs, nil
 }
 
-// ParseCN returns CommonName object from string
-func parseCN(cnS string) (CommonName, error) {
-	//TODO add some validation before returning CommonName
-	//we are sync - due to we do not have to update kernel side
-	//we can use simple Id generator
+// ParseCN returns CommonNameWithProtoPort object from string
+func parseCN(cnS string, pps common.AssetList[protoport]) ([]CommonNameWithProtoPort, error) {
+	retCns := make([]CommonNameWithProtoPort, len(pps))
 
-	return CommonName{cnS, syncx.Sequencer().Next()}, nil
+	for i, pp := range pps {
+		retCns[i] = CommonNameWithProtoPort{cnS, syncx.Sequencer().Next(), *pp.Value}
+	}
+	return retCns, nil
 }
 
-func parseCNs(cnsS []string) (common.AssetList[CommonName], error) {
-	var cns common.AssetList[CommonName]
+func parseCNs(cnsS []string, pps common.AssetList[protoport]) (common.AssetList[CommonNameWithProtoPort], error) {
+	var cns common.AssetList[CommonNameWithProtoPort]
 	for _, cnS := range cnsS {
-		cn, err := parseCN(cnS)
+		cnPps, err := parseCN(cnS, pps)
 		if err != nil {
 			return cns, err
 		}
-		_ = cns.Add(&cn)
+		for i := range cnPps {
+			_ = cns.Add(&cnPps[i])
+		}
 	}
 
 	return cns, nil
