@@ -102,7 +102,7 @@ spec:
                     x-kubernetes-map-type: atomic
                   ports:
                     items:
-                      description: Port is a tuple that describes a single port.
+                      description: PortSpec is a tuple that describes a single port.
                       properties:
                         port:
                           description: The port number of the endpoint.

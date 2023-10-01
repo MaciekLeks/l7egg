@@ -70,12 +70,14 @@ struct {
 struct ipv4_lpm_key {
     __u32 prefixlen;
     __u16 port;
+    __u8 protocol;
     __u32 data;
 }  __attribute__((packed));
 
 struct ipv6_lpm_key {
     __u32 prefixlen;
     __u16 port;
+    __u8 protocol;
     __u8 data[16];
 }  __attribute__((packed));
 
@@ -105,10 +107,11 @@ struct {
 
 long ringbuffer_flags = 0;
 
-static __always_inline void *ipv4_lookup(__u32 ipaddr, __u16 port) {
+static __always_inline void *ipv4_lookup(__u32 ipaddr, __u16 port, __u8 protocol) {
     struct ipv4_lpm_key key = {
             .prefixlen = 32,
             .port = port,
+            .protocol = protocol,
             .data = ipaddr
     };
 
@@ -117,7 +120,7 @@ static __always_inline void *ipv4_lookup(__u32 ipaddr, __u16 port) {
 
 
     bool is_stale = false;
-    if (valp)   {
+    if (valp) {
         struct value_t *vp = valp;
         if (vp->status == IP_STALE) {
             is_stale = true;
@@ -125,8 +128,9 @@ static __always_inline void *ipv4_lookup(__u32 ipaddr, __u16 port) {
     }
 
     if (!valp || is_stale) {
-        // find a wildcard port match
+        // find a wildcard port and protocol match
         key.port = 0;
+        key.protocol = 0;
         valp = bpf_map_lookup_elem(&ipv4_lpm_map, &key);
         if (!valp) {
             // find a wildcard port and address match
@@ -139,11 +143,12 @@ static __always_inline void *ipv4_lookup(__u32 ipaddr, __u16 port) {
 
 
 // TODO: ports
-static __always_inline void *ipv6_lookup(__u8 ipaddr[16], __u16 port) {
+static __always_inline void *ipv6_lookup(__u8 ipaddr[16], __u16 port, __u8 protocol) {
     long err;
     struct ipv6_lpm_key key = {
             .prefixlen = 128,
-            .port = port
+            .port = port,
+            .protocol = protocol,
     };
 
     //TODO: do we need deep copy of the ipaddr for searching?
@@ -157,7 +162,7 @@ static __always_inline void *ipv6_lookup(__u8 ipaddr[16], __u16 port) {
     void *valp = bpf_map_lookup_elem(&ipv6_lpm_map, &key);
 
     bool is_stale = false;
-    if (valp)   {
+    if (valp) {
         struct value_t *vp = valp;
         if (vp->status == IP_STALE) {
             is_stale = true;
@@ -165,8 +170,9 @@ static __always_inline void *ipv6_lookup(__u8 ipaddr[16], __u16 port) {
     }
 
     if (!valp || is_stale) {
-        // find a wildcard port match
+        // find a wildcard port and protocol match
         key.port = 0;
+        key.protocol = 0;
         valp = bpf_map_lookup_elem(&ipv6_lpm_map, &key);
         if (!valp) {
             // find a wildcard port and address match
@@ -178,22 +184,23 @@ static __always_inline void *ipv6_lookup(__u8 ipaddr[16], __u16 port) {
 
 }
 
-static __always_inline long ipv4_update(__u32 ipaddr, struct value_t val, __u16 port) {
+static __always_inline long ipv4_update(__u32 ipaddr, struct value_t val, __u16 port, __u8 protocol) {
     struct ipv4_lpm_key key = {
             .prefixlen = 32,
             .port = port,
+            .protocol = protocol,
             .data = ipaddr
     };
 
     return bpf_map_update_elem(&ipv4_lpm_map, &key, &val, BPF_EXIST);
 }
 
-// TODO ports
-static __always_inline long ipv6_update(__u8 ipaddr[16], struct value_t val, __u16 port) {
+static __always_inline long ipv6_update(__u8 ipaddr[16], struct value_t val, __u16 port, __u8 protocol) {
     long err;
     struct ipv6_lpm_key key = {
             .prefixlen = 128,
-            .port = port
+            .port = port,
+            .protocol = protocol,
             //   .data = ipaddr
     };
 
@@ -238,11 +245,11 @@ static __always_inline void ipv6_print_ip(char *str, const __u8 *ipv6) {
     bpf_printk(":%d%d:%d%d\n", bytes[12], bytes[13], bytes[14], bytes[15]);
 }
 
-static __always_inline int ipv4_check_and_update(struct iphdr *ipv4, __u16 port) {
+static __always_inline int ipv4_check_and_update(struct iphdr *ipv4, __u16 port, __u8 protocol) {
     __u32 daddr = ipv4->daddr;
     __u32 saddr = ipv4->saddr;
     bpf_printk("[egress]: daddr:%u, saddr:%u", daddr, saddr);
-    void *pv = ipv4_lookup(daddr, port);
+    void *pv = ipv4_lookup(daddr, port, protocol);
     if (!pv) {
         bpf_printk("[egress]: drop:%u", daddr);
         ipv4_print_ip("[egress] DROP", "\n", daddr);
@@ -264,7 +271,7 @@ static __always_inline int ipv4_check_and_update(struct iphdr *ipv4, __u16 port)
         return TC_ACT_SHOT;
     }
     pval->counter = pval->counter + 1; //it would not work /24 subnet and /32 ip addr
-    long ret = ipv4_update(daddr, *pval, port); //it creates /32 ip addr if you hit some subnet e.g. /24
+    long ret = ipv4_update(daddr, *pval, port, protocol); //it creates /32 ip addr if you hit some subnet e.g. /24
     if (ret) {
         bpf_printk("[egress]: can't update counter, code:%d", ret);
     } else {
@@ -276,11 +283,11 @@ static __always_inline int ipv4_check_and_update(struct iphdr *ipv4, __u16 port)
     return TC_MOVE_ONE; //process further inside bpf
 }
 
-static __always_inline int ipv6_check_and_update(struct ipv6hdr *ipv6, __u16 port) {
+static __always_inline int ipv6_check_and_update(struct ipv6hdr *ipv6, __u16 port, __u8 protocol) {
     struct in6_addr daddr = ipv6->daddr;
     struct in6_addr saddr = ipv6->saddr;
     bpf_printk("[egress]: daddr:%u, saddr:%u", daddr.in6_u.u6_addr8, saddr.in6_u.u6_addr8);
-    void *pv = ipv6_lookup(daddr.in6_u.u6_addr8, port);
+    void *pv = ipv6_lookup(daddr.in6_u.u6_addr8, port, protocol);
     if (!pv) {
         //   bpf_printk("[egress]: drop:%u", daddr.in6_u.u6_addr8);
         ipv6_print_ip("[egress] DROP", daddr.in6_u.u6_addr8);
@@ -301,7 +308,8 @@ static __always_inline int ipv6_check_and_update(struct ipv6hdr *ipv6, __u16 por
         return TC_ACT_SHOT;
     }
     pval->counter = pval->counter + 1; //it would not work /24 subnet and /32 ip addr
-    long ret = ipv6_update(daddr.in6_u.u6_addr8, *pval, port); //it creates /32 ip addr if you hit some subnet e.g. /24
+    long ret = ipv6_update(daddr.in6_u.u6_addr8, *pval, port,
+                           protocol); //it creates /32 ip addr if you hit some subnet e.g. /24
     if (ret) {
         bpf_printk("[egress]: can't update counter, code:%d", ret);
     } else {
@@ -432,9 +440,9 @@ process_relative(struct __sk_buff *skb, enum bpf_hdr_start_off hdr_start_off, bo
         if (is_egress) {
             int ret;
             if (!is_ipv6) {
-                ret = ipv4_check_and_update((struct iphdr *) ip, dport);
+                ret = ipv4_check_and_update((struct iphdr *) ip, dport, protocol);
             } else {
-                ret = ipv6_check_and_update((struct ipv6hdr *) ip, dport);
+                ret = ipv6_check_and_update((struct ipv6hdr *) ip, dport, protocol);
             }
 
             if (ret != TC_MOVE_ONE)

@@ -93,5 +93,6 @@ type PortSpec struct {
 	// Must be UDP, TCP, or SCTP.
 	// Default is TCP.
 	// +optional
+	// +default="TCP"
 	Protocol corev1.Protocol `json:"protocol,omitempty"`
 }

@@ -470,10 +470,11 @@ func (eby *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, net
 
 								for i := range eby.eggy.ProtoPorts {
 									port := eby.eggy.ProtoPorts[i].Value.port
+									proto := eby.eggy.ProtoPorts[i].Value.proto
 									if a.Type == layers.DNSTypeA {
-										key = ipv4LPMKey{32, port, [4]uint8(ip[0:4])}
+										key = ipv4LPMKey{32, port, uint8(proto), [4]uint8(ip[0:4])}
 									} else {
-										key = ipv6LPMKey{128, port, [16]uint8(ip[0:16])}
+										key = ipv6LPMKey{128, port, uint8(proto), [16]uint8(ip[0:16])}
 									}
 									//val := time.Now().Unix() + int64(ttl) //Now + ttl
 									ttlNs := uint64(ttlSec) * 1000000000
@@ -532,17 +533,18 @@ func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns *syncx.SafeSlice[Co
 					keyBytes := i.Key()
 					prefixLen := endian.Uint32(keyBytes[0:4])
 					port := endian.Uint16(keyBytes[4:6]) //port
+					proto := keyBytes[6:7][0]
 
 					var key ILPMKey
 					var ipB []byte
 					if ipv == ipv4 {
-						ipB = keyBytes[6:10]
+						ipB = keyBytes[7:11]
 						//ip := bytes2ip(ipBytes)
-						key = ipv4LPMKey{prefixLen, port, [4]uint8((ipB))}
+						key = ipv4LPMKey{prefixLen, port, proto, [4]uint8((ipB))}
 					} else {
-						ipB = keyBytes[6:22]
+						ipB = keyBytes[7:23]
 						//ip := bytes2ip(ipBytes)
-						key = ipv6LPMKey{prefixLen, port, [16]uint8((ipB))}
+						key = ipv6LPMKey{prefixLen, port, proto, [16]uint8((ipB))}
 					}
 
 					val := getACLValue(bpfM, key)
@@ -578,17 +580,19 @@ func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns *syncx.SafeSlice[Co
 func unmarshalIpv4ACLKey(bytes []byte) ipv4LPMKey {
 	prefixLen := endian.Uint32(bytes[0:4])
 	port := endian.Uint16(bytes[4:6])
-	ipB := bytes[6:10]
+	proto := bytes[6:7][0]
+	ipB := bytes[7:11]
 
-	return ipv4LPMKey{prefixLen, port, [4]uint8(ipB)}
+	return ipv4LPMKey{prefixLen, port, proto, [4]uint8(ipB)}
 }
 
 func unmarshalIpv6ACLKey(bytes []byte) ipv6LPMKey {
 	prefixLen := endian.Uint32(bytes[0:4])
 	port := endian.Uint16(bytes[4:6])
-	ipBytes := bytes[6:22]
+	proto := bytes[6:7][0]
+	ipBytes := bytes[7:23]
 
-	return ipv6LPMKey{prefixLen, port, [16]uint8(ipBytes)}
+	return ipv6LPMKey{prefixLen, port, proto, [16]uint8(ipBytes)}
 }
 
 func getACLValue(acl *bpf.BPFMap, ikey ILPMKey) ipLPMVal {
