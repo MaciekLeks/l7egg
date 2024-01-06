@@ -27,6 +27,3 @@ spec:
       protocol: TCP
     - port: 8080 #iperf
       protocol: TCP
-    redirect:
-      port: 10080
-      protocol: TCP
