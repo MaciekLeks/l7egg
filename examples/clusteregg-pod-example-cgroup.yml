@@ -22,8 +22,11 @@ spec:
         app: tester
     ports:
     - port: 80
-      #protocol: TCP #default is TCP
-#    - port: 443
-#      protocol: TCP
-#    - port: 8080 #iperf
-#      protocol: TCP
+      protocol: TCP #default is TCP
+    - port: 443
+      protocol: TCP
+    - port: 8080 #iperf
+      protocol: TCP
+    redirect:
+      port: 10080
+      protocol: TCP
