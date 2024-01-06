@@ -16,10 +16,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/common"
-	"github.com/MaciekLeks/l7egg/pkg/syncx"
+	"github.com/MaciekLeks/l7egg/pkg/metrics"
 	bpf "github.com/aquasecurity/libbpfgo"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
+	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/klog/v2"
 	"os"
 	"strings"
@@ -148,6 +149,7 @@ func (eby *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType commo
 
 		var lwg sync.WaitGroup
 		//runMapLooper(ctx, ebpfy.ipv4ACL, ebpfy.CommonNames, ipv4, &lwg, netNsPath, cgroupPath)
+		runMapLooper(ctx, eby.ipv4ACL, eby.eggy.CommonNames, ipv4, &lwg, netNsPath, cgroupPath)
 		//runMapLooper(ctx, ebpfy.ipv6ACL, ebpfy.CommonNames, ipv6, &lwg, netNsPath, cgroupPath)
 		eby.runPacketsLooper(ctx, &lwg, netNsPath, cgroupPath)
 		lwg.Wait()
@@ -511,7 +513,74 @@ func (eby *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, net
 	}()
 }
 
-func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns *syncx.SafeSlice[CommonNameWithProtoPort], ipv ipProtocolVersion, lwg *sync.WaitGroup, netNsPath string, cgroupPath string) {
+//
+//func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns *syncx.SafeSlice[CommonNameWithProtoPort], ipv ipProtocolVersion, lwg *sync.WaitGroup, netNsPath string, cgroupPath string) {
+//	lwg.Add(1)
+//	go func() {
+//		defer lwg.Done()
+//		defer fmt.Printf("runMapLooper terminated")
+//	mapLoop:
+//		for {
+//			select {
+//			case <-ctx.Done():
+//				fmt.Println("[mapLoop]: stopCh closed.")
+//				break mapLoop
+//			default:
+//				time.Sleep(5 * time.Second)
+//				fmt.Printf("\n\n----bpfM: %p\n", bpfM)
+//				i := bpfM.Iterator() //determineHost Endian search by Itertaot in libbfpgo
+//				for i.Next() {
+//					if i.Err() != nil {
+//						fatal("Iterator error", i.Err())
+//					}
+//					keyBytes := i.Key()
+//					prefixLen := endian.Uint32(keyBytes[0:4])
+//					port := endian.Uint16(keyBytes[4:6]) //port
+//					proto := keyBytes[6:7][0]
+//
+//					var key ILPMKey
+//					var ipB []byte
+//					if ipv == ipv4 {
+//						ipB = keyBytes[7:11]
+//						//ip := bytes2ip(ipBytes)
+//						key = ipv4LPMKey{prefixLen, port, proto, [4]uint8((ipB))}
+//					} else {
+//						ipB = keyBytes[7:23]
+//						//ip := bytes2ip(ipBytes)
+//						key = ipv6LPMKey{prefixLen, port, proto, [16]uint8((ipB))}
+//					}
+//
+//					val := getACLValue(bpfM, key)
+//					bootNs := uint64(C.get_nsecs())
+//					//var expired string = fmt.Sprintf("%d-%d", bootNs, ttl)
+//					var expired string
+//					if val.ttl != 0 && val.ttl < bootNs {
+//						//fmt.Printf("\nttl(%d)<bootNs(%d)=%t | ", ttl, bootNs, ttl < bootNs)
+//						expired = "x"
+//					}
+//
+//					//test only
+//					var cn string
+//					if val.ttl != 0 {
+//						for i := 0; i < cns.Len(); i++ {
+//							current := cns.Get(i)
+//							if current.id == val.id {
+//								cn = current.cn
+//							}
+//						}
+//					}
+//
+//					//valBytes := ipv4ACL[ipv4LPMKey{1,1}]
+//					//fmt.Printf(" [bootTtlNs:%d,bootNs:%d][%s]%s/%d[%d]", ttl, bootNs, expired, ip, prefixLen, val.counter)
+//					fmt.Printf("netNsPath:%s cgroupPath:%s id: %d cn:%s expired:%s ip: %v/%d counter:%d status:%d\n", netNsPath, cgroupPath, val.id, cn, expired, ipB, prefixLen, val.counter, val.status)
+//
+//				}
+//			}
+//		}
+//	}()
+//}
+
+func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns common.AssetList[CommonNameWithProtoPort], ipv ipProtocolVersion, lwg *sync.WaitGroup, netNsPath string, cgroupPath string) {
 	lwg.Add(1)
 	go func() {
 		defer lwg.Done()
@@ -560,9 +629,9 @@ func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns *syncx.SafeSlice[Co
 					var cn string
 					if val.ttl != 0 {
 						for i := 0; i < cns.Len(); i++ {
-							current := cns.Get(i)
-							if current.id == val.id {
-								cn = current.cn
+							current := cns[i]
+							if current.Value.id == val.id {
+								cn = current.Value.cn
 							}
 						}
 					}
@@ -570,7 +639,7 @@ func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns *syncx.SafeSlice[Co
 					//valBytes := ipv4ACL[ipv4LPMKey{1,1}]
 					//fmt.Printf(" [bootTtlNs:%d,bootNs:%d][%s]%s/%d[%d]", ttl, bootNs, expired, ip, prefixLen, val.counter)
 					fmt.Printf("netNsPath:%s cgroupPath:%s id: %d cn:%s expired:%s ip: %v/%d counter:%d status:%d\n", netNsPath, cgroupPath, val.id, cn, expired, ipB, prefixLen, val.counter, val.status)
-
+					metrics.CommonNameTotalRequests.With(prometheus.Labels{"cn": cn}).Set(float64(val.counter))
 				}
 			}
 		}

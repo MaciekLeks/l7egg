@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	ceggclientset "github.com/MaciekLeks/l7egg/pkg/client/clientset/versioned"
+	"github.com/MaciekLeks/l7egg/pkg/metrics"
 	"github.com/MaciekLeks/l7egg/pkg/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
@@ -99,10 +100,17 @@ func main() {
 	ceggInformerFactory.Start(ctx.Done())
 	kubeInformerFactory.Start(ctx.Done())
 
+	prometheusServer := metrics.RunServer(ctx, ":9090") //TODO: add to API
+
 	if err = c.Run(ctx, 1, 1); err != nil {
 		logger.Error(err, "Error running controller.")
 		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 	}
 
 	c.Wait(ctx)
+
+	if err := prometheusServer.Shutdown(ctx); err != nil {
+		logger.Error(err, "Error shutting down prometheus server.")
+		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
+	}
 }
