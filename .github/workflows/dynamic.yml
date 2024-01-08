@@ -15,7 +15,7 @@ jobs:
     - name: Install dependencies
       run: |
         apt-get update
-        apt-get install -y libbpf-dev=1:1.2.2-2 git make clang llvm build-essential libelf-dev curl
+        apt-get install -y libbpf-dev=1:1.2.2-2 git make clang llvm build-essential libelf-dev curl linux-tools-common
         dpkg -s libbpf-dev | grep Version
         dpkg -L libbpf-dev #check the libbpf-dev package contents
         curl -LO https://go.dev/dl/go${{ env.GO_VERSION }}.linux-amd64.tar.gz
