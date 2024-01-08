@@ -11,6 +11,7 @@ jobs:
       run: |
         sudo apt update
         sudo apt install -y libbpf-dev
+        dpkg -L libbpf-dev #check the libbpf-dev package contents
     - name: Check kernel version
       run: uname -r
     - name: Set up Go
