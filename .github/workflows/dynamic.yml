@@ -22,7 +22,5 @@ jobs:
         submodules: recursive
     - name: Get dependencies
       run: go get -v -t -d ./...
-    - name: Run pwd
-      run: pwd
     - name: Run Makefile
       run: LIBBPF_DIR=/usr/lib64 make dynamic
