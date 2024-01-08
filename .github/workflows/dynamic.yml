@@ -12,7 +12,7 @@ jobs:
     - name: Install dependencies
       run: |
         apt-get update
-        apt-get install -y libbpf-dev git make linux-tools-generic
+        apt-get install -y libbpf-dev git make linux-tools-azure
         dpkg -s libbpf-dev | grep Version
         dpkg -L libbpf-dev #check the libbpf-dev package contents
 #        #echo "deb http://cz.archive.ubuntu.com/ubuntu mantic main" | sudo tee -a /etc/apt/sources.list
@@ -22,7 +22,6 @@ jobs:
 #        sudo apt-get install -y libbpf-dev=1:1.3.0-2
 #        dpkg -s libbpf-dev | grep Version
 #        dpkg -L libbpf-dev #check the libbpf-dev package contents
-
     - name: Set up Go
       uses: actions/setup-go@v2
       with:
