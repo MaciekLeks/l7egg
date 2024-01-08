@@ -22,8 +22,8 @@ jobs:
         curl -LO https://go.dev/dl/go${{ env.GO_VERSION }}.linux-amd64.tar.gz
         tar -C /usr/local -xzf go${{ env.GO_VERSION }}.linux-amd64.tar.gz
         git clone --depth 1 --recurse-submodules https://github.com/libbpf/bpftool.git
-        curl -LO https://github.com/libbpf/bpftool/releases/download/${{ BPFTOOL_VERSION }}/bpftool-${{ BPFTOOL_VERSION}}-amd64.tar.gz
-        tar -xzvf bpftool-${{ BPFTOOL_VERSION}}-amd64.tar.gz
+        curl -LO https://github.com/libbpf/bpftool/releases/download/${{ env.BPFTOOL_VERSION }}/bpftool-${{ env.BPFTOOL_VERSION }}-amd64.tar.gz
+        tar -xzvf bpftool-${{ env.BPFTOOL_VERSION}}-amd64.tar.gz
         chmod +x bpftool
         ln -s /usr/local/bin/bpftool ./bpftool
 #        #echo "deb http://cz.archive.ubuntu.com/ubuntu mantic main" | sudo tee -a /etc/apt/sources.list
