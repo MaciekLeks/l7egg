@@ -13,6 +13,7 @@ jobs:
         sudo apt install -y libbpf-dev
         dpkg -s libbpf-dev | grep Version
         dpkg -L libbpf-dev #check the libbpf-dev package contents
+
     - name: Set up Go
       uses: actions/setup-go@v2
       with:
