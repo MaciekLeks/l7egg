@@ -4,7 +4,7 @@ SHELL = /bin/bash
 ARCH=$(shell uname -m)
 
 CC = clang
-GO = /usr/local/go/bin/go
+GO ?= /usr/local/go/bin/go
 
 MAIN = l7egg
 
