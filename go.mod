@@ -3,7 +3,7 @@ module github.com/MaciekLeks/l7egg
 go 1.20
 
 require (
-	github.com/aquasecurity/libbpfgo v0.5.0-libbpf-1.2
+	github.com/aquasecurity/libbpfgo v0.6.0-libbpf-1.3
 	github.com/containerd/cgroups v1.1.0
 	github.com/containerd/cgroups/v3 v3.0.2
 	github.com/containerd/containerd v1.7.1
