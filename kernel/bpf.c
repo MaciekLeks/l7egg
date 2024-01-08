@@ -210,7 +210,7 @@ static __always_inline long ipv6_update(__u8 ipaddr[16], struct value_t val, __u
     return bpf_map_update_elem(&ipv6_lpm_map, &key, &val, BPF_EXIST);
 }
 
-#if not defined DEBUG || DEBUG == 1
+#ifndef DEBUG || DEBUG == 1
 static __always_inline void ipv4_print_ip(char *prefix, char *suffix, __u32 ip) {
     unsigned char bytes[4];
     bytes[0] = ip & 0xFF;
