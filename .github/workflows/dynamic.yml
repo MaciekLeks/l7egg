@@ -9,7 +9,7 @@ jobs:
     container:
       image: ubuntu:23.04
     env:
-      GO_VERSION: 1.20.5
+      GO_VERSION: 1.20.12
       KERNEL_VERSION: 6.2.0-1018-azure
     steps:
     - name: Install dependencies
