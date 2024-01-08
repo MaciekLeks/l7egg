@@ -219,6 +219,7 @@ static __always_inline void ipv4_print_ip(char *prefix, char *suffix, __u32 ip) 
     bpf_printk("%s:%d.%d.%d.%d%s", prefix, bytes[0], bytes[1], bytes[2], bytes[3], suffix);
 }
 
+#if not defined DEBUG || DEBUG == 1
 static __always_inline void ipv6_print_ip(char *str, const __u8 *ipv6) {
     unsigned char bytes[16];
     bytes[0] = ipv6[0];
@@ -280,6 +281,7 @@ static __always_inline int ipv4_check_and_update(struct iphdr *ipv4, __u16 port,
 
     return TC_MOVE_ONE; //process further inside bpf
 }
+#endif
 
 static __always_inline int ipv6_check_and_update(struct ipv6hdr *ipv6, __u16 port, __u8 protocol) {
     struct in6_addr daddr = ipv6->daddr;
