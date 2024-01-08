@@ -12,8 +12,7 @@ jobs:
         sudo apt update
         sudo apt install -y libbpf-dev
         dpkg -L libbpf-dev #check the libbpf-dev package contents
-    - name: Check kernel version
-      run: uname -r
+
     - name: Set up Go
       uses: actions/setup-go@v2
       with:
@@ -23,6 +22,10 @@ jobs:
       with:
         fetch-depth: 0
         submodules: recursive
+    - name: Check kernel version
+      run: |
+        uname -r
+        whereis go
     - name: Get dependencies
       run: go get -v -t -d ./...
     - name: Run Makefile
