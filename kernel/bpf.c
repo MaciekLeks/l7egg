@@ -31,8 +31,8 @@
 
 #if defined DEBUG && DEBUG == 0
 #define bpf_printk(fmt,...)
-#define ipv6_print_ip(char *str, const __u8 *ipv6)
-#define ipv4_print_ip(char *prefix, char *suffix, __u32 ip)
+#define ipv6_print_ip(str, ipv6)
+#define ipv4_print_ip(prefix,suffix,ip)
 #endif
 
 //DNS header structure
@@ -72,21 +72,21 @@ struct ipv4_lpm_key {
     __u16 port;
     __u8 protocol;
     __u32 data;
-}  __attribute__((packed));
+} __attribute__((packed));
 
 struct ipv6_lpm_key {
     __u32 prefixlen;
     __u16 port;
     __u8 protocol;
     __u8 data[16];
-}  __attribute__((packed));
+} __attribute__((packed));
 
 struct value_t {
     __u64 ttl;
     __u64 counter;
     __u16 id; // identification number
     __u8 status; //0 - synced, 1 - stale
-}  __attribute__((packed));
+} __attribute__((packed));
 
 struct {
     __uint(type, BPF_MAP_TYPE_LPM_TRIE);
@@ -109,10 +109,10 @@ long ringbuffer_flags = 0;
 
 static __always_inline void *ipv4_lookup(__u32 ipaddr, __u16 port, __u8 protocol) {
     struct ipv4_lpm_key key = {
-            .prefixlen = 32,
-            .port = port,
-            .protocol = protocol,
-            .data = ipaddr
+        .prefixlen = 32,
+        .port = port,
+        .protocol = protocol,
+        .data = ipaddr
     };
 
     // try to find exact match first
@@ -136,7 +136,6 @@ static __always_inline void *ipv4_lookup(__u32 ipaddr, __u16 port, __u8 protocol
             // find a wildcard port and address match
             valp = bpf_map_lookup_elem(&ipv4_lpm_map, &key);
         }
-
     }
     return valp;
 }
@@ -146,9 +145,9 @@ static __always_inline void *ipv4_lookup(__u32 ipaddr, __u16 port, __u8 protocol
 static __always_inline void *ipv6_lookup(__u8 ipaddr[16], __u16 port, __u8 protocol) {
     long err;
     struct ipv6_lpm_key key = {
-            .prefixlen = 128,
-            .port = port,
-            .protocol = protocol,
+        .prefixlen = 128,
+        .port = port,
+        .protocol = protocol,
     };
 
     //TODO: do we need deep copy of the ipaddr for searching?
@@ -178,18 +177,16 @@ static __always_inline void *ipv6_lookup(__u8 ipaddr[16], __u16 port, __u8 proto
             // find a wildcard port and address match
             valp = bpf_map_lookup_elem(&ipv6_lpm_map, &key);
         }
-
     }
     return valp;
-
 }
 
 static __always_inline long ipv4_update(__u32 ipaddr, struct value_t val, __u16 port, __u8 protocol) {
     struct ipv4_lpm_key key = {
-            .prefixlen = 32,
-            .port = port,
-            .protocol = protocol,
-            .data = ipaddr
+        .prefixlen = 32,
+        .port = port,
+        .protocol = protocol,
+        .data = ipaddr
     };
 
     return bpf_map_update_elem(&ipv4_lpm_map, &key, &val, BPF_EXIST);
@@ -198,10 +195,10 @@ static __always_inline long ipv4_update(__u32 ipaddr, struct value_t val, __u16 
 static __always_inline long ipv6_update(__u8 ipaddr[16], struct value_t val, __u16 port, __u8 protocol) {
     long err;
     struct ipv6_lpm_key key = {
-            .prefixlen = 128,
-            .port = port,
-            .protocol = protocol,
-            //   .data = ipaddr
+        .prefixlen = 128,
+        .port = port,
+        .protocol = protocol,
+        //   .data = ipaddr
     };
 
     err = bpf_probe_read_kernel(key.data, 16, ipaddr); //bpf_probe_read->bpf_probe_read_kernel
@@ -265,7 +262,8 @@ static __always_inline int ipv4_check_and_update(struct iphdr *ipv4, __u16 port,
     }
     __u64 boot_plus_ttl_ns = pval->ttl;
     __u64 boot_ns = bpf_ktime_get_boot_ns();
-    if (boot_plus_ttl_ns != 0 && boot_plus_ttl_ns < boot_ns) { //0 means no TTL
+    if (boot_plus_ttl_ns != 0 && boot_plus_ttl_ns < boot_ns) {
+        //0 means no TTL
         bpf_printk("[egress]: TTL expired:%u, boot_plus_ttl_ns:%u boot_ns:%u", daddr, boot_plus_ttl_ns, boot_ns);
         ipv4_print_ip("[egress] DROP_TTL", "\n", daddr);
         return TC_ACT_SHOT;
@@ -302,7 +300,8 @@ static __always_inline int ipv6_check_and_update(struct ipv6hdr *ipv6, __u16 por
     }
     __u64 boot_plus_ttl_ns = pval->ttl;
     __u64 boot_ns = bpf_ktime_get_boot_ns();
-    if (boot_plus_ttl_ns != 0 && boot_plus_ttl_ns < boot_ns) { //0 means no TTL
+    if (boot_plus_ttl_ns != 0 && boot_plus_ttl_ns < boot_ns) {
+        //0 means no TTL
         //    bpf_printk("[egress]: TTL expired:%u, boot_plus_ttl_ns:%u boot_ns:%u", daddr.in6_u.u6_addr8, boot_plus_ttl_ns, boot_ns);
         ipv6_print_ip("[egress] DROP_TTL", daddr.in6_u.u6_addr8);
         return TC_ACT_SHOT;
@@ -358,7 +357,7 @@ process_relative(struct __sk_buff *skb, enum bpf_hdr_start_off hdr_start_off, bo
 
     //struct iphdr *ip = (data + off);
     __u8 version = *(__u8 *) (
-            long) (data + off) & 0xF0 >> 2;
+                       long) (data + off) & 0xF0 >> 2;
     if (data + off + sizeof(__u8) > data_end) {
         return 0;
     }
@@ -436,7 +435,6 @@ process_relative(struct __sk_buff *skb, enum bpf_hdr_start_off hdr_start_off, bo
 
     //TODO: what about different ports? see: https://stackoverflow.com/questions/7565300/identifying-dns-packets
     if (sport != 53 && dport != 53) {
-
         if (is_egress) {
             int ret;
             if (!is_ipv6) {
@@ -449,13 +447,13 @@ process_relative(struct __sk_buff *skb, enum bpf_hdr_start_off hdr_start_off, bo
                 return ret;
         }
         return TC_ACT_OK;
-
     }
 
     bpf_printk("[process] /7");
 
-//    check only for dnq query
-    if (is_egress && dport == 53) { //only answers matters
+    //    check only for dnq query
+    if (is_egress && dport == 53) {
+        //only answers matters
         const __u32 len = skb->len;
         if (len > ETH_FRAME_LEN)
             return 0;
@@ -472,13 +470,14 @@ process_relative(struct __sk_buff *skb, enum bpf_hdr_start_off hdr_start_off, bo
                    dnshp->z);
         bpf_printk("[DNS] q.header.flag|3 = ra:%u", dnshp->ra);
         bpf_printk("[DNS] q. qdcount:%u nscount: %u, arcount:%u", bpf_htons(dnshp->q_count),
-                   bpf_htons(dnshp->ans_count), bpf_htons(dnshp->add_count));
+                   bpf_htons(dnshp->ans_count), bpf_htons(dnshp->add_count))        ;
         //}dns
     }
 
     bpf_printk("[process] /8");
 
-    if (!is_egress && sport == 53) { //only answers matters
+    if (!is_egress && sport == 53) {
+        //only answers matters
         __u32 len = skb->len;
 
         //{dns deep dive
@@ -493,7 +492,7 @@ process_relative(struct __sk_buff *skb, enum bpf_hdr_start_off hdr_start_off, bo
                    dnshp->z);
         bpf_printk("[DNS] a.header.flag|3 = ra:%u", dnshp->ra);
         bpf_printk("[DNS] a. qdcount:%u nscount: %u, arcount:%u", bpf_htons(dnshp->q_count),
-                   bpf_htons(dnshp->ans_count), bpf_htons(dnshp->add_count));
+                   bpf_htons(dnshp->ans_count), bpf_htons(dnshp->add_count))        ;
         //}dns
 
 
@@ -518,11 +517,13 @@ process_relative(struct __sk_buff *skb, enum bpf_hdr_start_off hdr_start_off, bo
                 len = ETH_FRAME_LEN;
             }
             if (len < 1) {
-                len = 1; //see: https://stackoverflow.com/questions/76371104/bpf-skb-load-bytes-array-loading-when-len-could-be-0-invalid-access-to-memor
+                len = 1;
+                //see: https://stackoverflow.com/questions/76371104/bpf-skb-load-bytes-array-loading-when-len-could-be-0-invalid-access-to-memor
             }
             err = bpf_skb_load_bytes_relative(skb, 0, valp->data, len, BPF_HDR_START_MAC);
         }
-        if (err) { //!err -> err
+        if (err) {
+            //!err -> err
             bpf_ringbuf_discard(valp, ringbuffer_flags); //memory not consumed
             return TC_ACT_OK;
         }
