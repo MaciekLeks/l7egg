@@ -10,7 +10,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt update
-        sudo apt install -y libbpf-dev=1.2.2-2
+        sudo apt install -y libbpf-dev=1:1.3.0-2
         dpkg -s libbpf-dev | grep Version
         dpkg -L libbpf-dev #check the libbpf-dev package contents
 
