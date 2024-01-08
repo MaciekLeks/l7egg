@@ -13,7 +13,7 @@ compile_commands.json
 vmlinux.h
 
 # temp to be changed
-build/*
+#build/*
 
 #temporary
 /tools/tc-cleaner
