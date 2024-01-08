@@ -15,11 +15,14 @@ jobs:
     - name: Install dependencies
       run: |
         apt-get update
-        apt-get install -y libbpf-dev=1:1.2.2-2 git make clang llvm build-essential libelf-dev curl linux-tools-common
+        apt-get install -y libbpf-dev=1:1.2.2-2 git make clang llvm build-essential libelf-dev curl
         dpkg -s libbpf-dev | grep Version
         dpkg -L libbpf-dev #check the libbpf-dev package contents
         curl -LO https://go.dev/dl/go${{ env.GO_VERSION }}.linux-amd64.tar.gz
         tar -C /usr/local -xzf go${{ env.GO_VERSION }}.linux-amd64.tar.gz
+        git clone --depth 1 --recurse-submodules https://github.com/libbpf/bpftool.git
+        cd bpftool/src
+        make install
 #        #echo "deb http://cz.archive.ubuntu.com/ubuntu mantic main" | sudo tee -a /etc/apt/sources.list
 #        echo "deb http://cz.archive.ubuntu.com/ubuntu noble main" | sudo tee -a /etc/apt/sources.list
 #        sudo apt-get update
