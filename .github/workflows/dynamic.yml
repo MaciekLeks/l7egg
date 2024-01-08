@@ -15,11 +15,11 @@ jobs:
     - name: Install dependencies
       run: |
         apt-get update
-        apt-get install -y libbpf-dev git make linux-tools-${{ KERNEL_VERSION }} clang llvm build-essential libelf-dev curl
+        apt-get install -y libbpf-dev git make linux-tools-${{ env.KERNEL_VERSION }} clang llvm build-essential libelf-dev curl
         dpkg -s libbpf-dev | grep Version
         dpkg -L libbpf-dev #check the libbpf-dev package contents
-        curl -LO https://go.dev/dl/go${{ GO_VERSION }}.linux-amd64.tar.gz
-        tar -C /usr/local -xzf go${{ GO_VERSION }}.linux-amd64.tar.gz
+        curl -LO https://go.dev/dl/go${{ env.GO_VERSION }}.linux-amd64.tar.gz
+        tar -C /usr/local -xzf go${{ env.GO_VERSION }}.linux-amd64.tar.gz
 #        #echo "deb http://cz.archive.ubuntu.com/ubuntu mantic main" | sudo tee -a /etc/apt/sources.list
 #        echo "deb http://cz.archive.ubuntu.com/ubuntu noble main" | sudo tee -a /etc/apt/sources.list
 #        sudo apt-get update
