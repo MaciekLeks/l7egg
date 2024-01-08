@@ -47,6 +47,9 @@ CGO_EXTLDFLAGS_STATIC = '-extldflags "-static"'
 #CGO_LDFLAGS_DYN = '-lelf -lz  -Wl,-rpath=$(LIBBPF_DYN_LIB) -L$(LIBBPF_DYN_LIB) -lbpf'
 CGO_EXTLDFLAGS_DYN = '-extldflags "-lelf -lz  -Wl,-rpath=$(LIBBPF_DYN_LIB_PATH) -L$(LIBBPF_DYN_LIB_PATH) -lbpf"'
 
+build-dir:
+	mkdir -p $(BUILD_DIR)
+
 .PHONY: dynamic
 dynamic: $(LIBBPF_DYN_LIB) $(TARGET_BPF) $(TARGET_CLI_DYN) $(TARGET_K8S_DYN)
 
@@ -68,7 +71,7 @@ $(LIBBPF_DYN_LIB): $(wildcard $(LIBBPF_DIR)/*.c) $(wildcard $(LIBBPF_DIR)/*.h)
 	$(MAKE) -C $(LIBBPF_DIR)
 
 # -D__TARGET_ARCH_$(ARCH) - removed - needed only for tracing
-$(TARGET_BPF): $(BPF_SRC)
+$(TARGET_BPF): build-dir $(BPF_SRC)
 	$(CC) \
 		-MJ compile_commands.json \
 	    -g \
@@ -81,7 +84,7 @@ $(TARGET_BPF): $(BPF_SRC)
 		-c $^ \
 		-o $@
 
-$(TARGET_CLI_STATIC): $(LIBBPF_STATIC_LIB) $(CMD_CLI_GO_SRC) $(TARGET_BPF)
+$(TARGET_CLI_STATIC): build-dir $(LIBBPF_STATIC_LIB) $(CMD_CLI_GO_SRC) $(TARGET_BPF)
 	CGO_CFLAGS=$(CGO_CFLAGS) \
 	CGO_LDFLAGS=$(CGO_LDFLAGS_STATIC) \
 	$(GO) build \
@@ -89,7 +92,7 @@ $(TARGET_CLI_STATIC): $(LIBBPF_STATIC_LIB) $(CMD_CLI_GO_SRC) $(TARGET_BPF)
 	-ldflags $(CGO_EXTLDFLAGS_STATIC) \
 	-o $@ ./cmd/cli/$(MAIN).go
 
-$(TARGET_CLI_DYN): $(LIBBPF_DYN_LIB) $(CMD_CLI_GO_SRC) $(TARGET_BPF)
+$(TARGET_CLI_DYN): build-dir $(LIBBPF_DYN_LIB) $(CMD_CLI_GO_SRC) $(TARGET_BPF)
 	CGO_CFLAGS=$(CGO_CFLAGS) \
 	$(GO) build \
 	-ldflags $(CGO_EXTLDFLAGS_DYN) \
@@ -143,7 +146,7 @@ k8s-build-client:
 	--go-header-file $(K8S_CODE_GENERATOR)/hack/boilerplate.go.txt
 
 #-gcflags "all=-N -l" - debug only
-$(TARGET_K8S_STATIC): $(LIBBPF_STATIC_LIB) $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
+$(TARGET_K8S_STATIC): build-dir $(LIBBPF_STATIC_LIB) $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
 	CC=$(CC) \
 	CGO_ENABLED=1 \
  	CGO_CFLAGS=$(CGO_CFLAGS) \
@@ -155,7 +158,7 @@ $(TARGET_K8S_STATIC): $(LIBBPF_STATIC_LIB) $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
 	-gcflags "all=-N -l" \
 	-o $@ ./cmd/kubernetes/$(MAIN).go
 
-$(TARGET_K8S_DYN): $(LIBBPF_DYN_LIB) $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
+$(TARGET_K8S_DYN): build-dir $(LIBBPF_DYN_LIB) $(CMD_K8S_GO_SOURCE) $(TARGET_BPF)
 	CC=$(CC) \
 	CGO_ENABLED=1 \
 	CGO_CFLAGS=$(CGO_CFLAGS) \
