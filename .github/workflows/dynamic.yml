@@ -12,7 +12,7 @@ jobs:
     - name: Install dependencies
       run: |
         apt-get update
-        apt-get install -y libbpf-dev git make linux-tools-6.2.0-1018-azure
+        apt-get install -y libbpf-dev git make linux-tools-6.2.0-1018-azure clang llvm build-essential libelf-dev
         dpkg -s libbpf-dev | grep Version
         dpkg -L libbpf-dev #check the libbpf-dev package contents
 #        #echo "deb http://cz.archive.ubuntu.com/ubuntu mantic main" | sudo tee -a /etc/apt/sources.list
