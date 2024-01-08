@@ -51,13 +51,13 @@ CGO_EXTLDFLAGS_DYN = '-extldflags "-lelf -lz  -Wl,-rpath=$(LIBBPF_DYN_LIB_PATH) 
 dynamic: $(LIBBPF_DYN_LIB) $(TARGET_BPF) $(TARGET_CLI_DYN) $(TARGET_K8S_DYN)
 
 .PHONY: dynamic-with-libbpf-dev
-dynamic:  $(TARGET_BPF) $(TARGET_K8S_DYN)
+dynamic-with-libbpf-dev:  $(TARGET_BPF) $(TARGET_K8S_DYN)
 
 .PHONY: static
 static: $(LIBBPF_STATIC_LIB) $(TARGET_BPF) $(TARGET_CLI_STATIC) $(TARGET_K8S_STATIC)
 
 .PHONY: static-with-libbpf-dev
-static: $(TARGET_BPF) $(TARGET_K8S_STATIC)
+static-with-libbpf-dev: $(TARGET_BPF) $(TARGET_K8S_STATIC)
 
 $(BPF_SRC): $(BPF_HEADERS) $(VMLINUX_H)
 
