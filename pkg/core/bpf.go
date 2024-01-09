@@ -20,7 +20,6 @@ import (
 	bpf "github.com/aquasecurity/libbpfgo"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
-	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/klog/v2"
 	"os"
 	"strings"
@@ -206,6 +205,7 @@ func (eby *ebpfy) initCIDRs() {
 			counter: 0,
 			id:      cidr.Value.id, //test
 			status:  uint8(common.AssetSynced),
+			inAcl:   1,
 		}
 
 		var err error
@@ -306,8 +306,10 @@ func (eby *ebpfy) updateCIDRs() error {
 		if cidr.Status == common.AssetNew {
 			val := ipLPMVal{
 				ttl:     0,
+				id:      cidr.Value.id,
 				counter: 0,
 				status:  uint8(common.AssetSynced),
+				inAcl:   1,
 			}
 
 			var err error
@@ -489,6 +491,7 @@ func (eby *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, net
 										counter: 0, //zero existsing elements :/ //TODO why 0?
 										id:      cn.Value.id,
 										status:  uint8(common.AssetSynced),
+										inAcl:   1,
 									}
 									var err error
 									if a.Type == layers.DNSTypeA {
@@ -638,8 +641,17 @@ func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns common.AssetList[Co
 
 					//valBytes := ipv4ACL[ipv4LPMKey{1,1}]
 					//fmt.Printf(" [bootTtlNs:%d,bootNs:%d][%s]%s/%d[%d]", ttl, bootNs, expired, ip, prefixLen, val.counter)
-					fmt.Printf("netNsPath:%s cgroupPath:%s id: %d cn:%s expired:%s ip: %v/%d counter:%d status:%d\n", netNsPath, cgroupPath, val.id, cn, expired, ipB, prefixLen, val.counter, val.status)
-					metrics.CommonNameTotalRequests.With(prometheus.Labels{"cn": cn}).Set(float64(val.counter))
+					fmt.Printf("netNsPath:%s cgroupPath:%s id: %d cn:%s expired:%s ip: %v/%d counter:%d status:%d inACL:%d\n", netNsPath, cgroupPath, val.id, cn, expired, ipB, prefixLen, val.counter, val.status, val.inAcl)
+					//metrics.CommonNameTotalRequests.With(prometheus.Labels{"cn": cn}).Set(float64(val.counter))
+					inACLStr := fmt.Sprintf("%d", val.inAcl)
+					portStr := fmt.Sprintf("%d", port)
+					var ipStr string
+					if ipv == ipv4 {
+						ipStr = fmt.Sprintf("%d.%d.%d.%d", ipB[0], ipB[1], ipB[2], ipB[3])
+					} else {
+						ipStr = fmt.Sprintf("%x:%x:%x:%x:%x:%x:%x:%x", ipB[0], ipB[1], ipB[2], ipB[3], ipB[4], ipB[5], ipB[6], ipB[7])
+					}
+					metrics.CommonNameTotalRequests.WithLabelValues(inACLStr, cn, ipStr, portStr).Set(float64(val.counter))
 				}
 			}
 		}
@@ -677,6 +689,7 @@ func unmarshalValue(bytes []byte) ipLPMVal {
 		counter: endian.Uint64(bytes[8:16]),
 		id:      endian.Uint16(bytes[16:18]),
 		status:  bytes[18:19][0],
+		inAcl:   bytes[19:20][0],
 	}
 }
 

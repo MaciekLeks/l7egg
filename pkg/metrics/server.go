@@ -14,7 +14,7 @@ var (
 			Name: "l7egg_common_name_total_requests",
 			Help: "Gauge for requests from different Common Names",
 		},
-		[]string{"cn"},
+		[]string{"in_acl", "cn", "cidr", "port"},
 	)
 )
 

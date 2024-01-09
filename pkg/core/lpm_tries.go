@@ -34,11 +34,13 @@ func (k ipv6LPMKey) GetPointer() unsafe.Pointer {
 // - counter: Number of hits.
 // - id: The of the entry.
 // - status: The status of the entry (0 - sync, 1 - stale, 2 - new).
+// - inAcl: 0 - not in ACL, 1 - in ACL
 type ipLPMVal struct {
 	ttl     uint64
 	counter uint64
 	id      uint16
 	status  uint8
+	inAcl   uint8
 }
 
 type ipProtocolVersion int8

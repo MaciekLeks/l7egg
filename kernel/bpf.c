@@ -86,6 +86,7 @@ struct value_t {
     __u64 counter;
     __u16 id; // identification number
     __u8 status; //0 - synced, 1 - stale
+    __u8 in_acl; //0 - no, 1 - yes
 } __attribute__((packed));
 
 struct {
@@ -141,7 +142,6 @@ static __always_inline void *ipv4_lookup(__u32 ipaddr, __u16 port, __u8 protocol
 }
 
 
-// TODO: ports
 static __always_inline void *ipv6_lookup(__u8 ipaddr[16], __u16 port, __u8 protocol) {
     long err;
     struct ipv6_lpm_key key = {
@@ -250,9 +250,20 @@ static __always_inline int ipv4_check_and_update(struct iphdr *ipv4, __u16 port,
     bpf_printk("[egress]: daddr:%u, saddr:%u", daddr, saddr);
     void *pv = ipv4_lookup(daddr, port, protocol);
     if (!pv) {
-        bpf_printk("[egress]: drop:%u", daddr);
-        ipv4_print_ip("[egress] DROP", "\n", daddr);
-        return TC_ACT_SHOT;
+        // // we found - it's in the acl list
+        // bpf_printk("[egress]: drop:%u", daddr);
+        // ipv4_print_ip("[egress] DROP", "\n", daddr);
+        // return TC_ACT_SHOT;
+        //we did not find - it's not in the acl list
+        bpf_printk("[egress]: should be dropped:%u", daddr);
+        ipv4_print_ip("[egress] should be DROPPED", "\n", daddr);
+        pv = &(struct value_t){
+            .ttl = 0,
+            .counter = 0,
+            .id = 0, //no id means we do not control it from the suer space
+            .status = IP_SYNCED, //TOOD: synced?
+            .in_acl = 0
+        };
     }
     //}egress gate
     struct value_t *pval = pv;
@@ -277,6 +288,13 @@ static __always_inline int ipv4_check_and_update(struct iphdr *ipv4, __u16 port,
     } else {
         bpf_printk("[egress]: Counter updated");
     }
+
+    if (pval->in_acl == 0) {
+        bpf_printk("[egress]: >>>>>>>>>> daddr:%u status:%d", daddr, pval->status);
+        ipv4_print_ip("[egress] DROP", "\n", daddr);
+        return TC_ACT_SHOT;
+    }
+
     bpf_printk("[egress]: accept:%u, boot_plus_ttl_ns:%u boot_ns:%u", daddr, boot_plus_ttl_ns, boot_ns);
     ipv4_print_ip("[egress] ACCEPT", "\n", daddr);
 
