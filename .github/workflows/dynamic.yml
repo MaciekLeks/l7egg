@@ -1,0 +1,50 @@
+name: Build with Makefile
+
+on: [push]
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:23.10
+    env:
+      GO_VERSION: 1.20.12
+      KERNEL_VERSION: 6.2.0-1018-azure
+      BPFTOOL_VERSION: v7.3.0
+    steps:
+    - name: Install dependencies
+      run: |
+        apt-get update
+        apt-get install -y libbpf-dev=1:1.2.2-2 git make clang llvm build-essential libelf-dev curl
+        dpkg -s libbpf-dev | grep Version
+        dpkg -L libbpf-dev #check the libbpf-dev package contents
+        curl -LO https://go.dev/dl/go${{ env.GO_VERSION }}.linux-amd64.tar.gz
+        tar -C /usr/local -xzf go${{ env.GO_VERSION }}.linux-amd64.tar.gz
+        curl -LO https://github.com/libbpf/bpftool/releases/download/${{ env.BPFTOOL_VERSION }}/bpftool-${{ env.BPFTOOL_VERSION }}-amd64.tar.gz
+        tar -C /usr/local/bin -xzvf bpftool-${{ env.BPFTOOL_VERSION}}-amd64.tar.gz
+        chmod +x /usr/local/bin/bpftool
+#        #echo "deb http://cz.archive.ubuntu.com/ubuntu mantic main" | sudo tee -a /etc/apt/sources.list
+#        echo "deb http://cz.archive.ubuntu.com/ubuntu noble main" | sudo tee -a /etc/apt/sources.list
+#        sudo apt-get update
+#        #sudo apt-get install -y libbpf-dev=1:1.2.2-2
+#        sudo apt-get install -y libbpf-dev=1:1.3.0-2
+#        dpkg -s libbpf-dev | grep Version
+#        dpkg -L libbpf-dev #check the libbpf-dev package contents
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.20.x
+    - name: Check out code
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        submodules: recursive
+    - name: Check kernel version
+      run: uname -r
+    - name: Get dependencies
+      run: go get -v -t -d ./...
+    - name: Run Makefile
+      run: DEBUG=0 LIBBPF_DIR=/usr/lib/x86_64-linux-gnu make dynamic-with-libbpf-dev
+    - name: build directory listing
+      run: ls -l build
