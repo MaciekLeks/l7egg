@@ -200,6 +200,7 @@ func (eby *ebpfy) initCIDRs() {
 	fmt.Println("[ACL]: Init")
 	for i := 0; i < len(eby.eggy.Cidrs); i++ {
 		cidr := eby.eggy.Cidrs[i]
+		fmt.Printf("inAcl[0]\n")
 		val := ipLPMVal{
 			ttl:     0,
 			counter: 0,
@@ -304,6 +305,7 @@ func (eby *ebpfy) updateCIDRs() error {
 	//add
 	for _, cidr := range eby.eggy.Cidrs {
 		if cidr.Status == common.AssetNew {
+			fmt.Printf("inAcl[1]\n")
 			val := ipLPMVal{
 				ttl:     0,
 				id:      cidr.Value.id,
@@ -486,6 +488,7 @@ func (eby *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, net
 									//fmt.Println("key size:", unsafe.Sizeof(key))
 									//fmt.Println("key data:", key.data)
 
+									fmt.Printf("inAcl[2]\n")
 									val := ipLPMVal{
 										ttl:     bootTtlNs,
 										counter: 0, //zero existsing elements :/ //TODO why 0?
@@ -504,6 +507,8 @@ func (eby *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, net
 								}
 
 							} else {
+								//get TCP source and dest port from packet
+
 								fmt.Println("DROP")
 							}
 						}

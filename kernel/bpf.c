@@ -72,7 +72,7 @@ struct ipv4_lpm_key {
     __u16 port;
     __u8 protocol;
     __u32 data;
-} __attribute__((packed));
+}__attribute__((packed));
 
 struct ipv6_lpm_key {
     __u32 prefixlen;
@@ -120,24 +120,37 @@ static __always_inline void *ipv4_lookup(__u32 ipaddr, __u16 port, __u8 protocol
     void *valp = bpf_map_lookup_elem(&ipv4_lpm_map, &key);
 
 
-    bool is_stale = false;
-    if (valp) {
-        struct value_t *vp = valp;
-        if (vp->status == IP_STALE) {
-            is_stale = true;
-        }
-    }
+    bpf_printk("[egress][in_acl][0]: key.port:%u, key.protocol:%u, key.data:%u, valp:%p", key.port, key.protocol,
+               key.data,
+               valp);
+    // bool is_stale = false;
+    // if (valp) {
+    //     struct value_t *vp = valp;
+    //     if (vp->status == IP_STALE) {
+    //         is_stale = true;
+    //     }
+    // }
 
-    if (!valp || is_stale) {
+    // if (!valp || is_stale) {
+    //     // find a wildcard port and protocol match
+    //     key.port = 0;
+    //     key.protocol = 0;
+    //     valp = bpf_map_lookup_elem(&ipv4_lpm_map, &key);
+    //     if (!valp) {
+    //         // find a wildcard port and address match
+    //         valp = bpf_map_lookup_elem(&ipv4_lpm_map, &key);
+    //     }
+    // }
+    if (!valp/* || is_stale*/) {
         // find a wildcard port and protocol match
         key.port = 0;
         key.protocol = 0;
         valp = bpf_map_lookup_elem(&ipv4_lpm_map, &key);
-        if (!valp) {
-            // find a wildcard port and address match
-            valp = bpf_map_lookup_elem(&ipv4_lpm_map, &key);
-        }
+        bpf_printk("[egress][in_acl][1]: key.port:%u, key.protocol:%u, key.data:%u, valp:%p", key.port, key.protocol,
+                   key.data,
+                   valp);
     }
+
     return valp;
 }
 
@@ -267,7 +280,7 @@ static __always_inline int ipv4_check_and_update(struct iphdr *ipv4, __u16 port,
     }
     //}egress gate
     struct value_t *pval = pv;
-    bpf_printk("[egress]: >>>>>>>>>> daddr:%u status:%d", daddr, pval->status);
+    bpf_printk("[egress]: >>>>>>>>>> daddr:%u status:%d,in_acl:%d", daddr, pval->status, pval->in_acl);
     // does not process STALE IPs
     if (pval->status == IP_STALE) {
         ipv4_print_ip("[egress] STALE, DROP", "\n", daddr);
@@ -295,7 +308,8 @@ static __always_inline int ipv4_check_and_update(struct iphdr *ipv4, __u16 port,
         return TC_ACT_SHOT;
     }
 
-    bpf_printk("[egress]: accept:%u, boot_plus_ttl_ns:%u boot_ns:%u", daddr, boot_plus_ttl_ns, boot_ns);
+    bpf_printk("[egress]: accept:%u, boot_plus_ttl_ns:%u boot_ns:%u, in_acl:%d", daddr, boot_plus_ttl_ns, boot_ns,
+               pval->in_acl);
     ipv4_print_ip("[egress] ACCEPT", "\n", daddr);
 
     return TC_MOVE_ONE; //process further inside bpf
