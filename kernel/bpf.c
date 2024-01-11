@@ -79,6 +79,25 @@ struct {
 #define IPV6_ADDR_LEN_IN_BITS 128
 #define IPV6_DATA_LEN PORT_LEN + PROTOCOL_LEN + IPV6_ADDR_LEN
 #define IPV6_PREFIX_LEN_IN_BITS PORT_LEN_IN_BITS + PROTOCOL_LEN_IN_BITS + IPV6_ADDR_LEN_IN_BITS
+#define INDX_PORT_1 0
+#define INDX_PORT_2 1
+#define INDX_PROTOCOL 2
+#define INDX_IP_ADDR_1 3
+#define INDX_IP_ADDR_2 4
+#define INDX_IP_ADDR_3 5
+#define INDX_IP_ADDR_4 6
+#define INDX_IPV6_ADDR_5 7
+#define INDX_IPV6_ADDR_6 8
+#define INDX_IPV6_ADDR_7 9
+#define INDX_IPV6_ADDR_8 10
+#define INDX_IPV6_ADDR_9 11
+#define INDX_IPV6_ADDR_10 12
+#define INDX_IPV6_ADDR_11 13
+#define INDX_IPV6_ADDR_12 14
+#define INDX_IPV6_ADDR_13 15
+#define INDX_IPV6_ADDR_14 16
+#define INDX_IPV6_ADDR_15 17
+#define INDX_IPV6_ADDR_16 18
 
 struct ipv4_lpm_key {
     __u32 prefixlen;
@@ -118,28 +137,6 @@ struct {
     __uint(map_flags, BPF_F_NO_PREALLOC);
     __uint(max_entries, 255);
 } ipv6_lpm_map SEC(".maps");
-
-enum key_data_fields {
-    INDX_PORT_1,
-    INDX_PORT_2,
-    INDX_PROTOCOL,
-    INDX_IP_ADDR_1,
-    INDX_IP_ADDR_2,
-    INDX_IP_ADDR_3,
-    INDX_IP_ADDR_4,
-    INDX_IPV6_ADDR_5,
-    INDX_IPV6_ADDR_6,
-    INDX_IPV6_ADDR_7,
-    INDX_IPV6_ADDR_8,
-    INDX_IPV6_ADDR_9,
-    INDX_IPV6_ADDR_10,
-    INDX_IPV6_ADDR_11,
-    INDX_IPV6_ADDR_12,
-    INDX_IPV6_ADDR_13,
-    INDX_IPV6_ADDR_14,
-    INDX_IPV6_ADDR_15,
-    INDX_IPV6_ADDR_16
-};
 
 
 long ringbuffer_flags = 0;
@@ -260,13 +257,6 @@ static __always_inline long ipv4_update(__u32 ipaddr, struct value_t val, __u16 
 static __always_inline long ipv6_update(__u8 ipaddr[16], struct value_t val, __u16 port, __u8 protocol) {
     struct ipv6_lpm_key key = {0};
     prepare_ipv6_key(&key, port, protocol, ipaddr);
-
-
-    long err = bpf_probe_read_kernel(key.data, 16, ipaddr); //bpf_probe_read->bpf_probe_read_kernel
-    if (err != 0) {
-        bpf_printk("Can't copy memory %d", err);
-        return -1; //error
-    }
 
     return bpf_map_update_elem(&ipv6_lpm_map, &key, &val, BPF_EXIST);
 }
