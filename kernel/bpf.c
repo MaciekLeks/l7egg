@@ -67,18 +67,32 @@ struct {
     __uint(max_entries, 1 << 24);
 } packets SEC(".maps");
 
+#define PORT_LEN_IN_BITS 16
+#define PORT_LEN 2
+#define PROTOCOL_LEN_IN_BITS 8
+#define PROTOCOL_LEN 1
+#define IPV4_ADDR_LEN 4
+#define IPV4_ADDR_LEN_IN_BITS 32
+#define IPV4_DATA_LEN PORT_LEN + PROTOCOL_LEN + IPV4_ADDR_LEN
+#define IPV4_PREFIX_LEN_IN_BITS PORT_LEN_IN_BITS + PROTOCOL_LEN_IN_BITS + IPV4_ADDR_LEN_IN_BITS
+#define IPV6_ADDR_LEN 16
+#define IPV6_ADDR_LEN_IN_BITS 128
+#define IPV6_DATA_LEN PORT_LEN + PROTOCOL_LEN + IPV6_ADDR_LEN
+#define IPV6_PREFIX_LEN_IN_BITS PORT_LEN_IN_BITS + PROTOCOL_LEN_IN_BITS + IPV6_ADDR_LEN_IN_BITS
+
 struct ipv4_lpm_key {
     __u32 prefixlen;
-    __u16 port;
-    __u8 protocol;
-    __u32 data;
+    //__u16 port;
+    //__u8 protocol;
+    __u8 data[IPV4_DATA_LEN]; //2 - port, 1 - protocol, 4 - ip addr
 }__attribute__((packed));
+
 
 struct ipv6_lpm_key {
     __u32 prefixlen;
-    __u16 port;
-    __u8 protocol;
-    __u8 data[16];
+    //__u16 port;
+    //__u8 protocol;
+    __u8 data[IPV6_DATA_LEN]; //2 - port, 1 - protocol, 16 - ip addr
 } __attribute__((packed));
 
 struct value_t {
@@ -105,116 +119,150 @@ struct {
     __uint(max_entries, 255);
 } ipv6_lpm_map SEC(".maps");
 
+enum key_data_fields {
+    INDX_PORT_1,
+    INDX_PORT_2,
+    INDX_PROTOCOL,
+    INDX_IP_ADDR_1,
+    INDX_IP_ADDR_2,
+    INDX_IP_ADDR_3,
+    INDX_IP_ADDR_4,
+    INDX_IPV6_ADDR_5,
+    INDX_IPV6_ADDR_6,
+    INDX_IPV6_ADDR_7,
+    INDX_IPV6_ADDR_8,
+    INDX_IPV6_ADDR_9,
+    INDX_IPV6_ADDR_10,
+    INDX_IPV6_ADDR_11,
+    INDX_IPV6_ADDR_12,
+    INDX_IPV6_ADDR_13,
+    INDX_IPV6_ADDR_14,
+    INDX_IPV6_ADDR_15,
+    INDX_IPV6_ADDR_16
+};
+
 
 long ringbuffer_flags = 0;
 
+
+static __always_inline void prepare_ipv4_key(struct ipv4_lpm_key *key, const __u16 port, const __u8 protocol,
+                                             const __u32 ipaddr) {
+    key->prefixlen = IPV4_PREFIX_LEN_IN_BITS;
+    //little endian
+    //key->data[PORT_2] = port >> 8;
+    //key->data[PORT_1] = port & 0xFF;
+    __builtin_memcpy(key->data, &port, PORT_LEN);
+    key->data[INDX_PROTOCOL] = protocol;
+    __builtin_memcpy(key->data + PORT_LEN + PROTOCOL_LEN, &ipaddr, IPV4_ADDR_LEN);
+}
+
+static __always_inline void prepare_ipv6_key(struct ipv6_lpm_key *key, const __u16 port, const __u8 protocol,
+                                             const __u8 ipaddr[16]) {
+    key->prefixlen = IPV6_PREFIX_LEN_IN_BITS;
+    //little endian
+    //key->data[PORT_2] = port >> 8;
+    //key->data[PORT_1] = port & 0xFF;
+    __builtin_memcpy(key->data, &port, PORT_LEN);
+    key->data[INDX_PROTOCOL] = protocol;
+    __builtin_memcpy(key->data + PORT_LEN + PROTOCOL_LEN, ipaddr, IPV6_ADDR_LEN);
+}
+
+static __always_inline void *map_ipv4_lookup_with_wildcards(struct ipv4_lpm_key *key) {
+    // find a wildcard port and protocol match
+    __builtin_memset(key->data, 0, 3); // 2 bytes of port + 1 byte of protocol
+    void *valp = bpf_map_lookup_elem(&ipv4_lpm_map, key);
+    return valp;
+}
+
+static __always_inline void *map_ipv6_lookup_with_wildcards(struct ipv6_lpm_key *key) {
+    // find a wildcard port and protocol match
+    __builtin_memset(key->data, 0, 3); // 2 bytes of port + 1 byte of protocol
+    void *valp = bpf_map_lookup_elem(&ipv6_lpm_map, key);
+    return valp;
+}
+
 static __always_inline void *ipv4_lookup(__u32 ipaddr, __u16 port, __u8 protocol) {
-    struct ipv4_lpm_key key = {
-        .prefixlen = 32,
-        .port = port,
-        .protocol = protocol,
-        .data = ipaddr
-    };
+    struct ipv4_lpm_key key = {0};
+    prepare_ipv4_key(&key, port, protocol, ipaddr);
 
     // try to find exact match first
     void *valp = bpf_map_lookup_elem(&ipv4_lpm_map, &key);
 
-
-    bpf_printk("[egress][in_acl][0]: key.port:%u, key.protocol:%u, key.data:%u, valp:%p", key.port, key.protocol,
-               key.data,
-               valp);
-    // bool is_stale = false;
-    // if (valp) {
-    //     struct value_t *vp = valp;
-    //     if (vp->status == IP_STALE) {
-    //         is_stale = true;
-    //     }
-    // }
-
-    // if (!valp || is_stale) {
-    //     // find a wildcard port and protocol match
-    //     key.port = 0;
-    //     key.protocol = 0;
-    //     valp = bpf_map_lookup_elem(&ipv4_lpm_map, &key);
-    //     if (!valp) {
-    //         // find a wildcard port and address match
-    //         valp = bpf_map_lookup_elem(&ipv4_lpm_map, &key);
-    //     }
-    // }
-    if (!valp/* || is_stale*/) {
-        // find a wildcard port and protocol match
-        key.port = 0;
-        key.protocol = 0;
-        valp = bpf_map_lookup_elem(&ipv4_lpm_map, &key);
-        bpf_printk("[egress][in_acl][1]: key.port:%u, key.protocol:%u, key.data:%u, valp:%p", key.port, key.protocol,
-                   key.data,
-                   valp);
+    if (!valp) {
+        valp = map_ipv4_lookup_with_wildcards(&key);
+        bpf_printk("[egress][in_acl][1]");
     }
 
     return valp;
 }
-
 
 static __always_inline void *ipv6_lookup(__u8 ipaddr[16], __u16 port, __u8 protocol) {
-    long err;
-    struct ipv6_lpm_key key = {
-        .prefixlen = 128,
-        .port = port,
-        .protocol = protocol,
-    };
-
-    //TODO: do we need deep copy of the ipaddr for searching?
-    err = bpf_probe_read_kernel(key.data, 16, ipaddr); //bpf_probe_read->bpf_probe_read_kernel
-    if (err != 0) {
-        bpf_printk("Can't copy memory %d", err);
-        return NULL;
-    }
+    struct ipv6_lpm_key key = {0};
+    prepare_ipv6_key(&key, port, protocol, ipaddr);
 
     // try to find exact match first
-    void *valp = bpf_map_lookup_elem(&ipv6_lpm_map, &key);
+    void *valp = bpf_map_lookup_elem(&ipv4_lpm_map, &key);
 
-    bool is_stale = false;
-    if (valp) {
-        struct value_t *vp = valp;
-        if (vp->status == IP_STALE) {
-            is_stale = true;
-        }
+    if (!valp) {
+        valp = map_ipv6_lookup_with_wildcards(&key);
+        bpf_printk("[egress][in_acl][1]");
     }
 
-    if (!valp || is_stale) {
-        // find a wildcard port and protocol match
-        key.port = 0;
-        key.protocol = 0;
-        valp = bpf_map_lookup_elem(&ipv6_lpm_map, &key);
-        if (!valp) {
-            // find a wildcard port and address match
-            valp = bpf_map_lookup_elem(&ipv6_lpm_map, &key);
-        }
-    }
     return valp;
 }
 
+// static __always_inline void *ipv6_lookup(__u8 ipaddr[16], __u16 port, __u8 protocol) {
+//     long err;
+//     struct ipv6_lpm_key key = {
+//         .prefixlen = 128,
+//         .port = port,
+//         .protocol = protocol,
+//     };
+//
+//     //TODO: do we need deep copy of the ipaddr for searching?
+//     err = bpf_probe_read_kernel(key.data, 16, ipaddr); //bpf_probe_read->bpf_probe_read_kernel
+//     if (err != 0) {
+//         bpf_printk("Can't copy memory %d", err);
+//         return NULL;
+//     }
+//
+//     // try to find exact match first
+//     void *valp = bpf_map_lookup_elem(&ipv6_lpm_map, &key);
+//
+//     bool is_stale = false;
+//     if (valp) {
+//         struct value_t *vp = valp;
+//         if (vp->status == IP_STALE) {
+//             is_stale = true;
+//         }
+//     }
+//
+//     if (!valp || is_stale) {
+//         // find a wildcard port and protocol match
+//         key.port = 0;
+//         key.protocol = 0;
+//         valp = bpf_map_lookup_elem(&ipv6_lpm_map, &key);
+//         if (!valp) {
+//             // find a wildcard port and address match
+//             valp = bpf_map_lookup_elem(&ipv6_lpm_map, &key);
+//         }
+//     }
+//     return valp;
+// }
+
 static __always_inline long ipv4_update(__u32 ipaddr, struct value_t val, __u16 port, __u8 protocol) {
-    struct ipv4_lpm_key key = {
-        .prefixlen = 32,
-        .port = port,
-        .protocol = protocol,
-        .data = ipaddr
-    };
+    struct ipv4_lpm_key key = {0};
+    prepare_ipv4_key(&key, port, protocol, ipaddr);
 
     return bpf_map_update_elem(&ipv4_lpm_map, &key, &val, BPF_EXIST);
 }
 
 static __always_inline long ipv6_update(__u8 ipaddr[16], struct value_t val, __u16 port, __u8 protocol) {
-    long err;
-    struct ipv6_lpm_key key = {
-        .prefixlen = 128,
-        .port = port,
-        .protocol = protocol,
-        //   .data = ipaddr
-    };
+    struct ipv6_lpm_key key = {0};
+    prepare_ipv6_key(&key, port, protocol, ipaddr);
 
-    err = bpf_probe_read_kernel(key.data, 16, ipaddr); //bpf_probe_read->bpf_probe_read_kernel
+
+    long err = bpf_probe_read_kernel(key.data, 16, ipaddr); //bpf_probe_read->bpf_probe_read_kernel
     if (err != 0) {
         bpf_printk("Can't copy memory %d", err);
         return -1; //error

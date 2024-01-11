@@ -211,9 +211,9 @@ func (eby *ebpfy) initCIDRs() {
 
 		var err error
 		switch ip := cidr.Value.lpmKey.(type) {
-		case ipv4LPMKey:
+		case ipv4Key:
 			err = updateACLValueNew(eby.ipv4ACL, ip, val)
-		case ipv6LPMKey:
+		case ipv6Key:
 			err = updateACLValueNew(eby.ipv6ACL, ip, val)
 		}
 		must(err, "Can't update ACL.")
@@ -316,9 +316,9 @@ func (eby *ebpfy) updateCIDRs() error {
 
 			var err error
 			switch cidr.Value.lpmKey.(type) {
-			case ipv4LPMKey:
+			case ipv4Key:
 				err = updateACLValueNew(eby.ipv4ACL, cidr.Value.lpmKey, val)
-			case ipv6LPMKey:
+			case ipv6Key:
 				err = updateACLValueNew(eby.ipv6ACL, cidr.Value.lpmKey, val)
 			}
 			if err != nil {
@@ -478,9 +478,9 @@ func (eby *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, net
 									port := eby.eggy.ProtoPorts[i].Value.port
 									proto := eby.eggy.ProtoPorts[i].Value.proto
 									if a.Type == layers.DNSTypeA {
-										key = ipv4LPMKey{32, port, uint8(proto), [4]uint8(ip[0:4])}
+										key = ipv4Key{32, port, uint8(proto), [4]uint8(ip[0:4])}
 									} else {
-										key = ipv6LPMKey{128, port, uint8(proto), [16]uint8(ip[0:16])}
+										key = ipv6Key{128, port, uint8(proto), [16]uint8(ip[0:16])}
 									}
 									//val := time.Now().Unix() + int64(ttl) //Now + ttl
 									ttlNs := uint64(ttlSec) * 1000000000
@@ -608,20 +608,12 @@ func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns common.AssetList[Co
 						fatal("Iterator error", i.Err())
 					}
 					keyBytes := i.Key()
-					prefixLen := endian.Uint32(keyBytes[0:4])
-					port := endian.Uint16(keyBytes[4:6]) //port
-					proto := keyBytes[6:7][0]
 
 					var key ILPMKey
-					var ipB []byte
 					if ipv == ipv4 {
-						ipB = keyBytes[7:11]
-						//ip := bytes2ip(ipBytes)
-						key = ipv4LPMKey{prefixLen, port, proto, [4]uint8((ipB))}
+						key = unmarshalIpv4ACLKey(keyBytes)
 					} else {
-						ipB = keyBytes[7:23]
-						//ip := bytes2ip(ipBytes)
-						key = ipv6LPMKey{prefixLen, port, proto, [16]uint8((ipB))}
+						key = unmarshalIpv6ACLKey(keyBytes)
 					}
 
 					val := getACLValue(bpfM, key)
@@ -646,15 +638,16 @@ func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns common.AssetList[Co
 
 					//valBytes := ipv4ACL[ipv4LPMKey{1,1}]
 					//fmt.Printf(" [bootTtlNs:%d,bootNs:%d][%s]%s/%d[%d]", ttl, bootNs, expired, ip, prefixLen, val.counter)
-					fmt.Printf("netNsPath:%s cgroupPath:%s id: %d cn:%s expired:%s ip: %v/%d counter:%d status:%d inACL:%d\n", netNsPath, cgroupPath, val.id, cn, expired, ipB, prefixLen, val.counter, val.status, val.inAcl)
+					fmt.Printf("netNsPath:%s cgroupPath:%s id: %d cn:%s expired:%s ip: %v/%d counter:%d status:%d inACL:%d\n", netNsPath, cgroupPath, val.id, cn, expired, key.Addr(), key.MaskLen(), val.counter, val.status, val.inAcl)
 					//metrics.CommonNameTotalRequests.With(prometheus.Labels{"cn": cn}).Set(float64(val.counter))
 					inACLStr := fmt.Sprintf("%d", val.inAcl)
-					portStr := fmt.Sprintf("%d", port)
+					portStr := fmt.Sprintf("%d", key.Port())
 					var ipStr string
+					addr := key.Addr()
 					if ipv == ipv4 {
-						ipStr = fmt.Sprintf("%d.%d.%d.%d", ipB[0], ipB[1], ipB[2], ipB[3])
+						ipStr = fmt.Sprintf("%d.%d.%d.%d", addr[0], addr[1], addr[2], addr[3])
 					} else {
-						ipStr = fmt.Sprintf("%x:%x:%x:%x:%x:%x:%x:%x", ipB[0], ipB[1], ipB[2], ipB[3], ipB[4], ipB[5], ipB[6], ipB[7])
+						ipStr = fmt.Sprintf("%x:%x:%x:%x:%x:%x:%x:%x", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5], addr[6], addr[7])
 					}
 					metrics.CommonNameTotalRequests.WithLabelValues(inACLStr, cn, ipStr, portStr).Set(float64(val.counter))
 				}
@@ -663,26 +656,28 @@ func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns common.AssetList[Co
 	}()
 }
 
-func unmarshalIpv4ACLKey(bytes []byte) ipv4LPMKey {
+func unmarshalIpv4ACLKey(bytes []byte) ipv4Key {
 	prefixLen := endian.Uint32(bytes[0:4])
-	port := endian.Uint16(bytes[4:6])
-	proto := bytes[6:7][0]
-	ipB := bytes[7:11]
+	data := bytes[4:11]
 
-	return ipv4LPMKey{prefixLen, port, proto, [4]uint8(ipB)}
+	// create ipv4LPMKeyBytes from prefixLen and data in one line
+	ipv4LPMKeyBytes := ipv4LPMKeyBytes{prefixLen, [PortProtocolIpv4AddressSize]uint8(data)}
+
+	return ipv4LPMKeyBytes.ipv4BytesToKey()
 }
 
-func unmarshalIpv6ACLKey(bytes []byte) ipv6LPMKey {
+func unmarshalIpv6ACLKey(bytes []byte) ipv6Key {
 	prefixLen := endian.Uint32(bytes[0:4])
-	port := endian.Uint16(bytes[4:6])
-	proto := bytes[6:7][0]
-	ipBytes := bytes[7:23]
+	ipBytes := bytes[4:23]
 
-	return ipv6LPMKey{prefixLen, port, proto, [16]uint8(ipBytes)}
+	// create ipv6LPMKeyBytes from prefixLen and data in one line
+	ipv6LPMKeyBytes := ipv6LPMKeyBytes{prefixLen, [PortProtocolIpv6AddressSize]uint8(ipBytes)}
+
+	return ipv6LPMKeyBytes.ipv6BytesToKey()
 }
 
 func getACLValue(acl *bpf.BPFMap, ikey ILPMKey) ipLPMVal {
-	upKey := ikey.GetPointer()
+	upKey := ikey.Pointer()
 	valBytes, err := acl.GetValue(upKey)
 	must(err, "Can't get value.")
 	return unmarshalValue(valBytes)
@@ -700,7 +695,7 @@ func unmarshalValue(bytes []byte) ipLPMVal {
 
 func updateACLValueNew(acl *bpf.BPFMap, ikey ILPMKey, val ipLPMVal) error {
 	//check if not exists first
-	upKey := ikey.GetPointer()
+	upKey := ikey.Pointer()
 	oldValBytes, err := acl.GetValue(upKey)
 	var oldVal ipLPMVal
 	if err == nil { //update in any cases
@@ -725,7 +720,7 @@ func updateACLValueNew(acl *bpf.BPFMap, ikey ILPMKey, val ipLPMVal) error {
 	return nil
 }
 
-func removeACLKey(acl *bpf.BPFMap, key ipv4LPMKey) error {
+func removeACLKey(acl *bpf.BPFMap, key ipv4Key) error {
 	upKey := unsafe.Pointer(&key)
 	//check if not exists first
 	err := acl.DeleteKey(upKey)
