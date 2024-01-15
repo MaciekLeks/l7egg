@@ -22,6 +22,7 @@ import (
 	"github.com/google/gopacket/layers"
 	"k8s.io/klog/v2"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -41,6 +42,9 @@ type ebpfy struct {
 	ingressLink *bpf.BPFLink
 	// link between egress program and either tc or cgroup hook
 	egressLink *bpf.BPFLink
+
+	//statistics
+	statyMap map[uint16]staty
 }
 
 var (
@@ -54,6 +58,7 @@ func init() {
 func newEbpfy(eggi *Eggy) *ebpfy {
 	var egg ebpfy
 	egg.eggy = eggi
+	egg.statyMap = make(map[uint16]staty)
 	return &egg
 }
 
@@ -148,7 +153,7 @@ func (eby *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType commo
 
 		var lwg sync.WaitGroup
 		//runMapLooper(ctx, ebpfy.ipv4ACL, ebpfy.CommonNames, ipv4, &lwg, netNsPath, cgroupPath)
-		runMapLooper(ctx, eby.ipv4ACL, eby.eggy.CommonNames, ipv4, &lwg, netNsPath, cgroupPath)
+		eby.runMapLooper(ctx, eby.ipv4ACL, eby.eggy.CommonNames, ipv4, &lwg, netNsPath, cgroupPath)
 		//runMapLooper(ctx, ebpfy.ipv6ACL, ebpfy.CommonNames, ipv6, &lwg, netNsPath, cgroupPath)
 		eby.runPacketsLooper(ctx, &lwg, netNsPath, cgroupPath)
 		lwg.Wait()
@@ -502,6 +507,12 @@ func (eby *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, net
 									} else {
 										err = updateACLValueNew(eby.ipv6ACL, key, val)
 									}
+
+									//{stats
+									eby.statyMap[cn.Value.id] = staty{ip: ip.String(), fqdn: commonName}
+									fmt.Printf("statyMap: %+v\n", eby.statyMap)
+									//stats}
+
 									must(err, "Can't update ACL.")
 									fmt.Printf("ebpfy-ref: %p, netNsPath: %s cgroupPath: %s - updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", eby, netNsPath, cgroupPath, cn, ip, ttlSec, ttlNs, bootTtlNs)
 								}
@@ -588,7 +599,7 @@ func (eby *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, net
 //	}()
 //}
 
-func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns common.AssetList[CommonNameWithProtoPort], ipv ipProtocolVersion, lwg *sync.WaitGroup, netNsPath string, cgroupPath string) {
+func (eby *ebpfy) runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns common.AssetList[CommonNameWithProtoPort], ipv ipProtocolVersion, lwg *sync.WaitGroup, netNsPath string, cgroupPath string) {
 	lwg.Add(1)
 	go func() {
 		defer lwg.Done()
@@ -649,7 +660,12 @@ func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns common.AssetList[Co
 					} else {
 						ipStr = fmt.Sprintf("%x:%x:%x:%x:%x:%x:%x:%x", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5], addr[6], addr[7])
 					}
-					metrics.CommonNameTotalRequests.WithLabelValues(inACLStr, cn, ipStr, portStr).Set(float64(val.counter))
+					fqdn := ""
+					if sy, ok := eby.statyMap[val.id]; ok {
+						fqdn = sy.fqdn
+					}
+
+					metrics.CommonNameTotalRequests.WithLabelValues(strconv.Itoa(int(val.id)), inACLStr, cn, ipStr, portStr, fqdn).Set(float64(val.counter))
 				}
 			}
 		}
