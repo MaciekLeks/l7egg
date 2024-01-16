@@ -67,7 +67,6 @@ type EgressSpec struct {
 	// +optional
 	Shaping *ShapingSpec `json:"shaping,omitempty"`
 
-	// +optional
 	Ports []PortSpec `json:"ports,omitempty"`
 
 	// +optional

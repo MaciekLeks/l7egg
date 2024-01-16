@@ -44,7 +44,7 @@ type ebpfy struct {
 	egressLink *bpf.BPFLink
 
 	//statistics
-	statyMap map[uint16]staty
+	statyMap metrics.StatyMap
 }
 
 var (
@@ -58,7 +58,7 @@ func init() {
 func newEbpfy(eggi *Eggy) *ebpfy {
 	var egg ebpfy
 	egg.eggy = eggi
-	egg.statyMap = make(map[uint16]staty)
+	egg.statyMap = metrics.NewStatyMap()
 	return &egg
 }
 
@@ -508,18 +508,30 @@ func (eby *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, net
 										err = updateACLValueNew(eby.ipv6ACL, key, val)
 									}
 
-									//{stats
-									eby.statyMap[cn.Value.id] = staty{ip: ip.String(), fqdn: commonName}
-									fmt.Printf("statyMap: %+v\n", eby.statyMap)
-									//stats}
-
 									must(err, "Can't update ACL.")
 									fmt.Printf("ebpfy-ref: %p, netNsPath: %s cgroupPath: %s - updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", eby, netNsPath, cgroupPath, cn, ip, ttlSec, ttlNs, bootTtlNs)
 								}
 
+								//{stats
+								eby.statyMap.Add(cn.Value.id, ip.String(), metrics.Staty{Fqdn: commonName})
+								fmt.Printf("||||||||||||||||||||||||statyMap: %+v\n", eby.statyMap)
+								//stats}
+
 							} else {
 								//get TCP source and dest port from packet
-
+								//val := ipLPMVal{
+								//	ttl:     0,
+								//	counter: 0,
+								//	id:      syncx.Sequencer().Next(),
+								//	status:  uint8(common.AssetSynced),
+								//	inAcl:   0,
+								//}
+								//var err error
+								//if a.Type == layers.DNSTypeA {
+								//	err = updateACLValueNew(eby.ipv4ACL, key, val)
+								//} else {
+								//	err = updateACLValueNew(eby.ipv6ACL, key, val)
+								//}
 								fmt.Println("DROP")
 							}
 						}
@@ -661,11 +673,15 @@ func (eby *ebpfy) runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns common
 						ipStr = fmt.Sprintf("%x:%x:%x:%x:%x:%x:%x:%x", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5], addr[6], addr[7])
 					}
 					fqdn := ""
-					if sy, ok := eby.statyMap[val.id]; ok {
-						fqdn = sy.fqdn
+					if ipMap, ok := eby.statyMap[val.id]; ok {
+						if fqdns, ok := ipMap[ipStr]; ok {
+							for i := 0; i < len(fqdns); i++ {
+								metrics.CommonNameTotalRequests.WithLabelValues(strconv.Itoa(int(val.id)), inACLStr, cn, ipStr, portStr, fqdn).Set(float64(val.counter))
+							}
+						}
+					} else {
+						metrics.CommonNameTotalRequests.WithLabelValues(strconv.Itoa(int(val.id)), strconv.Itoa(int(val.status)), inACLStr, cn, ipStr, portStr, fqdn).Set(float64(val.counter))
 					}
-
-					metrics.CommonNameTotalRequests.WithLabelValues(strconv.Itoa(int(val.id)), inACLStr, cn, ipStr, portStr, fqdn).Set(float64(val.counter))
 				}
 			}
 		}
