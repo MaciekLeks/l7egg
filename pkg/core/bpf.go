@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/common"
 	"github.com/MaciekLeks/l7egg/pkg/metrics"
+	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	bpf "github.com/aquasecurity/libbpfgo"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -474,66 +475,58 @@ func (eby *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, net
 						if a.Type == layers.DNSTypeA || a.Type == layers.DNSTypeAAAA {
 
 							commonName := string(a.Name)
-							if cn, found := containsCN(eby.eggy.CommonNames, commonName); found {
-								ip := a.IP
-								ttlSec := a.TTL //!!! remove * 5
-								var key ILPMKey
+							cn, found := containsCN(eby.eggy.CommonNames, commonName)
 
-								for i := range eby.eggy.ProtoPorts {
-									port := eby.eggy.ProtoPorts[i].Value.port
-									proto := eby.eggy.ProtoPorts[i].Value.proto
-									if a.Type == layers.DNSTypeA {
-										key = ipv4Key{32, port, uint8(proto), [4]uint8(ip[0:4])}
-									} else {
-										key = ipv6Key{128, port, uint8(proto), [16]uint8(ip[0:16])}
-									}
-									//val := time.Now().Unix() + int64(ttl) //Now + ttl
-									ttlNs := uint64(ttlSec) * 1000000000
-									bootTtlNs := uint64(C.get_nsecs()) + ttlNs //boot time[ns] + ttl[ns]
-									//fmt.Println("key size:", unsafe.Sizeof(key))
-									//fmt.Println("key data:", key.data)
+							ip := a.IP
+							ttlSec := a.TTL //!!! remove * 5
+							var key ILPMKey
 
-									fmt.Printf("inAcl[2]\n")
-									val := ipLPMVal{
-										ttl:     bootTtlNs,
-										counter: 0, //zero existsing elements :/ //TODO why 0?
-										id:      cn.Value.id,
-										status:  uint8(common.AssetSynced),
-										inAcl:   1,
-									}
-									var err error
-									if a.Type == layers.DNSTypeA {
-										err = updateACLValueNew(eby.ipv4ACL, key, val)
-									} else {
-										err = updateACLValueNew(eby.ipv6ACL, key, val)
-									}
+							var inAcl uint8
+							var id uint16
+							if found {
+								inAcl = 1
+								id = cn.Value.id
+							} else {
+								id = syncx.Sequencer().Next()
+								inAcl = 0
+							}
 
-									must(err, "Can't update ACL.")
-									fmt.Printf("ebpfy-ref: %p, netNsPath: %s cgroupPath: %s - updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", eby, netNsPath, cgroupPath, cn, ip, ttlSec, ttlNs, bootTtlNs)
+							for i := range eby.eggy.ProtoPorts {
+								port := eby.eggy.ProtoPorts[i].Value.port
+								proto := eby.eggy.ProtoPorts[i].Value.proto
+								if a.Type == layers.DNSTypeA {
+									key = ipv4Key{32, port, uint8(proto), [4]uint8(ip[0:4])}
+								} else {
+									key = ipv6Key{128, port, uint8(proto), [16]uint8(ip[0:16])}
 								}
 
-								//{stats
-								eby.statyMap.Add(cn.Value.id, ip.String(), metrics.Staty{Fqdn: commonName})
-								fmt.Printf("||||||||||||||||||||||||statyMap: %+v\n", eby.statyMap)
-								//stats}
+								ttlNs := uint64(ttlSec) * 1000000000
+								bootTtlNs := uint64(C.get_nsecs()) + ttlNs //boot time[ns] + ttl[ns]
 
-							} else {
-								//get TCP source and dest port from packet
-								//val := ipLPMVal{
-								//	ttl:     0,
-								//	counter: 0,
-								//	id:      syncx.Sequencer().Next(),
-								//	status:  uint8(common.AssetSynced),
-								//	inAcl:   0,
-								//}
-								//var err error
-								//if a.Type == layers.DNSTypeA {
-								//	err = updateACLValueNew(eby.ipv4ACL, key, val)
-								//} else {
-								//	err = updateACLValueNew(eby.ipv6ACL, key, val)
-								//}
-								fmt.Println("DROP")
+								fmt.Printf("inAcl[2]\n")
+								val := ipLPMVal{
+									ttl:     bootTtlNs,
+									counter: 0,
+									id:      id,
+									status:  uint8(common.AssetSynced),
+									inAcl:   inAcl,
+								}
+								var err error
+								if a.Type == layers.DNSTypeA {
+									err = updateACLValueNew(eby.ipv4ACL, key, val)
+								} else {
+									err = updateACLValueNew(eby.ipv6ACL, key, val)
+								}
+
+								must(err, "Can't update ACL.")
+								fmt.Printf("ebpfy-ref: %p, netNsPath: %s cgroupPath: %s - updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", eby, netNsPath, cgroupPath, cn, ip, ttlSec, ttlNs, bootTtlNs)
 							}
+
+							//{stats
+							eby.statyMap.Add(id, ip.String(), metrics.Staty{Fqdn: commonName})
+							fmt.Printf("||||||||||||||||||||||||statyMap: %+v\n", eby.statyMap)
+							//stats}
+
 						}
 					}
 				} else {
@@ -672,15 +665,25 @@ func (eby *ebpfy) runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns common
 					} else {
 						ipStr = fmt.Sprintf("%x:%x:%x:%x:%x:%x:%x:%x", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5], addr[6], addr[7])
 					}
-					fqdn := ""
 					if ipMap, ok := eby.statyMap[val.id]; ok {
+						// id != 0 part
 						if fqdns, ok := ipMap[ipStr]; ok {
 							for i := 0; i < len(fqdns); i++ {
-								metrics.CommonNameTotalRequests.WithLabelValues(strconv.Itoa(int(val.id)), inACLStr, cn, ipStr, portStr, fqdn).Set(float64(val.counter))
+								metrics.CommonNameTotalRequests.WithLabelValues(strconv.Itoa(int(val.id)), strconv.Itoa(int(val.status)), inACLStr, cn, ipStr, portStr, fqdns[i].Fqdn).Set(float64(val.counter))
 							}
 						}
 					} else {
-						metrics.CommonNameTotalRequests.WithLabelValues(strconv.Itoa(int(val.id)), strconv.Itoa(int(val.status)), inACLStr, cn, ipStr, portStr, fqdn).Set(float64(val.counter))
+						//id = 0 part: here we serve id=0 (set by kernel for unknown ip:port)
+						// while kernel part could set id=0 for not matching tuple (ip,port) then iterate over all map values (all ips map) and search for ipStr there
+						for _, ipMap := range eby.statyMap {
+							for ipKey, statyVals := range ipMap {
+								if ipKey == ipStr {
+									for i := 0; i < len(statyVals); i++ {
+										metrics.CommonNameTotalRequests.WithLabelValues(strconv.Itoa(int(val.id)), strconv.Itoa(int(val.status)), inACLStr, cn, ipStr, portStr, statyVals[i].Fqdn).Set(float64(val.counter))
+									}
+								}
+							}
+						}
 					}
 				}
 			}

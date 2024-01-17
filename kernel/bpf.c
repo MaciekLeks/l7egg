@@ -178,7 +178,7 @@ static __always_inline void prepare_ipv6_key(struct ipv6_lpm_key *key, const __u
 //     return valp;
 // }
 
-static __always_inline void *ipv4_lookup(__u32 ipaddr, __u16 port, __u8 protocol) {
+static __always_inline void *ipv4_lookup(const __u32 ipaddr, const __u16 port, const __u8 protocol) {
     struct ipv4_lpm_key key = {0};
     prepare_ipv4_key(&key, port, protocol, ipaddr);
 
@@ -193,7 +193,7 @@ static __always_inline void *ipv4_lookup(__u32 ipaddr, __u16 port, __u8 protocol
     return valp;
 }
 
-static __always_inline void *ipv6_lookup(__u8 ipaddr[16], __u16 port, __u8 protocol) {
+static __always_inline void *ipv6_lookup(const __u8 ipaddr[16], const __u16 port, const __u8 protocol) {
     struct ipv6_lpm_key key = {0};
     prepare_ipv6_key(&key, port, protocol, ipaddr);
 
