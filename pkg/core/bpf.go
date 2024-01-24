@@ -17,12 +17,13 @@ import (
 	"fmt"
 	"github.com/MaciekLeks/l7egg/pkg/common"
 	"github.com/MaciekLeks/l7egg/pkg/metrics"
+	"github.com/MaciekLeks/l7egg/pkg/syncx"
 	bpf "github.com/aquasecurity/libbpfgo"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
-	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/klog/v2"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -42,6 +43,9 @@ type ebpfy struct {
 	ingressLink *bpf.BPFLink
 	// link between egress program and either tc or cgroup hook
 	egressLink *bpf.BPFLink
+
+	//statistics
+	statyMap metrics.StatyMap
 }
 
 var (
@@ -55,6 +59,7 @@ func init() {
 func newEbpfy(eggi *Eggy) *ebpfy {
 	var egg ebpfy
 	egg.eggy = eggi
+	egg.statyMap = metrics.NewStatyMap()
 	return &egg
 }
 
@@ -149,7 +154,7 @@ func (eby *ebpfy) run(ctx context.Context, wg *sync.WaitGroup, programType commo
 
 		var lwg sync.WaitGroup
 		//runMapLooper(ctx, ebpfy.ipv4ACL, ebpfy.CommonNames, ipv4, &lwg, netNsPath, cgroupPath)
-		runMapLooper(ctx, eby.ipv4ACL, eby.eggy.CommonNames, ipv4, &lwg, netNsPath, cgroupPath)
+		eby.runMapLooper(ctx, eby.ipv4ACL, eby.eggy.CommonNames, ipv4, &lwg, netNsPath, cgroupPath)
 		//runMapLooper(ctx, ebpfy.ipv6ACL, ebpfy.CommonNames, ipv6, &lwg, netNsPath, cgroupPath)
 		eby.runPacketsLooper(ctx, &lwg, netNsPath, cgroupPath)
 		lwg.Wait()
@@ -201,18 +206,20 @@ func (eby *ebpfy) initCIDRs() {
 	fmt.Println("[ACL]: Init")
 	for i := 0; i < len(eby.eggy.Cidrs); i++ {
 		cidr := eby.eggy.Cidrs[i]
+		fmt.Printf("inAcl[0]\n")
 		val := ipLPMVal{
 			ttl:     0,
 			counter: 0,
 			id:      cidr.Value.id, //test
 			status:  uint8(common.AssetSynced),
+			inAcl:   1,
 		}
 
 		var err error
 		switch ip := cidr.Value.lpmKey.(type) {
-		case ipv4LPMKey:
+		case ipv4Key:
 			err = updateACLValueNew(eby.ipv4ACL, ip, val)
-		case ipv6LPMKey:
+		case ipv6Key:
 			err = updateACLValueNew(eby.ipv6ACL, ip, val)
 		}
 		must(err, "Can't update ACL.")
@@ -304,17 +311,20 @@ func (eby *ebpfy) updateCIDRs() error {
 	//add
 	for _, cidr := range eby.eggy.Cidrs {
 		if cidr.Status == common.AssetNew {
+			fmt.Printf("inAcl[1]\n")
 			val := ipLPMVal{
 				ttl:     0,
+				id:      cidr.Value.id,
 				counter: 0,
 				status:  uint8(common.AssetSynced),
+				inAcl:   1,
 			}
 
 			var err error
 			switch cidr.Value.lpmKey.(type) {
-			case ipv4LPMKey:
+			case ipv4Key:
 				err = updateACLValueNew(eby.ipv4ACL, cidr.Value.lpmKey, val)
-			case ipv6LPMKey:
+			case ipv6Key:
 				err = updateACLValueNew(eby.ipv6ACL, cidr.Value.lpmKey, val)
 			}
 			if err != nil {
@@ -465,44 +475,58 @@ func (eby *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, net
 						if a.Type == layers.DNSTypeA || a.Type == layers.DNSTypeAAAA {
 
 							commonName := string(a.Name)
-							if cn, found := containsCN(eby.eggy.CommonNames, commonName); found {
-								ip := a.IP
-								ttlSec := a.TTL //!!! remove * 5
-								var key ILPMKey
+							cn, found := containsCN(eby.eggy.CommonNames, commonName)
 
-								for i := range eby.eggy.ProtoPorts {
-									port := eby.eggy.ProtoPorts[i].Value.port
-									proto := eby.eggy.ProtoPorts[i].Value.proto
-									if a.Type == layers.DNSTypeA {
-										key = ipv4LPMKey{32, port, uint8(proto), [4]uint8(ip[0:4])}
-									} else {
-										key = ipv6LPMKey{128, port, uint8(proto), [16]uint8(ip[0:16])}
-									}
-									//val := time.Now().Unix() + int64(ttl) //Now + ttl
-									ttlNs := uint64(ttlSec) * 1000000000
-									bootTtlNs := uint64(C.get_nsecs()) + ttlNs //boot time[ns] + ttl[ns]
-									//fmt.Println("key size:", unsafe.Sizeof(key))
-									//fmt.Println("key data:", key.data)
+							ip := a.IP
+							ttlSec := a.TTL //!!! remove * 5
+							var key ILPMKey
 
-									val := ipLPMVal{
-										ttl:     bootTtlNs,
-										counter: 0, //zero existsing elements :/ //TODO why 0?
-										id:      cn.Value.id,
-										status:  uint8(common.AssetSynced),
-									}
-									var err error
-									if a.Type == layers.DNSTypeA {
-										err = updateACLValueNew(eby.ipv4ACL, key, val)
-									} else {
-										err = updateACLValueNew(eby.ipv6ACL, key, val)
-									}
-									must(err, "Can't update ACL.")
-									fmt.Printf("ebpfy-ref: %p, netNsPath: %s cgroupPath: %s - updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", eby, netNsPath, cgroupPath, cn, ip, ttlSec, ttlNs, bootTtlNs)
+							var inAcl uint8
+							var id uint16
+							if found {
+								inAcl = 1
+								id = cn.Value.id
+							} else {
+								id = syncx.Sequencer().Next()
+								inAcl = 0
+							}
+
+							for i := range eby.eggy.ProtoPorts {
+								port := eby.eggy.ProtoPorts[i].Value.port
+								proto := eby.eggy.ProtoPorts[i].Value.proto
+								if a.Type == layers.DNSTypeA {
+									key = ipv4Key{32, port, uint8(proto), [4]uint8(ip[0:4])}
+								} else {
+									key = ipv6Key{128, port, uint8(proto), [16]uint8(ip[0:16])}
 								}
 
-							} else {
-								fmt.Println("DROP")
+								ttlNs := uint64(ttlSec) * 1000000000
+								bootTtlNs := uint64(C.get_nsecs()) + ttlNs //boot time[ns] + ttl[ns]
+
+								fmt.Printf("inAcl[2]\n")
+								val := ipLPMVal{
+									ttl:     bootTtlNs,
+									counter: 0,
+									id:      id,
+									status:  uint8(common.AssetSynced),
+									inAcl:   inAcl,
+								}
+								var err error
+								if a.Type == layers.DNSTypeA {
+									err = updateACLValueNew(eby.ipv4ACL, key, val)
+								} else {
+									err = updateACLValueNew(eby.ipv6ACL, key, val)
+								}
+
+								must(err, "Can't update ACL.")
+								fmt.Printf("ebpfy-ref: %p, netNsPath: %s cgroupPath: %s - updated for %s ip:%s DNS ttl:%d, ttlNs:%d, bootTtlNs:%d\n", eby, netNsPath, cgroupPath, cn, ip, ttlSec, ttlNs, bootTtlNs)
 							}
+
+							//{stats
+							eby.statyMap.Add(id, ip.String(), metrics.Staty{Fqdn: commonName})
+							fmt.Printf("||||||||||||||||||||||||statyMap: %+v\n", eby.statyMap)
+							//stats}
+
 						}
 					}
 				} else {
@@ -580,7 +604,7 @@ func (eby *ebpfy) runPacketsLooper(ctx context.Context, lwg *sync.WaitGroup, net
 //	}()
 //}
 
-func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns common.AssetList[CommonNameWithProtoPort], ipv ipProtocolVersion, lwg *sync.WaitGroup, netNsPath string, cgroupPath string) {
+func (eby *ebpfy) runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns common.AssetList[CommonNameWithProtoPort], ipv ipProtocolVersion, lwg *sync.WaitGroup, netNsPath string, cgroupPath string) {
 	lwg.Add(1)
 	go func() {
 		defer lwg.Done()
@@ -600,20 +624,12 @@ func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns common.AssetList[Co
 						fatal("Iterator error", i.Err())
 					}
 					keyBytes := i.Key()
-					prefixLen := endian.Uint32(keyBytes[0:4])
-					port := endian.Uint16(keyBytes[4:6]) //port
-					proto := keyBytes[6:7][0]
 
 					var key ILPMKey
-					var ipB []byte
 					if ipv == ipv4 {
-						ipB = keyBytes[7:11]
-						//ip := bytes2ip(ipBytes)
-						key = ipv4LPMKey{prefixLen, port, proto, [4]uint8((ipB))}
+						key = unmarshalIpv4ACLKey(keyBytes)
 					} else {
-						ipB = keyBytes[7:23]
-						//ip := bytes2ip(ipBytes)
-						key = ipv6LPMKey{prefixLen, port, proto, [16]uint8((ipB))}
+						key = unmarshalIpv6ACLKey(keyBytes)
 					}
 
 					val := getACLValue(bpfM, key)
@@ -638,34 +654,65 @@ func runMapLooper(ctx context.Context, bpfM *bpf.BPFMap, cns common.AssetList[Co
 
 					//valBytes := ipv4ACL[ipv4LPMKey{1,1}]
 					//fmt.Printf(" [bootTtlNs:%d,bootNs:%d][%s]%s/%d[%d]", ttl, bootNs, expired, ip, prefixLen, val.counter)
-					fmt.Printf("netNsPath:%s cgroupPath:%s id: %d cn:%s expired:%s ip: %v/%d counter:%d status:%d\n", netNsPath, cgroupPath, val.id, cn, expired, ipB, prefixLen, val.counter, val.status)
-					metrics.CommonNameTotalRequests.With(prometheus.Labels{"cn": cn}).Set(float64(val.counter))
+					fmt.Printf("netNsPath:%s cgroupPath:%s id: %d cn:%s expired:%s ip: %v/%d counter:%d status:%d inACL:%d\n", netNsPath, cgroupPath, val.id, cn, expired, key.Addr(), key.MaskLen(), val.counter, val.status, val.inAcl)
+					//metrics.CommonNameTotalRequests.With(prometheus.Labels{"cn": cn}).Set(float64(val.counter))
+					inACLStr := fmt.Sprintf("%d", val.inAcl)
+					portStr := fmt.Sprintf("%d", key.Port())
+					var ipStr string
+					addr := key.Addr()
+					if ipv == ipv4 {
+						ipStr = fmt.Sprintf("%d.%d.%d.%d", addr[0], addr[1], addr[2], addr[3])
+					} else {
+						ipStr = fmt.Sprintf("%x:%x:%x:%x:%x:%x:%x:%x", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5], addr[6], addr[7])
+					}
+					if ipMap, ok := eby.statyMap[val.id]; ok {
+						// id != 0 part
+						if fqdns, ok := ipMap[ipStr]; ok {
+							for i := 0; i < len(fqdns); i++ {
+								metrics.CommonNameTotalRequests.WithLabelValues(strconv.Itoa(int(val.id)), strconv.Itoa(int(val.status)), inACLStr, cn, ipStr, portStr, fqdns[i].Fqdn).Set(float64(val.counter))
+							}
+						}
+					} else {
+						//id = 0 part: here we serve id=0 (set by kernel for unknown ip:port)
+						// while kernel part could set id=0 for not matching tuple (ip,port) then iterate over all map values (all ips map) and search for ipStr there
+						for _, ipMap := range eby.statyMap {
+							for ipKey, statyVals := range ipMap {
+								if ipKey == ipStr {
+									for i := 0; i < len(statyVals); i++ {
+										metrics.CommonNameTotalRequests.WithLabelValues(strconv.Itoa(int(val.id)), strconv.Itoa(int(val.status)), inACLStr, cn, ipStr, portStr, statyVals[i].Fqdn).Set(float64(val.counter))
+									}
+								}
+							}
+						}
+					}
 				}
 			}
 		}
 	}()
 }
 
-func unmarshalIpv4ACLKey(bytes []byte) ipv4LPMKey {
+func unmarshalIpv4ACLKey(bytes []byte) ipv4Key {
 	prefixLen := endian.Uint32(bytes[0:4])
-	port := endian.Uint16(bytes[4:6])
-	proto := bytes[6:7][0]
-	ipB := bytes[7:11]
+	data := bytes[4:11]
 
-	return ipv4LPMKey{prefixLen, port, proto, [4]uint8(ipB)}
+	// create ipv4LPMKeyBytes from prefixLen and data in one line
+	ipv4LPMKeyBytes := ipv4LPMKeyBytes{prefixLen, [PortProtocolIpv4AddressSize]uint8(data)}
+
+	return ipv4LPMKeyBytes.ipv4BytesToKey()
 }
 
-func unmarshalIpv6ACLKey(bytes []byte) ipv6LPMKey {
+func unmarshalIpv6ACLKey(bytes []byte) ipv6Key {
 	prefixLen := endian.Uint32(bytes[0:4])
-	port := endian.Uint16(bytes[4:6])
-	proto := bytes[6:7][0]
-	ipBytes := bytes[7:23]
+	ipBytes := bytes[4:23]
 
-	return ipv6LPMKey{prefixLen, port, proto, [16]uint8(ipBytes)}
+	// create ipv6LPMKeyBytes from prefixLen and data in one line
+	ipv6LPMKeyBytes := ipv6LPMKeyBytes{prefixLen, [PortProtocolIpv6AddressSize]uint8(ipBytes)}
+
+	return ipv6LPMKeyBytes.ipv6BytesToKey()
 }
 
 func getACLValue(acl *bpf.BPFMap, ikey ILPMKey) ipLPMVal {
-	upKey := ikey.GetPointer()
+	upKey := ikey.Pointer()
 	valBytes, err := acl.GetValue(upKey)
 	must(err, "Can't get value.")
 	return unmarshalValue(valBytes)
@@ -677,12 +724,13 @@ func unmarshalValue(bytes []byte) ipLPMVal {
 		counter: endian.Uint64(bytes[8:16]),
 		id:      endian.Uint16(bytes[16:18]),
 		status:  bytes[18:19][0],
+		inAcl:   bytes[19:20][0],
 	}
 }
 
 func updateACLValueNew(acl *bpf.BPFMap, ikey ILPMKey, val ipLPMVal) error {
 	//check if not exists first
-	upKey := ikey.GetPointer()
+	upKey := ikey.Pointer()
 	oldValBytes, err := acl.GetValue(upKey)
 	var oldVal ipLPMVal
 	if err == nil { //update in any cases
@@ -707,7 +755,7 @@ func updateACLValueNew(acl *bpf.BPFMap, ikey ILPMKey, val ipLPMVal) error {
 	return nil
 }
 
-func removeACLKey(acl *bpf.BPFMap, key ipv4LPMKey) error {
+func removeACLKey(acl *bpf.BPFMap, key ipv4Key) error {
 	upKey := unsafe.Pointer(&key)
 	//check if not exists first
 	err := acl.DeleteKey(upKey)

@@ -66,7 +66,8 @@ Please find some differences between `tc` and `cgroups` program types:
 | Shaping                         | +  | + |
 | Specifying interface name       | +  | - |
 
-
+## Metrics
+The metrics are available at the `:9090/metrics` endpoint of the operator POD.
 
 ## CLI:
 TODO: add accurate example

@@ -275,16 +275,16 @@ func parseCIDR(cidrS string, pps common.AssetList[protoport]) ([]CidrWithProtoPo
 	if err != nil {
 		return nil, fmt.Errorf("can't parse CidrWithProtoPort %s", cidrS)
 	}
-	prefix, _ := ipNet.Mask.Size()
+	maskLen, _ := ipNet.Mask.Size()
 	retCidrs := make([]CidrWithProtoPort, len(pps))
 
 	//iterate over pps and create lpmKey for each port, or add port 0 if pps is empty
 	for i, pp := range pps {
 
 		if ipv4 := ip.To4(); ipv4 != nil {
-			retCidrs[i] = CidrWithProtoPort{cidrS, syncx.Sequencer().Next(), *pp.Value, ipv4LPMKey{uint32(prefix), pp.Value.port, uint8(pp.Value.proto), [4]uint8(ipv4)}}
+			retCidrs[i] = CidrWithProtoPort{cidrS, syncx.Sequencer().Next(), *pp.Value, ipv4Key{uint8(maskLen), pp.Value.port, uint8(pp.Value.proto), [4]uint8(ipv4)}}
 		} else if ipv6 := ip.To16(); ipv6 != nil {
-			retCidrs[i] = CidrWithProtoPort{cidrS, syncx.Sequencer().Next(), *pp.Value, ipv6LPMKey{uint32(prefix), pp.Value.port, uint8(pp.Value.proto), [16]uint8(ipv6)}}
+			retCidrs[i] = CidrWithProtoPort{cidrS, syncx.Sequencer().Next(), *pp.Value, ipv6Key{uint8(maskLen), pp.Value.port, uint8(pp.Value.proto), [16]uint8(ipv6)}}
 		}
 	}
 
